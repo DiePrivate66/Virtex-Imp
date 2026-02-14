@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS RAMÓN BY BOSCO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bosco: {
+                            dark: '#1a1a1a',    /* El fondo oscuro del menú físico */
+                            gray: '#2d2d2d',    /* Para las tarjetas de productos */
+                            orange: '#ff6600',  /* El naranja exacto de RAMÓN */
+                            text: '#f3f4f6',    /* Blanco hueso para leer bien */
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'], /* Fuente limpia parecida al menú */
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Ajustes para scrollbar oscuro */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #ff6600; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-bosco-dark text-bosco-text h-screen overflow-hidden font-sans">
+    
+    {% block content %}
+    {% endblock %}
+
+</body>
+</html>

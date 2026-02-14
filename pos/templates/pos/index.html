@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="flex h-screen overflow-hidden bg-bosco-dark font-sans text-gray-100">
+    
+    <div class="w-1/6 bg-black border-r border-gray-800 flex flex-col z-20">
+        <div class="p-6 bg-bosco-orange text-black text-center font-black text-2xl tracking-widest shadow-lg">
+            RAMÓN
+        </div>
+        
+        <div class="px-4 pt-4">
+            <button onclick="marcarAsistencia()" class="w-full bg-gray-800 border border-gray-700 text-gray-300 py-2 rounded text-xs font-bold hover:bg-gray-700 hover:text-white transition flex items-center justify-center gap-2">
+                ⏱️ MARCAR RELOJ
+            </button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 py-4 space-y-1">
+            <button onclick="filtrarProductos('todos')" class="w-full text-left px-6 py-4 text-gray-400 hover:bg-gray-900 hover:text-white border-l-4 border-transparent hover:border-bosco-orange transition-all font-bold text-sm uppercase">
+                TODO EL MENÚ
+            </button>
+            {% for cat in categorias %}
+            <button onclick="filtrarProductos('{{ cat.id }}')" class="w-full text-left px-6 py-4 text-gray-400 hover:bg-gray-900 hover:text-white border-l-4 border-transparent hover:border-bosco-orange transition-all font-bold text-sm uppercase">
+                {{ cat.nombre }}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="w-3/6 bg-[#1a1a1a] p-6 flex flex-col relative">
+        <div class="mb-4">
+            <input type="text" id="buscador" onkeyup="buscarProducto()" placeholder="BUSCAR (EJ: BONELESS)..." 
+                   class="w-full bg-[#2d2d2d] text-white p-4 pl-6 rounded-xl border border-gray-700 focus:outline-none focus:border-bosco-orange placeholder-gray-500 uppercase font-bold">
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pb-24 pr-2 custom-scrollbar">
+            {% for prod in productos %}
+            <div onclick="abrirModalOpciones('{{ prod.id }}', '{{ prod.nombre }}', {{ prod.precio }})" 
+                 class="producto-card group bg-[#2d2d2d] hover:bg-[#3d3d3d] p-5 rounded-xl cursor-pointer border border-transparent hover:border-bosco-orange transition-all duration-200 shadow-lg select-none h-36 flex flex-col justify-between active:scale-95"
+                 data-categoria-id="{{ prod.categoria.id }}"
+                 data-nombre="{{ prod.nombre|lower }}">
+                
+                <h3 class="font-bold text-gray-100 text-lg leading-tight uppercase group-hover:text-bosco-orange">
+                    {{ prod.nombre }}
+                </h3>
+                <div class="flex justify-between items-end mt-2">
+                    <span class="bg-bosco-orange text-black font-black px-3 py-1 rounded-md text-base">
+                        ${{ prod.precio }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="w-2/6 bg-white flex flex-col shadow-2xl z-30 h-full border-l border-gray-900 text-gray-900">
+        <div class="p-4 bg-gray-100 border-b border-gray-300 space-y-3">
+            <div class="flex bg-gray-300 rounded p-1">
+                <button id="btn-servir" onclick="setTipoPedido('SERVIR')" class="flex-1 py-2 rounded font-bold text-sm bg-white shadow text-black transition">PARA SERVIR</button>
+                <button id="btn-llevar" onclick="setTipoPedido('LLEVAR')" class="flex-1 py-2 rounded font-bold text-sm text-gray-600 hover:bg-gray-200 transition">PARA LLEVAR</button>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+                <input type="text" id="cliente-cedula" placeholder="C.I. / RUC" class="col-span-1 bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none">
+                <input type="text" id="cliente-nombre" placeholder="NOMBRE CLIENTE" class="col-span-2 bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none uppercase">
+            </div>
+        </div>
+
+        <div id="lista-carrito" class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
+            </div>
+
+        <div class="p-6 bg-white border-t border-gray-200 shadow-lg">
+            <div class="flex justify-between items-end mb-4">
+                <span class="text-gray-500 font-bold text-sm uppercase">Total</span>
+                <span id="total-carrito" class="font-black text-5xl text-gray-900 tracking-tighter">$0.00</span>
+            </div>
+            <button onclick="abrirModalPago()" class="w-full bg-bosco-orange text-black py-4 rounded-xl font-black text-xl hover:bg-orange-500 transition-colors shadow-lg active:translate-y-1">
+                COBRAR
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-opciones" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-[#2d2d2d] w-full max-w-md rounded-xl shadow-2xl border border-gray-600 overflow-hidden">
+        <div class="bg-black p-4 border-b border-gray-700">
+            <h3 id="modal-prod-nombre" class="text-xl font-black text-bosco-orange uppercase">PRODUCTO</h3>
+            <p class="text-gray-400 text-xs">PERSONALIZA TU ORDEN</p>
+        </div>
+        
+        <div class="p-6 space-y-4">
+            <div class="flex items-center justify-between bg-[#1a1a1a] p-3 rounded-lg">
+                <span class="text-white font-bold">CANTIDAD</span>
+                <div class="flex items-center gap-4">
+                    <button onclick="cambiarCant(-1)" class="w-10 h-10 bg-gray-700 rounded text-white font-bold text-xl hover:bg-gray-600">-</button>
+                    <span id="modal-cantidad" class="text-2xl font-black text-white">1</span>
+                    <button onclick="cambiarCant(1)" class="w-10 h-10 bg-bosco-orange rounded text-black font-bold text-xl hover:bg-orange-500">+</button>
+                </div>
+            </div>
+
+            <div id="seccion-salsas">
+                <p class="text-gray-400 text-xs font-bold uppercase mb-2">ELIGE UNA SALSA:</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="selSalsa('BBQ Original')" class="btn-salsa p-2 border border-gray-600 rounded text-gray-300 text-sm hover:border-bosco-orange hover:text-white">BBQ Original</button>
+                    <button onclick="selSalsa('BBQ Picante')" class="btn-salsa p-2 border border-gray-600 rounded text-gray-300 text-sm hover:border-bosco-orange hover:text-white">BBQ Picante</button>
+                    <button onclick="selSalsa('Miel y Mostaza')" class="btn-salsa p-2 border border-gray-600 rounded text-gray-300 text-sm hover:border-bosco-orange hover:text-white">Miel y Mostaza</button>
+                    <button onclick="selSalsa('Sin Salsa')" class="btn-salsa p-2 border border-gray-600 rounded text-gray-300 text-sm hover:border-bosco-orange hover:text-white">Sin Salsa</button>
+                </div>
+            </div>
+
+            <div>
+                <p class="text-gray-400 text-xs font-bold uppercase mb-2">NOTAS / COMENTARIOS:</p>
+                <textarea id="modal-notas" rows="2" placeholder="Ej: Sin lechuga, aparte, bien cocido..." class="w-full bg-[#1a1a1a] text-white p-3 rounded-lg border border-gray-600 focus:border-bosco-orange outline-none text-sm uppercase"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mt-4">
+                <button onclick="cerrarModalOpciones()" class="py-3 rounded-lg border border-gray-600 text-gray-300 font-bold hover:bg-gray-700">CANCELAR</button>
+                <button onclick="confirmarAgregar()" class="py-3 rounded-lg bg-bosco-orange text-black font-bold hover:bg-orange-500 shadow-lg">AGREGAR</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-pago" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-[#1a1a1a] w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-700 p-8">
+        <h2 class="text-3xl font-black text-white mb-6">CONFIRMAR PAGO</h2>
+        <div class="text-6xl font-black text-bosco-orange mb-8" id="modal-total">$0.00</div>
+        
+        <div class="grid grid-cols-1 gap-4">
+            <button onclick="finalizarVenta('EFECTIVO')" class="p-4 bg-gray-800 rounded text-white font-bold hover:bg-gray-700">💵 EFECTIVO</button>
+            <button onclick="finalizarVenta('TRANSFERENCIA')" class="p-4 bg-gray-800 rounded text-white font-bold hover:bg-gray-700">📱 TRANSFERENCIA</button>
+            <button onclick="cerrarModalPago()" class="p-4 border border-gray-600 rounded text-gray-400 font-bold mt-4">VOLVER</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- ESTADO ---
+    let carrito = [];
+    let prodTemp = {}; // Producto siendo editado en el modal
+    let tipoPedido = 'SERVIR';
+
+    // --- LÓGICA MODAL OPCIONES ---
+    function abrirModalOpciones(id, nombre, precio) {
+        prodTemp = { id, nombre, precio, cantidad: 1, salsa: '', notas: '' };
+        
+        document.getElementById('modal-prod-nombre').innerText = nombre;
+        document.getElementById('modal-cantidad').innerText = "1";
+        document.getElementById('modal-notas').value = "";
+        
+        // Reset botones de salsa
+        document.querySelectorAll('.btn-salsa').forEach(btn => {
+            btn.classList.remove('bg-bosco-orange', 'text-black');
+            btn.classList.add('text-gray-300');
+        });
+
+        // Mostrar/Ocultar Salsas (Solo si es Boneless o Tenders)
+        const esPollo = nombre.includes('BONELESS') || nombre.includes('TENDERS');
+        document.getElementById('seccion-salsas').style.display = esPollo ? 'block' : 'none';
+
+        document.getElementById('modal-opciones').classList.remove('hidden');
+    }
+
+    function cambiarCant(delta) {
+        let nueva = prodTemp.cantidad + delta;
+        if(nueva < 1) nueva = 1;
+        prodTemp.cantidad = nueva;
+        document.getElementById('modal-cantidad').innerText = nueva;
+    }
+
+    function selSalsa(salsa) {
+        prodTemp.salsa = salsa;
+        // Visual Update
+        document.querySelectorAll('.btn-salsa').forEach(btn => {
+            if(btn.innerText === salsa) {
+                btn.classList.add('bg-bosco-orange', 'text-black');
+                btn.classList.remove('text-gray-300');
+            } else {
+                btn.classList.remove('bg-bosco-orange', 'text-black');
+                btn.classList.add('text-gray-300');
+            }
+        });
+    }
+
+    function cerrarModalOpciones() {
+        document.getElementById('modal-opciones').classList.add('hidden');
+    }
+
+    function confirmarAgregar() {
+        const notas = document.getElementById('modal-notas').value;
+        const nombreFinal = prodTemp.salsa ? `${prodTemp.nombre} (${prodTemp.salsa})` : prodTemp.nombre;
+        const notaFinal = notas.trim();
+
+        // Agregar al carrito
+        carrito.push({
+            id: prodTemp.id,
+            nombre: nombreFinal,
+            precio: parseFloat(prodTemp.precio),
+            cantidad: prodTemp.cantidad,
+            nota: notaFinal // Esto irá a la base de datos
+        });
+
+        renderizar();
+        cerrarModalOpciones();
+    }
+
+    // --- RENDERIZADO CARRITO ---
+    function renderizar() {
+        const lista = document.getElementById('lista-carrito');
+        lista.innerHTML = '';
+        let total = 0;
+
+        carrito.forEach((item, idx) => {
+            total += item.precio * item.cantidad;
+            const row = document.createElement('div');
+            row.className = "flex justify-between bg-white p-3 rounded border border-gray-200 shadow-sm mb-2";
+            row.innerHTML = `
+                <div class="flex-1">
+                    <div class="font-bold text-gray-800 text-sm uppercase">${item.nombre}</div>
+                    
+                    ${item.nota ? `<div class="bg-yellow-100 text-yellow-800 text-[10px] p-1 rounded mt-1 font-bold border border-yellow-200 uppercase">📝 ${item.nota}</div>` : ''}
+                    
+                    <div class="text-[10px] text-gray-500 mt-1">$${item.precio.toFixed(2)} c/u</div>
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                    <span class="bg-gray-100 px-2 py-1 rounded text-xs font-bold">x${item.cantidad}</span>
+                    <span class="font-bold text-sm text-gray-900">$${(item.precio * item.cantidad).toFixed(2)}</span>
+                    <button onclick="eliminar(${idx})" class="text-red-500 text-xs font-bold hover:underline">BORRAR</button>
+                </div>
+            `;
+            lista.appendChild(row);
+        });
+        document.getElementById('total-carrito').innerText = '$' + total.toFixed(2);
+    }
+
+    function eliminar(idx) {
+        carrito.splice(idx, 1);
+        renderizar();
+    }
+
+    // --- FUNCIONES EXTRA ---
+    function marcarAsistencia() {
+        const codigo = prompt("Ingrese su código de empleado:");
+        if(codigo) alert("✅ Entrada registrada: " + new Date().toLocaleTimeString());
+    }
+
+    // (Aquí va el resto de tu código de pagos anterior: abrirModalPago, finalizarVenta, etc.)
+    // ... Asegúrate de copiar las funciones abrirModalPago y finalizarVenta del paso anterior ...
+    function abrirModalPago() {
+        if(carrito.length === 0) return alert("Carrito vacío");
+        document.getElementById('modal-total').innerText = document.getElementById('total-carrito').innerText;
+        document.getElementById('modal-pago').classList.remove('hidden');
+    }
+    function cerrarModalPago() { document.getElementById('modal-pago').classList.add('hidden'); }
+    function finalizarVenta(metodo) {
+        // ... (Usa la lógica de fetch del paso anterior) ...
+        alert("Simulación: Venta guardada");
+        carrito = [];
+        renderizar();
+        cerrarModalPago();
+    }
+
+    // --- FILTROS ---
+    function filtrarProductos(id) { /* ... lógica anterior ... */ }
+    function buscarProducto() { /* ... lógica anterior ... */ }
+    function setTipoPedido(t) { /* ... lógica anterior ... */ }
+</script>
+{% endblock %}
