@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a1a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>RAMÓN — Pide tu Comida</title>
+    <link rel="manifest" href="{% load static %}{% static 'pedidos/manifest.json' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bosco: { dark: '#1a1a1a', gray: '#2d2d2d', light: '#3a3a3a', orange: '#ff6600' }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; overscroll-behavior: none; }
+        ::-webkit-scrollbar { display: none; }
+        input, textarea, select { font-size: 16px !important; }
+        
+        .cat-pill.active { background: #ff6600 !important; color: #000 !important; border-color: #ff6600 !important; }
+        
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+        
+        .anim-slide { animation: slideUp 0.25s ease-out; }
+        .anim-fade { animation: fadeIn 0.15s ease-out; }
+        .anim-pop { animation: pop 0.3s ease-out; }
+        .anim-shake { animation: shake 0.3s ease-out; }
+        
+        /* Efecto al agregar al carrito */
+        .added { animation: pop 0.3s ease-out; }
+        
+        /* Overlay del modal */
+        .modal-overlay { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+    </style>
+</head>
+<body class="bg-[#111] text-white min-h-screen">
+
+    <!-- ══════════════ HEADER FIJO ══════════════ -->
+    <header class="sticky top-0 z-40 bg-[#111]/98 backdrop-blur-md border-b border-gray-800/50">
+        <div class="flex items-center justify-between px-5 py-4">
+            <div>
+                <h1 class="text-2xl font-black text-bosco-orange tracking-[0.25em]">RAMÓN</h1>
+                <p class="text-[9px] text-gray-600 tracking-[0.2em] font-bold mt-0.5">ALITAS · BONELESS · MÁS</p>
+            </div>
+        </div>
+        
+        <!-- Categorías -->
+        <div class="flex gap-2 px-5 pb-3 overflow-x-auto" id="cat-bar">
+            <button onclick="filtrar(this, 'todos')" class="cat-pill active whitespace-nowrap px-5 py-2 rounded-full text-xs font-black uppercase bg-bosco-orange text-black border border-transparent transition-all">
+                TODO
+            </button>
+            {% for cat in categorias %}
+            <button onclick="filtrar(this, '{{ cat.id }}')" class="cat-pill whitespace-nowrap px-5 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-gray-500 border border-gray-700/50 transition-all">
+                {{ cat.nombre }}
+            </button>
+            {% endfor %}
+        </div>
+    </header>
+
+    <!-- Banner horario cuando está cerrado -->
+    {% if not local_abierto %}
+    <div class="bg-red-900/40 border-b border-red-800 px-5 py-3 flex items-center gap-3">
+        <span class="text-2xl">🕐</span>
+        <div>
+            <p class="text-red-400 font-black text-sm">ESTAMOS CERRADOS</p>
+            <p class="text-red-400/60 text-xs font-bold">{{ dia_hoy }}: {{ horario_hoy }} · Puedes ver el menú pero los pedidos están deshabilitados</p>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-green-900/20 border-b border-green-900/30 px-5 py-1.5 flex items-center justify-center gap-2">
+        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+        <p class="text-green-500 text-[10px] font-black uppercase tracking-widest">Abierto · {{ dia_hoy }} {{ horario_hoy }}</p>
+    </div>
+    {% endif %}
+
+    <!-- ══════════════ LISTA DE PRODUCTOS ══════════════ -->
+    <main class="px-4 pt-3 pb-28 space-y-2" id="grid-productos">
+        {% for prod in productos %}
+        <div class="producto-item bg-bosco-gray rounded-2xl p-4 border border-gray-700/40 active:scale-[0.98] transition-transform"
+             data-cat="{{ prod.categoria.id }}" data-id="{{ prod.id }}">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 mr-4">
+                    <h3 class="font-black text-white text-[15px] uppercase leading-tight">{{ prod.nombre }}</h3>
+                    <div class="flex items-baseline gap-1 mt-1.5">
+                        <span class="text-bosco-orange font-black text-xl">${{ prod.precio|floatformat:2 }}</span>
+                    </div>
+                </div>
+                <button onclick="abrirModal('{{ prod.id }}', '{{ prod.nombre }}', '{{ prod.precio }}')"
+                        class="bg-bosco-orange text-black font-black w-12 h-12 rounded-2xl text-2xl flex items-center justify-center active:scale-90 transition-transform shadow-lg shadow-orange-600/20"
+                        aria-label="Agregar {{ prod.nombre }}">
+                    +
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </main>
+
+    <!-- ══════════════ BOTTOM BAR (CARRITO FLOTANTE) ══════════════ -->
+    <div id="bottom-bar" class="hidden fixed bottom-0 left-0 right-0 z-50 p-3 anim-slide">
+        <button onclick="abrirCarrito()" class="w-full max-w-lg mx-auto bg-bosco-orange rounded-2xl p-4 flex items-center justify-between shadow-2xl shadow-black/60 active:scale-[0.97] transition-transform block">
+            <div class="flex items-center gap-3">
+                <span class="bg-black/20 text-black w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm" id="bar-count">0</span>
+                <span class="font-black text-black text-sm uppercase tracking-wide">VER MI PEDIDO</span>
+            </div>
+            <span class="font-black text-black text-xl" id="bar-total">$0.00</span>
+        </button>
+    </div>
+
+    <!-- ══════════════ MODAL: PERSONALIZACIÓN ══════════════ -->
+    <div id="modal-opciones" class="hidden fixed inset-0 z-50 bg-black/80 modal-overlay flex items-end justify-center" onclick="if(event.target===this)cerrarModal()">
+        <div class="bg-bosco-gray w-full max-w-lg rounded-t-[28px] anim-slide border-t border-gray-600/50 max-h-[85vh] overflow-y-auto">
+            <!-- Barra de arrastre visual -->
+            <div class="flex justify-center pt-3 pb-1">
+                <div class="w-10 h-1 bg-gray-600 rounded-full"></div>
+            </div>
+            
+            <div class="px-6 pb-6 space-y-5">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 id="modal-nombre" class="text-xl font-black text-white uppercase"></h3>
+                        <span id="modal-precio" class="text-bosco-orange font-black text-lg"></span>
+                    </div>
+                    <button onclick="cerrarModal()" class="w-9 h-9 bg-[#1a1a1a] rounded-full flex items-center justify-center text-gray-500 font-bold text-sm">✕</button>
+                </div>
+
+                <!-- Cantidad -->
+                <div class="flex items-center justify-between bg-[#1a1a1a] p-4 rounded-2xl">
+                    <span class="text-gray-400 font-bold text-sm uppercase">Cantidad</span>
+                    <div class="flex items-center gap-5">
+                        <button onclick="cambCant(-1)" class="w-11 h-11 bg-gray-700 rounded-xl text-white font-bold text-xl active:bg-gray-600 transition-colors flex items-center justify-center">−</button>
+                        <span id="modal-cant" class="text-2xl font-black text-white w-6 text-center">1</span>
+                        <button onclick="cambCant(1)" class="w-11 h-11 bg-bosco-orange rounded-xl text-black font-bold text-xl active:bg-orange-500 transition-colors flex items-center justify-center">+</button>
+                    </div>
+                </div>
+
+                <!-- Salsas -->
+                <div id="sec-salsas" class="hidden space-y-3">
+                    <p class="text-gray-400 text-xs font-black uppercase tracking-wider">Elige tu salsa</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="selSalsa(this,'BBQ Original')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🔥 BBQ Original</button>
+                        <button onclick="selSalsa(this,'BBQ Picante')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🌶️ BBQ Picante</button>
+                        <button onclick="selSalsa(this,'Miel y Mostaza')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🍯 Miel Mostaza</button>
+                        <button onclick="selSalsa(this,'Sin Salsa')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">❌ Sin Salsa</button>
+                    </div>
+                </div>
+
+                <!-- Notas -->
+                <div>
+                    <p class="text-gray-400 text-xs font-black uppercase tracking-wider mb-2">Instrucciones especiales</p>
+                    <textarea id="modal-notas" rows="2" placeholder="Ej: Sin cebolla, extra salsa..." 
+                        class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm placeholder-gray-600"></textarea>
+                </div>
+
+                <!-- Botón Agregar -->
+                <button onclick="confirmarAgregar()" class="w-full bg-bosco-orange text-black font-black py-4 rounded-2xl text-base active:scale-[0.97] transition-transform shadow-lg shadow-orange-600/30 flex items-center justify-center gap-2">
+                    <span>AGREGAR AL PEDIDO</span>
+                    <span id="modal-subtotal" class="bg-black/20 px-3 py-1 rounded-lg text-sm"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════ PANTALLA COMPLETA: CARRITO + CHECKOUT ══════════════ -->
+    <div id="modal-carrito" class="hidden fixed inset-0 z-50 bg-[#111] overflow-y-auto">
+        <div class="max-w-lg mx-auto min-h-screen flex flex-col">
+            
+            <!-- Header Carrito -->
+            <div class="sticky top-0 bg-[#111]/98 backdrop-blur-md p-4 border-b border-gray-800/50 z-10 flex items-center justify-between">
+                <button onclick="cerrarCarrito()" class="text-gray-400 font-bold text-sm flex items-center gap-1">← Menú</button>
+                <h2 class="font-black text-white text-lg">Tu Pedido</h2>
+                <button onclick="vaciarCarrito()" class="text-red-500 text-xs font-bold">Vaciar</button>
+            </div>
+
+            <!-- Items del Carrito -->
+            <div id="carrito-items" class="flex-1 p-4 space-y-2">
+                <!-- JS renderiza aquí -->
+            </div>
+
+            <!-- Subtotal -->
+            <div class="px-4 py-3 border-t border-gray-800/50">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-500 font-bold text-sm">SUBTOTAL</span>
+                    <span id="carrito-total" class="text-2xl font-black text-bosco-orange">$0.00</span>
+                </div>
+            </div>
+
+            <!-- ══════ SECCIÓN CHECKOUT ══════ -->
+            <div class="p-4 space-y-4 border-t border-gray-700/50 bg-bosco-gray/50 rounded-t-3xl">
+                
+                <!-- PASO 1: Tus datos -->
+                <div class="space-y-3">
+                    <h3 class="font-black text-white uppercase text-xs tracking-widest flex items-center gap-2">
+                        <span class="w-6 h-6 bg-bosco-orange rounded-full text-black text-xs font-black flex items-center justify-center">1</span>
+                        TUS DATOS
+                    </h3>
+                    <input type="text" id="ch-nombre" placeholder="Nombre completo *"
+                        class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600">
+                    <input type="tel" id="ch-telefono" placeholder="WhatsApp / Teléfono *"
+                        class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600">
+                    <input type="text" id="ch-cedula" placeholder="C.I. / RUC (para factura, opcional)"
+                        class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm placeholder-gray-600">
+                </div>
+                
+                <!-- PASO 2: Tipo de entrega -->
+                <div class="space-y-3">
+                    <h3 class="font-black text-white uppercase text-xs tracking-widest flex items-center gap-2">
+                        <span class="w-6 h-6 bg-bosco-orange rounded-full text-black text-xs font-black flex items-center justify-center">2</span>
+                        ¿CÓMO LO QUIERES?
+                    </h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setTipo(this,'DOMICILIO')" class="btn-tipo p-4 rounded-xl font-bold text-sm border-2 border-bosco-orange bg-bosco-orange/10 text-bosco-orange transition-all text-center">
+                            <span class="text-2xl block mb-1">🛵</span>
+                            DELIVERY
+                        </button>
+                        <button onclick="setTipo(this,'LLEVAR')" class="btn-tipo p-4 rounded-xl font-bold text-sm border-2 border-gray-700 text-gray-400 transition-all text-center">
+                            <span class="text-2xl block mb-1">📦</span>
+                            RETIRO
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Dirección (solo domicilio) -->
+                <div id="sec-direccion" class="space-y-3">
+                    <textarea id="ch-direccion" rows="2" placeholder="Dirección de entrega * (Ej: Cdla. Las Palmas, casa 5, junto a la tienda Don Pepe)"
+                        class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600"></textarea>
+                    
+                    <!-- BOTÓN GPS -->
+                    <button type="button" onclick="obtenerGPS()" id="btn-gps"
+                        class="w-full bg-[#1a1a1a] border-2 border-dashed border-gray-600 p-4 rounded-xl text-center active:scale-[0.97] transition-all hover:border-blue-500">
+                        <div id="gps-placeholder">
+                            <span class="text-3xl">📍</span>
+                            <p class="text-blue-400 font-black text-sm mt-1">ENVIAR MI UBICACIÓN GPS</p>
+                            <p class="text-gray-600 text-[10px] mt-1">Ayuda al delivery a encontrarte más rápido</p>
+                        </div>
+                        <div id="gps-success" class="hidden">
+                            <span class="text-3xl">✅</span>
+                            <p class="text-green-400 font-black text-sm mt-1">UBICACIÓN CAPTURADA</p>
+                            <p id="gps-coords" class="text-gray-500 text-[10px] mt-1"></p>
+                        </div>
+                        <div id="gps-loading" class="hidden">
+                            <span class="text-3xl animate-pulse">🛰️</span>
+                            <p class="text-yellow-400 font-black text-sm mt-1">OBTENIENDO UBICACIÓN...</p>
+                        </div>
+                        <div id="gps-error" class="hidden">
+                            <span class="text-3xl">⚠️</span>
+                            <p class="text-red-400 font-bold text-sm mt-1">NO SE PUDO OBTENER GPS</p>
+                            <p id="gps-error-msg" class="text-gray-500 text-[10px] mt-1"></p>
+                        </div>
+                    </button>
+
+                    <p class="text-gray-600 text-[10px] font-bold">📍 Te contactaremos por WhatsApp para confirmar el costo de envío. El delivery cobra la carrera directamente.</p>
+                </div>
+
+                <!-- PASO 3: Método de pago -->
+                <div class="space-y-3">
+                    <h3 class="font-black text-white uppercase text-xs tracking-widest flex items-center gap-2">
+                        <span class="w-6 h-6 bg-bosco-orange rounded-full text-black text-xs font-black flex items-center justify-center">3</span>
+                        MÉTODO DE PAGO
+                    </h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setPago(this,'EFECTIVO')" class="btn-pago p-4 rounded-xl font-bold text-sm border-2 border-bosco-orange bg-bosco-orange/10 text-bosco-orange transition-all text-center">
+                            <span class="text-2xl block mb-1">💵</span>
+                            EFECTIVO
+                        </button>
+                        <button onclick="setPago(this,'TRANSFERENCIA')" class="btn-pago p-4 rounded-xl font-bold text-sm border-2 border-gray-700 text-gray-400 transition-all text-center">
+                            <span class="text-2xl block mb-1">📱</span>
+                            TRANSFERENCIA
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Datos bancarios (solo transferencia) -->
+                <div id="sec-cuenta" class="hidden anim-fade bg-[#1a1a1a] p-4 rounded-xl border border-gray-700/50 space-y-3">
+                    <p class="text-bosco-orange font-black text-[10px] uppercase tracking-wider mb-2">Datos para transferencia</p>
+                    
+                    <!-- Cooperativa JEP -->
+                    <div class="bg-[#222] p-3 rounded-lg border border-gray-700/30">
+                        <p class="text-yellow-400 font-black text-[10px] uppercase">Cooperativa JEP</p>
+                        <p class="text-white text-sm font-bold mt-1">Juan José Castro</p>
+                        <p class="text-gray-400 text-xs">Cta. Ahorros: <span class="text-white font-bold">406148953900</span></p>
+                        <p class="text-gray-400 text-xs">C.I.: <span class="text-white font-bold">0105994735</span></p>
+                    </div>
+                    
+                    <!-- Banco Pichincha -->
+                    <div class="bg-[#222] p-3 rounded-lg border border-gray-700/30">
+                        <p class="text-blue-400 font-black text-[10px] uppercase">Banco Pichincha</p>
+                        <p class="text-white text-sm font-bold mt-1">Juan José Castro</p>
+                        <p class="text-gray-400 text-xs">Cta. Ahorros: <span class="text-white font-bold">2211994932</span></p>
+                        <p class="text-gray-400 text-xs">C.I.: <span class="text-white font-bold">0105994735</span></p>
+                    </div>
+                    
+                    <p class="text-gray-500 text-[10px]">📧 Enviar comprobante a: <span class="text-white font-bold">juanjocastro2000@gmail.com</span></p>
+                </div>
+
+                <!-- Upload Comprobante (solo transferencia) -->
+                <div id="sec-comprobante" class="hidden anim-fade">
+                    <label class="block w-full bg-[#1a1a1a] border-2 border-dashed border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-bosco-orange transition-colors">
+                        <input type="file" id="ch-comprobante" accept="image/*" capture="environment" class="hidden" onchange="previewComprobante(this)">
+                        <div id="comprobante-placeholder">
+                            <span class="text-4xl">📸</span>
+                            <p class="text-gray-400 text-sm font-bold mt-2">TOCA PARA SUBIR COMPROBANTE</p>
+                            <p class="text-gray-600 text-[10px] mt-1">Foto o captura de la transferencia</p>
+                        </div>
+                        <div id="comprobante-preview" class="hidden">
+                            <span class="text-4xl">✅</span>
+                            <p class="text-green-400 font-bold text-sm mt-2">COMPROBANTE CARGADO</p>
+                            <p id="comprobante-name" class="text-gray-500 text-xs mt-1"></p>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Botón Confirmar -->
+                <button onclick="enviarPedido()" id="btn-enviar" 
+                    class="w-full bg-bosco-orange text-black font-black py-5 rounded-2xl text-lg active:scale-[0.97] transition-transform shadow-lg shadow-orange-600/30 mt-3">
+                    CONFIRMAR PEDIDO
+                </button>
+                
+                <p class="text-gray-700 text-[9px] text-center pb-2">Al confirmar, aceptas que los precios finales incluyen envío cobrado por el delivery</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════ MODAL: ENVIANDO ══════════════ -->
+    <div id="modal-enviando" class="hidden fixed inset-0 z-[60] bg-black/95 flex items-center justify-center">
+        <div class="text-center p-8">
+            <div class="text-6xl mb-4 animate-bounce">🍗</div>
+            <p class="text-white font-black text-xl tracking-wide">ENVIANDO PEDIDO...</p>
+            <p class="text-gray-500 text-sm mt-2">Un momento por favor</p>
+        </div>
+    </div>
+
+
+<script>
+    // ══════════════ ESTADO GLOBAL ══════════════
+    let carrito = [];
+    let tempProd = { id: '', nombre: '', precio: 0, cantidad: 1, salsa: '' };
+    let tipoPedido = 'DOMICILIO';
+    let metodoPago = 'EFECTIVO';
+    let ubicacionLat = null;
+    let ubicacionLng = null;
+
+    // ══════════════ FILTRAR CATEGORÍAS ══════════════
+    function filtrar(btn, catId) {
+        document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        document.querySelectorAll('.producto-item').forEach(item => {
+            item.style.display = (catId === 'todos' || item.dataset.cat === catId) ? '' : 'none';
+        });
+    }
+
+    // ══════════════ MODAL PERSONALIZACIÓN ══════════════
+    function abrirModal(id, nombre, precio) {
+        tempProd = { id, nombre, precio: parseFloat(precio), cantidad: 1, salsa: '' };
+        document.getElementById('modal-nombre').innerText = nombre;
+        document.getElementById('modal-precio').innerText = '$' + parseFloat(precio).toFixed(2);
+        document.getElementById('modal-cant').innerText = '1';
+        document.getElementById('modal-notas').value = '';
+        actualizarSubModal();
+
+        // Reset salsas
+        document.querySelectorAll('.btn-salsa').forEach(b => {
+            b.classList.remove('bg-bosco-orange', 'text-black', 'border-bosco-orange');
+            b.classList.add('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
+        });
+
+        // Mostrar salsas solo para pollo
+        const upper = nombre.toUpperCase();
+        const esPollo = upper.includes('BONELESS') || upper.includes('TENDERS') || upper.includes('ALITAS');
+        document.getElementById('sec-salsas').classList.toggle('hidden', !esPollo);
+
+        document.getElementById('modal-opciones').classList.remove('hidden');
+    }
+
+    function cerrarModal() { document.getElementById('modal-opciones').classList.add('hidden'); }
+
+    function cambCant(d) {
+        tempProd.cantidad = Math.max(1, tempProd.cantidad + d);
+        document.getElementById('modal-cant').innerText = tempProd.cantidad;
+        actualizarSubModal();
+    }
+
+    function actualizarSubModal() {
+        const sub = (Math.round(tempProd.precio * tempProd.cantidad * 100) / 100).toFixed(2);
+        document.getElementById('modal-subtotal').innerText = '$' + sub;
+    }
+
+    function selSalsa(btn, salsa) {
+        tempProd.salsa = salsa;
+        document.querySelectorAll('.btn-salsa').forEach(b => {
+            b.classList.remove('bg-bosco-orange', 'text-black', 'border-bosco-orange');
+            b.classList.add('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
+        });
+        btn.classList.add('bg-bosco-orange', 'text-black', 'border-bosco-orange');
+        btn.classList.remove('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
+    }
+
+    function confirmarAgregar() {
+        const notas = document.getElementById('modal-notas').value.trim();
+        const nombreFinal = tempProd.salsa ? `${tempProd.nombre} (${tempProd.salsa})` : tempProd.nombre;
+
+        // Buscar entrada existente con misma config
+        const existe = carrito.find(i => i.id === tempProd.id && i.nota === notas && i.nombre === nombreFinal);
+        if (existe) {
+            existe.cantidad += tempProd.cantidad;
+        } else {
+            carrito.push({
+                id: tempProd.id,
+                nombre: nombreFinal,
+                precio: tempProd.precio,
+                cantidad: tempProd.cantidad,
+                nota: notas
+            });
+        }
+        cerrarModal();
+        actualizarUI();
+        
+        // Feedback visual
+        const bar = document.getElementById('bottom-bar');
+        bar.classList.add('anim-pop');
+        setTimeout(() => bar.classList.remove('anim-pop'), 300);
+    }
+
+    // ══════════════ RENDERIZAR UI ══════════════
+    function actualizarUI() {
+        const count = carrito.reduce((s, i) => s + i.cantidad, 0);
+        let total = 0;
+        carrito.forEach(i => { total += Math.round(i.precio * i.cantidad * 100) / 100; });
+
+        // Bottom bar
+        const bar = document.getElementById('bottom-bar');
+        if (count > 0) {
+            bar.classList.remove('hidden');
+            document.getElementById('bar-count').innerText = count;
+            document.getElementById('bar-total').innerText = '$' + total.toFixed(2);
+        } else {
+            bar.classList.add('hidden');
+        }
+
+        // Carrito items
+        const container = document.getElementById('carrito-items');
+        container.innerHTML = '';
+        if (carrito.length === 0) {
+            container.innerHTML = '<div class="text-center text-gray-600 py-16"><span class="text-5xl block mb-4">🛒</span><p class="text-base font-bold">Tu pedido está vacío</p><p class="text-sm mt-2">Agrega algo rico desde el menú</p></div>';
+        } else {
+            carrito.forEach((item, idx) => {
+                const sub = (Math.round(item.precio * item.cantidad * 100) / 100).toFixed(2);
+                container.innerHTML += `
+                    <div class="bg-bosco-gray p-4 rounded-2xl border border-gray-700/40 anim-fade">
+                        <div class="flex items-center gap-3">
+                            <div class="flex-1">
+                                <h4 class="font-bold text-white text-sm uppercase leading-tight">${item.nombre}</h4>
+                                ${item.nota ? `<p class="text-yellow-400 text-[10px] font-bold mt-0.5">📝 ${item.nota}</p>` : ''}
+                                <p class="text-gray-600 text-xs mt-1">$${item.precio.toFixed(2)} c/u</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <button onclick="modCant(${idx},-1)" class="w-8 h-8 bg-[#1a1a1a] rounded-lg text-gray-400 font-bold text-sm flex items-center justify-center active:bg-gray-600">−</button>
+                                <span class="text-white font-black text-sm w-4 text-center">${item.cantidad}</span>
+                                <button onclick="modCant(${idx},1)" class="w-8 h-8 bg-bosco-orange rounded-lg text-black font-bold text-sm flex items-center justify-center active:bg-orange-500">+</button>
+                            </div>
+                            <span class="text-bosco-orange font-black text-base w-16 text-right">$${sub}</span>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        document.getElementById('carrito-total').innerText = '$' + total.toFixed(2);
+    }
+
+    function modCant(idx, d) {
+        carrito[idx].cantidad += d;
+        if (carrito[idx].cantidad < 1) carrito.splice(idx, 1);
+        actualizarUI();
+    }
+
+    function vaciarCarrito() {
+        if (carrito.length === 0) return;
+        if (!confirm('¿Vaciar todo el pedido?')) return;
+        carrito = [];
+        actualizarUI();
+        cerrarCarrito();
+    }
+
+    // ══════════════ CARRITO MODAL ══════════════
+    function abrirCarrito() {
+        if (carrito.length === 0) return;
+        actualizarUI();
+        document.getElementById('modal-carrito').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function cerrarCarrito() {
+        document.getElementById('modal-carrito').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    // ══════════════ CHECKOUT ══════════════
+    function setTipo(btn, tipo) {
+        tipoPedido = tipo;
+        document.querySelectorAll('.btn-tipo').forEach(b => {
+            b.classList.remove('border-bosco-orange', 'bg-bosco-orange/10', 'text-bosco-orange');
+            b.classList.add('border-gray-700', 'text-gray-400');
+        });
+        btn.classList.add('border-bosco-orange', 'bg-bosco-orange/10', 'text-bosco-orange');
+        btn.classList.remove('border-gray-700', 'text-gray-400');
+        
+        document.getElementById('sec-direccion').style.display = tipo === 'DOMICILIO' ? '' : 'none';
+    }
+
+    function setPago(btn, metodo) {
+        metodoPago = metodo;
+        document.querySelectorAll('.btn-pago').forEach(b => {
+            b.classList.remove('border-bosco-orange', 'bg-bosco-orange/10', 'text-bosco-orange');
+            b.classList.add('border-gray-700', 'text-gray-400');
+        });
+        btn.classList.add('border-bosco-orange', 'bg-bosco-orange/10', 'text-bosco-orange');
+        btn.classList.remove('border-gray-700', 'text-gray-400');
+        
+        document.getElementById('sec-comprobante').classList.toggle('hidden', metodo !== 'TRANSFERENCIA');
+        document.getElementById('sec-cuenta').classList.toggle('hidden', metodo !== 'TRANSFERENCIA');
+    }
+
+    function previewComprobante(input) {
+        if (input.files && input.files[0]) {
+            document.getElementById('comprobante-placeholder').classList.add('hidden');
+            document.getElementById('comprobante-preview').classList.remove('hidden');
+            document.getElementById('comprobante-name').innerText = input.files[0].name;
+        }
+    }
+
+    // ══════════════ ENVIAR PEDIDO ══════════════
+    function enviarPedido() {
+        const nombre = document.getElementById('ch-nombre').value.trim();
+        const telefono = document.getElementById('ch-telefono').value.trim();
+        const direccion = document.getElementById('ch-direccion').value.trim();
+        const btn = document.getElementById('btn-enviar');
+
+        if (!nombre) { sacudir('ch-nombre'); return alert('⚠️ Ingresa tu nombre'); }
+        if (!telefono) { sacudir('ch-telefono'); return alert('⚠️ Ingresa tu WhatsApp/teléfono'); }
+        if (tipoPedido === 'DOMICILIO' && !direccion) { sacudir('ch-direccion'); return alert('⚠️ Ingresa tu dirección de entrega'); }
+        if (carrito.length === 0) return alert('⚠️ Tu carrito está vacío');
+
+        if (metodoPago === 'TRANSFERENCIA') {
+            const comp = document.getElementById('ch-comprobante').files[0];
+            if (!comp) return alert('⚠️ Sube el comprobante de transferencia');
+        }
+
+        // Desactivar botón
+        btn.disabled = true;
+        btn.innerText = 'PROCESANDO...';
+        btn.classList.add('opacity-50');
+        document.getElementById('modal-enviando').classList.remove('hidden');
+
+        // Preparar FormData
+        const formData = new FormData();
+        formData.append('nombre', nombre);
+        formData.append('cedula', document.getElementById('ch-cedula').value.trim());
+        formData.append('telefono', telefono);
+        formData.append('direccion', direccion);
+        formData.append('tipo_pedido', tipoPedido);
+        formData.append('metodo_pago', metodoPago);
+        formData.append('carrito', JSON.stringify(carrito));
+        if (ubicacionLat && ubicacionLng) {
+            formData.append('ubicacion_lat', ubicacionLat);
+            formData.append('ubicacion_lng', ubicacionLng);
+        }
+
+        if (metodoPago === 'TRANSFERENCIA') {
+            const file = document.getElementById('ch-comprobante').files[0];
+            if (file) formData.append('comprobante', file);
+        }
+
+        fetch('/pedido/api/crear/', {
+            method: 'POST',
+            body: formData,
+        })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('modal-enviando').classList.add('hidden');
+            if (data.status === 'ok') {
+                window.location.href = '/pedido/confirmacion/' + data.pedido_id + '/';
+            } else {
+                resetEnviarBtn();
+                alert('❌ ' + data.mensaje);
+            }
+        })
+        .catch(err => {
+            document.getElementById('modal-enviando').classList.add('hidden');
+            resetEnviarBtn();
+            alert('❌ Error de conexión. Intenta de nuevo.');
+        });
+    }
+
+    function resetEnviarBtn() {
+        const btn = document.getElementById('btn-enviar');
+        btn.disabled = false;
+        btn.innerText = 'CONFIRMAR PEDIDO';
+        btn.classList.remove('opacity-50');
+    }
+
+    function sacudir(id) {
+        const el = document.getElementById(id);
+        el.classList.add('anim-shake', 'border-red-500');
+        el.focus();
+        setTimeout(() => el.classList.remove('anim-shake', 'border-red-500'), 500);
+    }
+
+    // ══════════════ GEOLOCALIZACIÓN ══════════════
+    function obtenerGPS() {
+        if (!navigator.geolocation) {
+            document.getElementById('gps-placeholder').classList.add('hidden');
+            document.getElementById('gps-error').classList.remove('hidden');
+            document.getElementById('gps-error-msg').innerText = 'Tu navegador no soporta GPS';
+            return;
+        }
+
+        document.getElementById('gps-placeholder').classList.add('hidden');
+        document.getElementById('gps-success').classList.add('hidden');
+        document.getElementById('gps-error').classList.add('hidden');
+        document.getElementById('gps-loading').classList.remove('hidden');
+
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                ubicacionLat = pos.coords.latitude;
+                ubicacionLng = pos.coords.longitude;
+                document.getElementById('gps-loading').classList.add('hidden');
+                document.getElementById('gps-success').classList.remove('hidden');
+                document.getElementById('gps-coords').innerText = 
+                    'Lat: ' + ubicacionLat.toFixed(6) + ', Lng: ' + ubicacionLng.toFixed(6);
+                
+                // Cambiar el borde a verde
+                document.getElementById('btn-gps').classList.remove('border-gray-600');
+                document.getElementById('btn-gps').classList.add('border-green-500');
+            },
+            function(err) {
+                document.getElementById('gps-loading').classList.add('hidden');
+                document.getElementById('gps-error').classList.remove('hidden');
+                const msgs = {
+                    1: 'Permiso denegado. Toca "Permitir" cuando tu teléfono lo pida.',
+                    2: 'No se pudo determinar tu ubicación. ¿Estás en interiores?',
+                    3: 'Tiempo agotado. Intenta de nuevo al aire libre.'
+                };
+                document.getElementById('gps-error-msg').innerText = msgs[err.code] || 'Error desconocido';
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+    }
+
+    // Init
+    actualizarUI();
+</script>
+
+<!-- Footer Ü Systems -->
+<div class="text-center py-4 text-gray-700 text-[9px] font-bold tracking-widest flex items-center justify-center gap-2">
+    Powered by Ü Systems
+    <a href="/login/?src=pwa" class="text-gray-800 hover:text-gray-500 transition">🔒</a>
+</div>
+
+</body>
+</html>

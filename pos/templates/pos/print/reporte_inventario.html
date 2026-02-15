@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Inventario</title>
+    <style>
+        @page { margin: 15mm; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 11px;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #ff6600;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .header h1 { font-size: 22px; margin: 0; color: #222; }
+        .header p { margin: 3px 0; color: #666; font-size: 10px; }
+        
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .stat-card {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        .stat-card .number { font-size: 24px; font-weight: 900; }
+        .stat-card .label { font-size: 9px; color: #999; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-green .number { color: #22c55e; }
+        .stat-yellow .number { color: #eab308; }
+        .stat-red .number { color: #ef4444; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        th {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 8px 6px;
+            text-align: left;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+        }
+        td {
+            border: 1px solid #eee;
+            padding: 6px;
+            font-size: 11px;
+        }
+        .stock-ok { color: #22c55e; font-weight: 900; }
+        .stock-bajo { color: #eab308; font-weight: 900; background: #fefce8; }
+        .stock-sin { color: #ef4444; font-weight: 900; background: #fef2f2; }
+        
+        .alerta-section {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+        .alerta-section h3 { color: #dc2626; margin: 0 0 8px; font-size: 12px; }
+
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            color: #999;
+            font-size: 8px;
+            border-top: 1px solid #ddd;
+            padding-top: 8px;
+        }
+
+        @media screen {
+            body { max-width: 800px; margin: 20px auto; padding: 20px; }
+            .no-screen { display: none; }
+            .btn-imprimir {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #ff6600;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-weight: 900;
+                font-size: 14px;
+                cursor: pointer;
+            }
+            .btn-imprimir:hover { background: #e55800; }
+        }
+        @media print {
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <button onclick="window.print()" class="btn-imprimir no-print">🖨️ IMPRIMIR / PDF</button>
+
+    <div class="header">
+        <h1>📦 REPORTE DE INVENTARIO</h1>
+        <p><strong>RAMÓN</strong> — Generado: {{ ahora|date:"d/m/Y H:i" }} por {{ usuario }}</p>
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="stats">
+        <div class="stat-card">
+            <div class="number">{{ total_productos }}</div>
+            <div class="label">Total Productos</div>
+        </div>
+        <div class="stat-card stat-green">
+            <div class="number">{{ total_productos|add:"-"|add:bajo_stock.count }}</div>
+            <div class="label">Stock Normal</div>
+        </div>
+        <div class="stat-card stat-yellow">
+            <div class="number">{{ bajo_stock.count }}</div>
+            <div class="label">Bajo Stock</div>
+        </div>
+        <div class="stat-card stat-red">
+            <div class="number">{{ sin_stock.count }}</div>
+            <div class="label">Sin Stock</div>
+        </div>
+    </div>
+
+    <!-- Alertas -->
+    {% if bajo_stock %}
+    <div class="alerta-section">
+        <h3>⚠️ PRODUCTOS QUE NECESITAN REPOSICIÓN</h3>
+        <table>
+            <tr>
+                <th>Producto</th>
+                <th>Categoría</th>
+                <th>Stock Actual</th>
+                <th>Stock Mínimo</th>
+                <th>Faltan</th>
+            </tr>
+            {% for inv in bajo_stock %}
+            <tr>
+                <td><strong>{{ inv.producto.nombre }}</strong></td>
+                <td>{{ inv.producto.categoria.nombre }}</td>
+                <td class="{% if inv.stock_actual <= 0 %}stock-sin{% else %}stock-bajo{% endif %}">{{ inv.stock_actual }} {{ inv.unidad }}</td>
+                <td>{{ inv.stock_minimo }}</td>
+                <td class="stock-sin">{{ inv.stock_minimo|add:"-"|add:inv.stock_actual }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Inventario completo -->
+    <h3 style="margin: 0 0 8px; font-size: 13px;">📋 INVENTARIO COMPLETO</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Producto</th>
+            <th>Categoría</th>
+            <th>Precio</th>
+            <th>Stock</th>
+            <th>Mínimo</th>
+            <th>Unidad</th>
+            <th>Estado</th>
+            <th>Últ. Actualización</th>
+        </tr>
+        {% for inv in inventarios %}
+        <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><strong>{{ inv.producto.nombre }}</strong></td>
+            <td>{{ inv.producto.categoria.nombre }}</td>
+            <td>${{ inv.producto.precio|floatformat:2 }}</td>
+            <td class="{% if inv.stock_actual <= 0 %}stock-sin{% elif inv.alerta_bajo %}stock-bajo{% else %}stock-ok{% endif %}">
+                {{ inv.stock_actual }}
+            </td>
+            <td>{{ inv.stock_minimo }}</td>
+            <td>{{ inv.unidad }}</td>
+            <td>
+                {% if inv.stock_actual <= 0 %}🔴 SIN STOCK
+                {% elif inv.alerta_bajo %}🟡 BAJO
+                {% else %}🟢 OK{% endif %}
+            </td>
+            <td>{{ inv.ultima_actualizacion|date:"d/m/Y H:i" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <div class="footer">
+        Ü Systems v1.0 — Este reporte es un documento interno de control de inventario
+    </div>
+</body>
+</html>

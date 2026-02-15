@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-3xl font-black text-white tracking-tight">📊 REPORTE CONTADORA</h1>
+            <p class="text-gray-500 text-xs font-bold mt-1">Resumen financiero para revisión semanal</p>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="window.print()" class="bg-bosco-orange text-black px-6 py-2 rounded-lg text-sm font-black hover:bg-orange-500 transition">
+                🖨️ IMPRIMIR / PDF
+            </button>
+            <a href="{% url 'pos_index' %}" class="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+                ← VOLVER
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtro de Fechas -->
+    <div class="bg-[#1a1a1a] rounded-xl border border-gray-800 p-4 mb-6 flex items-center gap-4 no-print">
+        <span class="text-gray-400 font-bold text-sm">📅 PERÍODO:</span>
+        <input type="date" id="fecha-desde" value="{{ desde }}" class="bg-gray-800 text-white p-2 rounded-lg border border-gray-700 text-sm font-bold">
+        <span class="text-gray-600">→</span>
+        <input type="date" id="fecha-hasta" value="{{ hasta }}" class="bg-gray-800 text-white p-2 rounded-lg border border-gray-700 text-sm font-bold">
+        <button onclick="filtrarFechas()" class="bg-bosco-orange text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-orange-500 transition">
+            FILTRAR
+        </button>
+    </div>
+
+    <!-- Tarjetas Resumen -->
+    <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="bg-[#1a1a1a] rounded-xl border border-gray-800 p-5 text-center">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">VENTAS TOTALES</p>
+            <p class="text-bosco-orange text-3xl font-black mt-2">${{ total_ventas|floatformat:2 }}</p>
+            <p class="text-gray-600 text-xs mt-1">{{ num_ventas }} transacciones</p>
+        </div>
+        <div class="bg-green-900/10 rounded-xl border border-green-900/30 p-5 text-center">
+            <p class="text-green-700 text-[10px] font-black uppercase tracking-widest">INGRESOS EXTRA</p>
+            <p class="text-green-400 text-3xl font-black mt-2">+${{ total_ingresos|floatformat:2 }}</p>
+        </div>
+        <div class="bg-red-900/10 rounded-xl border border-red-900/30 p-5 text-center">
+            <p class="text-red-700 text-[10px] font-black uppercase tracking-widest">EGRESOS</p>
+            <p class="text-red-400 text-3xl font-black mt-2">-${{ total_egresos|floatformat:2 }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-xl border border-gray-800 p-5 text-center">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">DIFERENCIA CIERRES</p>
+            <p class="text-3xl font-black mt-2 {% if total_diferencia > 0 %}text-green-400{% elif total_diferencia < 0 %}text-red-400{% else %}text-gray-400{% endif %}">
+                ${{ total_diferencia|floatformat:2 }}
+            </p>
+            <p class="text-gray-600 text-xs mt-1">{{ num_turnos }} turnos</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-6 mb-6">
+        <!-- Desglose por método de pago -->
+        <div class="bg-[#1a1a1a] rounded-xl border border-gray-800 p-6">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">💳 VENTAS POR MÉTODO DE PAGO</h2>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between bg-gray-800/50 p-4 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">💵</span>
+                        <span class="text-white font-bold">Efectivo</span>
+                    </div>
+                    <span class="text-green-400 font-black text-lg">${{ total_efectivo|floatformat:2 }}</span>
+                </div>
+                <div class="flex items-center justify-between bg-gray-800/50 p-4 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">📱</span>
+                        <span class="text-white font-bold">Transferencia</span>
+                    </div>
+                    <span class="text-blue-400 font-black text-lg">${{ total_transferencia|floatformat:2 }}</span>
+                </div>
+                <div class="flex items-center justify-between bg-gray-800/50 p-4 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">💳</span>
+                        <span class="text-white font-bold">Tarjeta/Medianet</span>
+                    </div>
+                    <span class="text-purple-400 font-black text-lg">${{ total_tarjeta|floatformat:2 }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Desglose de egresos por concepto -->
+        <div class="bg-[#1a1a1a] rounded-xl border border-gray-800 p-6">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">📤 EGRESOS POR CONCEPTO</h2>
+            <div class="space-y-2">
+                {% for eg in egresos_por_concepto %}
+                <div class="flex items-center justify-between bg-gray-800/50 p-3 rounded-xl">
+                    <span class="text-gray-300 font-bold text-sm">{{ eg.concepto }}</span>
+                    <span class="text-red-400 font-black">-${{ eg.total|floatformat:2 }}</span>
+                </div>
+                {% empty %}
+                <p class="text-gray-600 text-center text-sm py-4">Sin egresos en este período</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista detallada de movimientos -->
+    <div class="bg-[#1a1a1a] rounded-xl border border-gray-800 p-6 mb-6">
+        <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">📋 DETALLE DE MOVIMIENTOS ({{ movimientos.count }})</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-gray-500 text-xs uppercase border-b border-gray-800">
+                        <th class="text-left py-3 px-2">Fecha/Hora</th>
+                        <th class="text-left py-3 px-2">Tipo</th>
+                        <th class="text-left py-3 px-2">Concepto</th>
+                        <th class="text-left py-3 px-2">Descripción</th>
+                        <th class="text-left py-3 px-2">Registrado por</th>
+                        <th class="text-right py-3 px-2">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mov in movimientos %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                        <td class="py-2 px-2 text-gray-400">{{ mov.fecha|date:"d/m H:i" }}</td>
+                        <td class="py-2 px-2">
+                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full {% if mov.tipo == 'INGRESO' %}bg-green-900/50 text-green-400{% else %}bg-red-900/50 text-red-400{% endif %}">
+                                {{ mov.tipo }}
+                            </span>
+                        </td>
+                        <td class="py-2 px-2 text-white font-bold">{{ mov.concepto }}</td>
+                        <td class="py-2 px-2 text-gray-400">{{ mov.descripcion|default:"-" }}</td>
+                        <td class="py-2 px-2 text-gray-500">{{ mov.registrado_por.username }}</td>
+                        <td class="py-2 px-2 text-right font-black {% if mov.tipo == 'INGRESO' %}text-green-400{% else %}text-red-400{% endif %}">
+                            {% if mov.tipo == 'INGRESO' %}+{% else %}-{% endif %}${{ mov.monto|floatformat:2 }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-gray-600 py-8">Sin movimientos en este período</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pie con branding -->
+    <div class="text-center text-gray-700 text-[10px] font-bold tracking-widest py-4">
+        Powered by Ü Systems — Reporte generado {{ ahora|default:"hoy" }}
+    </div>
+</div>
+
+<style>
+    @media print {
+        .no-print { display: none !important; }
+        body { background: white !important; color: black !important; }
+        .bg-bosco-dark { background: white !important; }
+        .text-white, .text-gray-100, .text-gray-300, .text-gray-400 { color: #333 !important; }
+        .text-gray-500, .text-gray-600, .text-gray-700 { color: #666 !important; }
+        * { border-color: #ddd !important; }
+    }
+</style>
+
+<script>
+    function filtrarFechas() {
+        const desde = document.getElementById('fecha-desde').value;
+        const hasta = document.getElementById('fecha-hasta').value;
+        window.location.href = '{% url "reporte_contadora" %}?desde=' + desde + '&hasta=' + hasta;
+    }
+</script>
+{% endblock %}

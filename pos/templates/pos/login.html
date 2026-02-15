@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-bosco-dark">
+    <div class="bg-[#1a1a1a] p-8 rounded-2xl shadow-2xl border border-gray-800 w-full max-w-md">
+        <div class="text-center mb-6">
+            <h1 class="text-4xl font-black text-bosco-orange tracking-widest mb-2">RAMÓN</h1>
+            <p class="text-gray-400 text-sm tracking-wide">SISTEMA INTEGRAL</p>
+        </div>
+
+        <!-- TABS -->
+        <div class="flex bg-black p-1 rounded-xl mb-6">
+            <button onclick="setMode('POS')" id="tab-pos" class="flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-bosco-orange text-black shadow">ENTRAR A CAJA</button>
+            <button onclick="setMode('ASISTENCIA')" id="tab-asistencia" class="flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-white">MARCAR ASISTENCIA</button>
+        </div>
+
+        <!-- Pantalla del PIN -->
+        <div class="mb-6 relative">
+            <div class="bg-black p-4 rounded-xl border border-gray-700 flex justify-center items-center gap-3 h-20">
+                <span class="dot w-5 h-5 rounded-full bg-gray-800 transition-colors"></span>
+                <span class="dot w-5 h-5 rounded-full bg-gray-800 transition-colors"></span>
+                <span class="dot w-5 h-5 rounded-full bg-gray-800 transition-colors"></span>
+                <span class="dot w-5 h-5 rounded-full bg-gray-800 transition-colors"></span>
+            </div>
+            <p id="mensaje-estado" class="text-center text-xs mt-2 font-bold h-4 text-gray-400"></p>
+        </div>
+
+        <!-- Botones Asistencia (Solo visibles en modo asistencia) -->
+        <div id="botones-asistencia" class="hidden grid grid-cols-2 gap-4 mb-4">
+            <button onclick="setAsistenciaAction('ENTRADA')" id="btn-entrada" class="py-2 bg-green-900/50 text-green-400 border border-green-800 rounded font-bold hover:bg-green-900 transition">ENTRADA</button>
+            <button onclick="setAsistenciaAction('SALIDA')" id="btn-salida" class="py-2 bg-red-900/50 text-red-400 border border-red-800 rounded font-bold hover:bg-red-900 transition">SALIDA</button>
+        </div>
+
+        <!-- Teclado Numérico -->
+        <div class="grid grid-cols-3 gap-4 mb-2">
+            <button onclick="addDigit(1)" class="btn-numpad">1</button>
+            <button onclick="addDigit(2)" class="btn-numpad">2</button>
+            <button onclick="addDigit(3)" class="btn-numpad">3</button>
+            <button onclick="addDigit(4)" class="btn-numpad">4</button>
+            <button onclick="addDigit(5)" class="btn-numpad">5</button>
+            <button onclick="addDigit(6)" class="btn-numpad">6</button>
+            <button onclick="addDigit(7)" class="btn-numpad">7</button>
+            <button onclick="addDigit(8)" class="btn-numpad">8</button>
+            <button onclick="addDigit(9)" class="btn-numpad">9</button>
+            <button onclick="deleteDigit()" class="btn-numpad text-red-500">⌫</button>
+            <button onclick="addDigit(0)" class="btn-numpad">0</button>
+            <button onclick="submitPin()" class="bg-gray-800 text-white font-black rounded-xl text-2xl hover:bg-white hover:text-black flex items-center justify-center transition">➜</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-numpad {
+        background: #2d2d2d;
+        color: white;
+        font-weight: bold;
+        padding: 1.25rem 0;
+        border-radius: 0.75rem;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .btn-numpad:hover { background: #404040; }
+    .btn-numpad:active { transform: scale(0.95); }
+    .dot.active {
+        background: #ff6600 !important;
+        box-shadow: 0 0 10px #ff6600;
+    }
+</style>
+
+<script>
+    let pin = "";
+    let mode = 'POS'; // POS | ASISTENCIA
+    let asistenciaAction = 'ENTRADA'; 
+
+    function setMode(newMode) {
+        mode = newMode;
+        pin = "";
+        updateDots();
+        document.getElementById('mensaje-estado').innerText = "";
+        
+        const tabPos = document.getElementById('tab-pos');
+        const tabAsistencia = document.getElementById('tab-asistencia');
+        const botsAsistencia = document.getElementById('botones-asistencia');
+
+        if(mode === 'POS') {
+            tabPos.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-bosco-orange text-black shadow";
+            tabAsistencia.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-white";
+            botsAsistencia.classList.add('hidden');
+        } else {
+            tabPos.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-white";
+            tabAsistencia.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-blue-600 text-white shadow";
+            botsAsistencia.classList.remove('hidden');
+        }
+    }
+
+    function setAsistenciaAction(action) {
+        asistenciaAction = action;
+        document.getElementById('btn-entrada').className = action === 'ENTRADA' ? "py-2 bg-green-600 text-white rounded font-bold transition shadow" : "py-2 bg-green-900/50 text-green-400 border border-green-800 rounded font-bold hover:bg-green-900 transition";
+        document.getElementById('btn-salida').className = action === 'SALIDA' ? "py-2 bg-red-600 text-white rounded font-bold transition shadow" : "py-2 bg-red-900/50 text-red-400 border border-red-800 rounded font-bold hover:bg-red-900 transition";
+    }
+
+    function addDigit(digit) {
+        if(pin.length < 4) {
+            pin += digit;
+            updateDots();
+            // Auto-submit cuando llega a 4 dígitos
+            if(pin.length === 4) {
+                setTimeout(submitPin, 200);
+            }
+        }
+    }
+
+    function deleteDigit() {
+        pin = pin.slice(0, -1);
+        updateDots();
+        document.getElementById('mensaje-estado').innerText = "";
+    }
+
+    function updateDots() {
+        const dots = document.querySelectorAll('.dot');
+        dots.forEach((dot, idx) => {
+            if (idx < pin.length) dot.classList.add('active');
+            else dot.classList.remove('active');
+        });
+    }
+
+    function submitPin() {
+        if(pin.length < 4) return;
+
+        const csrftoken = getCookie('csrftoken');
+        const hdrs = {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken};
+
+        if(mode === 'POS') {
+            // Login normal
+            fetch('/api/verificar-pin/', {
+                method: 'POST',
+                headers: hdrs,
+                body: JSON.stringify({ pin: pin })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'ok') {
+                    // Si viene de la PWA y es ADMIN, ir al Dashboard
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('src') === 'pwa' && data.rol === 'ADMIN') {
+                        window.location.href = '/dashboard/';
+                    } else {
+                        window.location.href = '/apertura/';
+                    }
+                } else {
+                    showError("PIN INCORRECTO O NO AUTORIZADO");
+                }
+            });
+        } else {
+            // Asistencia
+            fetch('/api/asistencia/', {
+                method: 'POST',
+                headers: hdrs,
+                body: JSON.stringify({ pin: pin, accion: asistenciaAction })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'ok') {
+                    showSuccess(data.mensaje);
+                    pin = "";
+                    updateDots();
+                } else {
+                    showError(data.mensaje);
+                    pin = "";
+                    updateDots();
+                }
+            });
+        }
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('mensaje-estado');
+        el.innerText = msg;
+        el.className = "text-center text-xs mt-2 font-bold h-4 text-red-500 animate-pulse";
+    }
+
+    function showSuccess(msg) {
+        const el = document.getElementById('mensaje-estado');
+        el.innerText = msg;
+        el.className = "text-center text-xs mt-2 font-bold h-4 text-green-500";
+        setTimeout(() => { el.innerText = ""; }, 3000);
+    }
+
+    // Teclado físico support
+    document.addEventListener('keydown', (e) => {
+        if(e.key >= '0' && e.key <= '9') addDigit(e.key);
+        if(e.key === 'Backspace') deleteDigit();
+        if(e.key === 'Enter') submitPin();
+    });
+    
+    // Init state
+    setAsistenciaAction('ENTRADA');
+</script>
+{% endblock %}

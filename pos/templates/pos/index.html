@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load l10n %}
 
 {% block content %}
 <div class="flex h-screen overflow-hidden bg-bosco-dark font-sans text-gray-100">
@@ -9,18 +10,42 @@
             RAMÓN
         </div>
         
-        <div class="px-4 pt-4">
-            <button onclick="marcarAsistencia()" class="w-full bg-gray-800 border border-gray-700 text-gray-300 py-2 rounded text-xs font-bold hover:bg-gray-700 hover:text-white transition flex items-center justify-center gap-2">
-                ⏱️ MARCAR RELOJ
-            </button>
+        <div class="px-4 pt-4 space-y-2">
+            <a href="{% url 'panel_pedidos_web' %}" id="btn-pedidos-web" class="block w-full bg-bosco-orange/20 border border-bosco-orange text-bosco-orange py-3 rounded text-xs font-black hover:bg-bosco-orange hover:text-black transition text-center relative">
+                📱 PEDIDOS WEB
+                <span id="badge-web" class="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center hidden">0</span>
+            </a>
+            <a href="{% url 'lista_empleados' %}" class="block w-full bg-gray-800 border border-gray-700 text-gray-300 py-2 rounded text-xs font-bold hover:bg-gray-700 hover:text-white transition text-center">
+                👥 EMPLEADOS
+            </a>
+            <a href="{% url 'panel_inventario' %}" class="block w-full bg-gray-800 border border-gray-700 text-gray-300 py-2 rounded text-xs font-bold hover:bg-gray-700 hover:text-white transition text-center">
+                📦 INVENTARIO
+            </a>
+            <a href="{% url 'panel_movimientos' %}" class="block w-full bg-gray-800 border border-gray-700 text-gray-300 py-2 rounded text-xs font-bold hover:bg-gray-700 hover:text-white transition text-center">
+                💰 CAJA (GASTOS)
+            </a>
+            {% if rol == 'ADMIN' %}
+            <a href="{% url 'reporte_contadora' %}" class="block w-full bg-purple-900/30 border border-purple-800 text-purple-400 py-2 rounded text-xs font-bold hover:bg-purple-900 hover:text-white transition text-center">
+                📊 CONTADORA
+            </a>
+            <a href="{% url 'dashboard_analytics' %}" class="block w-full bg-gradient-to-r from-orange-900/30 to-yellow-900/30 border border-orange-800 text-orange-400 py-2 rounded text-xs font-bold hover:bg-orange-900 hover:text-white transition text-center">
+                📈 ANALYTICS
+            </a>
+            {% endif %}
+            <a href="{% url 'pos_cierre' %}" class="block w-full bg-red-900/30 border border-red-900 text-red-400 py-2 rounded text-xs font-bold hover:bg-red-900 hover:text-white transition text-center">
+                🔒 CERRAR CAJA
+            </a>
+            <a href="{% url 'pos_logout' %}" class="block w-full bg-gray-900 border border-gray-700 text-gray-500 py-2 rounded text-xs font-bold hover:bg-gray-800 hover:text-white transition text-center">
+                🚪 SALIR
+            </a>
         </div>
 
         <div class="overflow-y-auto flex-1 py-4 space-y-1">
-            <button onclick="filtrarProductos('todos')" class="w-full text-left px-6 py-4 text-gray-400 hover:bg-gray-900 hover:text-white border-l-4 border-transparent hover:border-bosco-orange transition-all font-bold text-sm uppercase">
+            <button onclick="filtrarProductos('todos')" class="w-full text-left px-6 py-4 text-gray-400 hover:bg-gray-900 hover:text-white border-l-4 border-transparent hover:border-bosco-orange transition-all font-bold text-sm uppercase focus:bg-gray-800 focus:text-white focus:border-bosco-orange">
                 TODO EL MENÚ
             </button>
             {% for cat in categorias %}
-            <button onclick="filtrarProductos('{{ cat.id }}')" class="w-full text-left px-6 py-4 text-gray-400 hover:bg-gray-900 hover:text-white border-l-4 border-transparent hover:border-bosco-orange transition-all font-bold text-sm uppercase">
+            <button onclick="filtrarProductos('{{ cat.id }}')" class="w-full text-left px-6 py-4 text-gray-400 hover:bg-gray-900 hover:text-white border-l-4 border-transparent hover:border-bosco-orange transition-all font-bold text-sm uppercase focus:bg-gray-800 focus:text-white focus:border-bosco-orange">
                 {{ cat.nombre }}
             </button>
             {% endfor %}
@@ -33,9 +58,9 @@
                    class="w-full bg-[#2d2d2d] text-white p-4 pl-6 rounded-xl border border-gray-700 focus:outline-none focus:border-bosco-orange placeholder-gray-500 uppercase font-bold">
         </div>
 
-        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pb-24 pr-2 custom-scrollbar">
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pb-24 pr-2 custom-scrollbar" id="grid-productos">
             {% for prod in productos %}
-            <div onclick="abrirModalOpciones('{{ prod.id }}', '{{ prod.nombre }}', {{ prod.precio }})" 
+            <div onclick="abrirModalOpciones('{{ prod.id }}', '{{ prod.nombre }}', '{{ prod.precio|unlocalize }}')"  
                  class="producto-card group bg-[#2d2d2d] hover:bg-[#3d3d3d] p-5 rounded-xl cursor-pointer border border-transparent hover:border-bosco-orange transition-all duration-200 shadow-lg select-none h-36 flex flex-col justify-between active:scale-95"
                  data-categoria-id="{{ prod.categoria.id }}"
                  data-nombre="{{ prod.nombre|lower }}">
@@ -45,7 +70,7 @@
                 </h3>
                 <div class="flex justify-between items-end mt-2">
                     <span class="bg-bosco-orange text-black font-black px-3 py-1 rounded-md text-base">
-                        ${{ prod.precio }}
+                        ${{ prod.precio|floatformat:2 }}
                     </span>
                 </div>
             </div>
@@ -60,13 +85,31 @@
                 <button id="btn-llevar" onclick="setTipoPedido('LLEVAR')" class="flex-1 py-2 rounded font-bold text-sm text-gray-600 hover:bg-gray-200 transition">PARA LLEVAR</button>
             </div>
             <div class="grid grid-cols-3 gap-2">
-                <input type="text" id="cliente-cedula" placeholder="C.I. / RUC" class="col-span-1 bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none">
-                <input type="text" id="cliente-nombre" placeholder="NOMBRE CLIENTE" class="col-span-2 bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none uppercase">
+                <div class="col-span-1 relative">
+                    <input type="text" id="cliente-cedula" onkeydown="if(event.key==='Enter')buscarCliente()" placeholder="C.I. / RUC" class="w-full bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none">
+                    <button onclick="buscarCliente()" class="absolute right-1 top-1 text-gray-400 hover:text-black text-lg">🔍</button>
+                </div>
+                <input type="text" id="cliente-nombre" placeholder="NOMBRE COMPLETO" class="col-span-2 bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none uppercase">
+            </div>
+            
+            <!-- Estado del cliente -->
+            <div id="cliente-status" class="hidden text-xs font-bold px-2 py-1 rounded text-center"></div>
+
+            <!-- Campos adicionales del cliente -->
+            <div id="extra-cliente" class="hidden grid grid-cols-2 gap-2 animate-fade-in">
+                <input type="text" id="cliente-telefono" placeholder="📞 TELÉFONO" class="bg-gray-50 p-2 rounded text-xs border border-gray-200 font-bold">
+                <input type="email" id="cliente-email" placeholder="📧 EMAIL (FACTURA)" class="bg-gray-50 p-2 rounded text-xs border border-gray-200 font-bold">
+                <input type="text" id="cliente-direccion" placeholder="📍 DIRECCIÓN" class="col-span-2 bg-gray-50 p-2 rounded text-xs border border-gray-200 font-bold">
+                <div class="col-span-2 flex gap-2">
+                    <button onclick="guardarCliente()" id="btn-guardar-cliente" class="flex-1 bg-gray-800 text-white text-xs py-2 rounded font-bold hover:bg-black transition">💾 GUARDAR CLIENTE</button>
+                    <button onclick="limpiarCliente()" class="bg-gray-300 text-gray-700 text-xs px-3 py-2 rounded font-bold hover:bg-gray-400 transition">✕</button>
+                </div>
             </div>
         </div>
 
         <div id="lista-carrito" class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
-            </div>
+            <!-- Items del carrito -->
+        </div>
 
         <div class="p-6 bg-white border-t border-gray-200 shadow-lg">
             <div class="flex justify-between items-end mb-4">
@@ -80,6 +123,7 @@
     </div>
 </div>
 
+<!-- Modal Opciones -->
 <div id="modal-opciones" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center backdrop-blur-sm">
     <div class="bg-[#2d2d2d] w-full max-w-md rounded-xl shadow-2xl border border-gray-600 overflow-hidden">
         <div class="bg-black p-4 border-b border-gray-700">
@@ -97,7 +141,7 @@
                 </div>
             </div>
 
-            <div id="seccion-salsas">
+            <div id="seccion-salsas" style="display: none;">
                 <p class="text-gray-400 text-xs font-bold uppercase mb-2">ELIGE UNA SALSA:</p>
                 <div class="grid grid-cols-2 gap-2">
                     <button onclick="selSalsa('BBQ Original')" class="btn-salsa p-2 border border-gray-600 rounded text-gray-300 text-sm hover:border-bosco-orange hover:text-white">BBQ Original</button>
@@ -120,15 +164,66 @@
     </div>
 </div>
 
+<!-- Modal Pago -->
 <div id="modal-pago" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center backdrop-blur-sm">
     <div class="bg-[#1a1a1a] w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-700 p-8">
-        <h2 class="text-3xl font-black text-white mb-6">CONFIRMAR PAGO</h2>
-        <div class="text-6xl font-black text-bosco-orange mb-8" id="modal-total">$0.00</div>
+        <h2 class="text-2xl font-black text-white mb-2">CONFIRMAR PAGO</h2>
+        <div class="text-5xl font-black text-bosco-orange mb-6" id="modal-total">$0.00</div>
         
-        <div class="grid grid-cols-1 gap-4">
-            <button onclick="finalizarVenta('EFECTIVO')" class="p-4 bg-gray-800 rounded text-white font-bold hover:bg-gray-700">💵 EFECTIVO</button>
-            <button onclick="finalizarVenta('TRANSFERENCIA')" class="p-4 bg-gray-800 rounded text-white font-bold hover:bg-gray-700">📱 TRANSFERENCIA</button>
-            <button onclick="cerrarModalPago()" class="p-4 border border-gray-600 rounded text-gray-400 font-bold mt-4">VOLVER</button>
+        <!-- Selección de método -->
+        <div class="grid grid-cols-3 gap-3 mb-6">
+            <button onclick="selMetodo('EFECTIVO')" id="btn-met-efectivo" class="p-4 bg-green-900/40 border-2 border-green-600 rounded-xl text-white font-bold text-lg hover:bg-green-900 transition flex items-center justify-center gap-2">
+                💵 EFECTIVO
+            </button>
+            <button onclick="selMetodo('TRANSFERENCIA')" id="btn-met-transferencia" class="p-4 bg-blue-900/40 border-2 border-blue-600 rounded-xl text-white font-bold text-lg hover:bg-blue-900 transition flex items-center justify-center gap-2">
+                📱 TRANSFERENCIA
+            </button>
+            <button onclick="selMetodo('TARJETA')" id="btn-met-tarjeta" class="p-4 bg-purple-900/40 border-2 border-purple-600 rounded-xl text-white font-bold text-lg hover:bg-purple-900 transition flex items-center justify-center gap-2">
+                💳 TARJETA
+            </button>
+        </div>
+
+        <!-- Sección Efectivo: Monto recibido y cambio -->
+        <div id="seccion-efectivo" class="hidden bg-[#2d2d2d] p-5 rounded-xl border border-gray-600 mb-6 space-y-4">
+            <label class="block text-gray-400 text-xs font-bold uppercase">MONTO RECIBIDO DEL CLIENTE</label>
+            <input type="number" id="monto-recibido" step="0.01" min="0" oninput="calcularCambio()" 
+                   class="w-full bg-black text-white text-4xl font-black p-4 rounded-xl border border-gray-600 focus:border-bosco-orange outline-none text-center" 
+                   placeholder="0.00">
+            <div class="flex justify-between items-center bg-black p-4 rounded-xl">
+                <span class="text-gray-400 font-bold text-sm uppercase">CAMBIO A DEVOLVER:</span>
+                <span id="cambio-display" class="text-3xl font-black text-green-400">$0.00</span>
+            </div>
+            <!-- Billetes rápidos -->
+            <div class="grid grid-cols-4 gap-2">
+                <button onclick="setMontoRapido(1)" class="bg-gray-700 text-white py-2 rounded font-bold hover:bg-gray-600 text-sm">$1</button>
+                <button onclick="setMontoRapido(5)" class="bg-gray-700 text-white py-2 rounded font-bold hover:bg-gray-600 text-sm">$5</button>
+                <button onclick="setMontoRapido(10)" class="bg-gray-700 text-white py-2 rounded font-bold hover:bg-gray-600 text-sm">$10</button>
+                <button onclick="setMontoRapido(20)" class="bg-gray-700 text-white py-2 rounded font-bold hover:bg-gray-600 text-sm">$20</button>
+                <button onclick="setMontoRapido(50)" class="bg-gray-700 text-white py-2 rounded font-bold hover:bg-gray-600 text-sm">$50</button>
+                <button onclick="setMontoRapido(100)" class="bg-gray-700 text-white py-2 rounded font-bold hover:bg-gray-600 text-sm">$100</button>
+                <button onclick="setMontoExacto()" class="col-span-2 bg-bosco-orange text-black py-2 rounded font-bold hover:bg-orange-500 text-sm">MONTO EXACTO</button>
+            </div>
+        </div>
+
+        <!-- Sección Transferencia -->
+        <div id="seccion-transferencia" class="hidden bg-[#2d2d2d] p-5 rounded-xl border border-gray-600 mb-6 space-y-3">
+            <label class="block text-gray-400 text-xs font-bold uppercase">REFERENCIA / # COMPROBANTE</label>
+            <input type="text" id="ref-transferencia" class="w-full bg-black text-white text-xl font-bold p-3 rounded-xl border border-gray-600 focus:border-blue-500 outline-none text-center uppercase" placeholder="NÚMERO DE REFERENCIA">
+        </div>
+
+        <!-- Sección Tarjeta -->
+        <div id="seccion-tarjeta" class="hidden bg-[#2d2d2d] p-5 rounded-xl border border-gray-600 mb-6 space-y-3">
+            <div class="text-center">
+                <p class="text-gray-300 text-sm font-bold">💳 PAGO CON TARJETA / DATAFAST</p>
+                <p class="text-gray-500 text-xs mt-2">El pago se procesa en el terminal POS externo</p>
+            </div>
+            <label class="block text-gray-400 text-xs font-bold uppercase mt-3">REF. LOTE / APROBACIÓN (OPCIONAL)</label>
+            <input type="text" id="ref-tarjeta" class="w-full bg-black text-white text-xl font-bold p-3 rounded-xl border border-gray-600 focus:border-purple-500 outline-none text-center uppercase" placeholder="# LOTE O APROBACIÓN">
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+            <button onclick="cerrarModalPago()" class="p-4 border border-gray-600 rounded-xl text-gray-400 font-bold hover:border-white hover:text-white transition">CANCELAR</button>
+            <button onclick="confirmarPago()" id="btn-confirmar-pago" class="hidden p-4 bg-bosco-orange text-black rounded-xl font-black text-lg hover:bg-orange-500 shadow-lg transition transform active:scale-95">✅ CONFIRMAR VENTA</button>
         </div>
     </div>
 </div>
@@ -139,9 +234,47 @@
     let prodTemp = {}; // Producto siendo editado en el modal
     let tipoPedido = 'SERVIR';
 
+    // --- LÓGICA FILTROS ---
+    function filtrarProductos(catId) {
+        const tarjetas = document.querySelectorAll('.producto-card');
+        tarjetas.forEach(card => {
+            if(catId === 'todos' || card.dataset.categoriaId === catId) {
+                card.style.display = 'flex';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
+    function buscarProducto() {
+        const texto = document.getElementById('buscador').value.toLowerCase();
+        const tarjetas = document.querySelectorAll('.producto-card');
+        tarjetas.forEach(card => {
+            if(card.dataset.nombre.includes(texto)) {
+                card.style.display = 'flex';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
+    function setTipoPedido(tipo) {
+        tipoPedido = tipo;
+        const btnServir = document.getElementById('btn-servir');
+        const btnLlevar = document.getElementById('btn-llevar');
+        
+        if(tipo === 'SERVIR') {
+            btnServir.className = "flex-1 py-2 rounded font-bold text-sm bg-white shadow text-black transition";
+            btnLlevar.className = "flex-1 py-2 rounded font-bold text-sm text-gray-600 hover:bg-gray-200 transition";
+        } else {
+            btnServir.className = "flex-1 py-2 rounded font-bold text-sm text-gray-600 hover:bg-gray-200 transition";
+            btnLlevar.className = "flex-1 py-2 rounded font-bold text-sm bg-white shadow text-black transition";
+        }
+    }
+
     // --- LÓGICA MODAL OPCIONES ---
     function abrirModalOpciones(id, nombre, precio) {
-        prodTemp = { id, nombre, precio, cantidad: 1, salsa: '', notas: '' };
+        prodTemp = { id, nombre, precio: parseFloat(precio), cantidad: 1, salsa: '', notas: '' };
         
         document.getElementById('modal-prod-nombre').innerText = nombre;
         document.getElementById('modal-cantidad').innerText = "1";
@@ -153,8 +286,9 @@
             btn.classList.add('text-gray-300');
         });
 
-        // Mostrar/Ocultar Salsas (Solo si es Boneless o Tenders)
-        const esPollo = nombre.includes('BONELESS') || nombre.includes('TENDERS');
+        // Mostrar/Ocultar Salsas (Solo si es Boneless o Tenders) - Lógica simple por nombre
+        const nombreUpper = nombre.toUpperCase();
+        const esPollo = nombreUpper.includes('BONELESS') || nombreUpper.includes('TENDERS') || nombreUpper.includes('ALITAS');
         document.getElementById('seccion-salsas').style.display = esPollo ? 'block' : 'none';
 
         document.getElementById('modal-opciones').classList.remove('hidden');
@@ -191,13 +325,20 @@
         const notaFinal = notas.trim();
 
         // Agregar al carrito
-        carrito.push({
-            id: prodTemp.id,
-            nombre: nombreFinal,
-            precio: parseFloat(prodTemp.precio),
-            cantidad: prodTemp.cantidad,
-            nota: notaFinal // Esto irá a la base de datos
-        });
+        // Buscar si ya existe uno idéntico (mismo ID y mismas notas)
+        const existe = carrito.find(item => item.id === prodTemp.id && item.nota === notaFinal && item.nombre === nombreFinal);
+
+        if(existe) {
+            existe.cantidad += prodTemp.cantidad;
+        } else {
+            carrito.push({
+                id: prodTemp.id,
+                nombre: nombreFinal,
+                precio: Math.round(parseFloat(prodTemp.precio) * 100) / 100,
+                cantidad: prodTemp.cantidad,
+                nota: notaFinal
+            });
+        }
 
         renderizar();
         cerrarModalOpciones();
@@ -206,13 +347,23 @@
     // --- RENDERIZADO CARRITO ---
     function renderizar() {
         const lista = document.getElementById('lista-carrito');
+        const totalElem = document.getElementById('total-carrito');
         lista.innerHTML = '';
         let total = 0;
 
+        if (carrito.length === 0) {
+            lista.innerHTML = `
+                <div class="h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
+                    <p class="font-bold text-sm">CARRITO VACÍO</p>
+                </div>`;
+            totalElem.innerText = '$0.00';
+            return;
+        }
+
         carrito.forEach((item, idx) => {
-            total += item.precio * item.cantidad;
+            total += Math.round(item.precio * item.cantidad * 100) / 100;
             const row = document.createElement('div');
-            row.className = "flex justify-between bg-white p-3 rounded border border-gray-200 shadow-sm mb-2";
+            row.className = "flex justify-between bg-white p-3 rounded border border-gray-200 shadow-sm mb-2 animate-fade-in";
             row.innerHTML = `
                 <div class="flex-1">
                     <div class="font-bold text-gray-800 text-sm uppercase">${item.nombre}</div>
@@ -222,14 +373,18 @@
                     <div class="text-[10px] text-gray-500 mt-1">$${item.precio.toFixed(2)} c/u</div>
                 </div>
                 <div class="flex flex-col items-end gap-1">
-                    <span class="bg-gray-100 px-2 py-1 rounded text-xs font-bold">x${item.cantidad}</span>
-                    <span class="font-bold text-sm text-gray-900">$${(item.precio * item.cantidad).toFixed(2)}</span>
-                    <button onclick="eliminar(${idx})" class="text-red-500 text-xs font-bold hover:underline">BORRAR</button>
+                    <div class="flex items-center gap-1">
+                        <button onclick="modificarCantidadItem(${idx}, -1)" class="text-gray-400 hover:text-black font-bold px-1 text-xs">-</button>
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs font-bold">x${item.cantidad}</span>
+                        <button onclick="modificarCantidadItem(${idx}, 1)" class="text-gray-400 hover:text-black font-bold px-1 text-xs">+</button>
+                    </div>
+                    <span class="font-bold text-sm text-gray-900">$${(Math.round(item.precio * item.cantidad * 100) / 100).toFixed(2)}</span>
+                    <button onclick="eliminar(${idx})" class="text-red-500 text-xs font-bold hover:underline mt-1">BORRAR</button>
                 </div>
             `;
             lista.appendChild(row);
         });
-        document.getElementById('total-carrito').innerText = '$' + total.toFixed(2);
+        totalElem.innerText = '$' + total.toFixed(2);
     }
 
     function eliminar(idx) {
@@ -237,31 +392,273 @@
         renderizar();
     }
 
-    // --- FUNCIONES EXTRA ---
-    function marcarAsistencia() {
-        const codigo = prompt("Ingrese su código de empleado:");
-        if(codigo) alert("✅ Entrada registrada: " + new Date().toLocaleTimeString());
+    function modificarCantidadItem(idx, delta) {
+        const item = carrito[idx];
+        const newCant = item.cantidad + delta;
+        if(newCant > 0) {
+            item.cantidad = newCant;
+        } else {
+            // Si baja a 0, preguntar o eliminar directo? Mejor eliminar
+            carrito.splice(idx, 1);
+        }
+        renderizar();
     }
 
-    // (Aquí va el resto de tu código de pagos anterior: abrirModalPago, finalizarVenta, etc.)
-    // ... Asegúrate de copiar las funciones abrirModalPago y finalizarVenta del paso anterior ...
+    let clienteId = null;
+
+    // --- CLIENTE ---
+    function buscarCliente() {
+        const cedula = document.getElementById('cliente-cedula').value.trim();
+        if(cedula.length < 3) return;
+
+        fetch(`/api/cliente/?cedula=${cedula}`)
+        .then(res => res.json())
+        .then(data => {
+            if(data.encontrado) {
+                clienteId = data.id;
+                document.getElementById('cliente-nombre').value = data.nombre;
+                document.getElementById('cliente-telefono').value = data.telefono || '';
+                document.getElementById('cliente-email').value = data.email || '';
+                document.getElementById('cliente-direccion').value = data.direccion || '';
+                
+                // Mostrar campos en modo lectura
+                document.getElementById('extra-cliente').classList.remove('hidden');
+                document.getElementById('btn-guardar-cliente').innerText = '✏️ ACTUALIZAR DATOS';
+                
+                // Indicador verde
+                const status = document.getElementById('cliente-status');
+                status.innerText = '✅ CLIENTE REGISTRADO: ' + data.nombre;
+                status.className = 'text-xs font-bold px-2 py-1 rounded text-center bg-green-100 text-green-700 border border-green-300';
+                status.classList.remove('hidden');
+            } else {
+                clienteId = null;
+                document.getElementById('cliente-nombre').value = '';
+                document.getElementById('cliente-nombre').focus();
+                document.getElementById('extra-cliente').classList.remove('hidden');
+                document.getElementById('btn-guardar-cliente').innerText = '💾 GUARDAR CLIENTE NUEVO';
+                
+                const status = document.getElementById('cliente-status');
+                status.innerText = '⚠️ CLIENTE NUEVO — Complete los datos para registrar';
+                status.className = 'text-xs font-bold px-2 py-1 rounded text-center bg-yellow-100 text-yellow-700 border border-yellow-300';
+                status.classList.remove('hidden');
+            }
+        });
+    }
+
+    function limpiarCliente() {
+        clienteId = null;
+        document.getElementById('cliente-cedula').value = '';
+        document.getElementById('cliente-nombre').value = '';
+        document.getElementById('cliente-telefono').value = '';
+        document.getElementById('cliente-email').value = '';
+        document.getElementById('cliente-direccion').value = '';
+        document.getElementById('extra-cliente').classList.add('hidden');
+        document.getElementById('cliente-status').classList.add('hidden');
+    }
+
+    function guardarCliente() {
+        const cedula = document.getElementById('cliente-cedula').value.trim();
+        if(!cedula) return alert('⚠️ Ingrese la cédula primero');
+        const nombre = document.getElementById('cliente-nombre').value.trim();
+        if(!nombre) return alert('⚠️ Ingrese el nombre del cliente');
+
+        const data = {
+            cedula: cedula,
+            nombre: nombre,
+            telefono: document.getElementById('cliente-telefono').value,
+            email: document.getElementById('cliente-email').value,
+            direccion: document.getElementById('cliente-direccion').value
+        };
+
+        fetch('/api/cliente/', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.status === 'ok') {
+                clienteId = res.cliente_id;
+                document.getElementById('cliente-nombre').value = res.nombre;
+                
+                // Mostrar indicador verde
+                const status = document.getElementById('cliente-status');
+                status.innerText = '✅ CLIENTE GUARDADO: ' + res.nombre;
+                status.className = 'text-xs font-bold px-2 py-1 rounded text-center bg-green-100 text-green-700 border border-green-300';
+                status.classList.remove('hidden');
+                
+                document.getElementById('btn-guardar-cliente').innerText = '✏️ ACTUALIZAR DATOS';
+            }
+        });
+    }
+
+
+    // --- PAGO ---
+    let metodoSeleccionado = null;
+
     function abrirModalPago() {
         if(carrito.length === 0) return alert("Carrito vacío");
         document.getElementById('modal-total').innerText = document.getElementById('total-carrito').innerText;
+        metodoSeleccionado = null;
+        document.getElementById('seccion-efectivo').classList.add('hidden');
+        document.getElementById('seccion-transferencia').classList.add('hidden');
+        document.getElementById('seccion-tarjeta').classList.add('hidden');
+        document.getElementById('btn-confirmar-pago').classList.add('hidden');
+        document.getElementById('monto-recibido').value = '';
+        document.getElementById('cambio-display').innerText = '$0.00';
+        if(document.getElementById('ref-transferencia')) document.getElementById('ref-transferencia').value = '';
+        if(document.getElementById('ref-tarjeta')) document.getElementById('ref-tarjeta').value = '';
+        
+        // Reset all method buttons
+        const baseEf = 'p-4 bg-green-900/40 border-2 border-green-600 rounded-xl text-white font-bold text-lg hover:bg-green-900 transition flex items-center justify-center gap-2';
+        const baseTr = 'p-4 bg-blue-900/40 border-2 border-blue-600 rounded-xl text-white font-bold text-lg hover:bg-blue-900 transition flex items-center justify-center gap-2';
+        const baseTa = 'p-4 bg-purple-900/40 border-2 border-purple-600 rounded-xl text-white font-bold text-lg hover:bg-purple-900 transition flex items-center justify-center gap-2';
+        document.getElementById('btn-met-efectivo').className = baseEf;
+        document.getElementById('btn-met-transferencia').className = baseTr;
+        document.getElementById('btn-met-tarjeta').className = baseTa;
         document.getElementById('modal-pago').classList.remove('hidden');
     }
-    function cerrarModalPago() { document.getElementById('modal-pago').classList.add('hidden'); }
-    function finalizarVenta(metodo) {
-        // ... (Usa la lógica de fetch del paso anterior) ...
-        alert("Simulación: Venta guardada");
-        carrito = [];
-        renderizar();
-        cerrarModalPago();
+
+    function selMetodo(metodo) {
+        metodoSeleccionado = metodo;
+        document.getElementById('btn-confirmar-pago').classList.remove('hidden');
+
+        // Hide all sections
+        document.getElementById('seccion-efectivo').classList.add('hidden');
+        document.getElementById('seccion-transferencia').classList.add('hidden');
+        document.getElementById('seccion-tarjeta').classList.add('hidden');
+
+        // Dim all buttons
+        const dimEf = 'p-4 bg-green-900/40 border-2 border-green-600 rounded-xl text-gray-500 font-bold text-lg transition flex items-center justify-center gap-2';
+        const dimTr = 'p-4 bg-blue-900/40 border-2 border-blue-600 rounded-xl text-gray-500 font-bold text-lg transition flex items-center justify-center gap-2';
+        const dimTa = 'p-4 bg-purple-900/40 border-2 border-purple-600 rounded-xl text-gray-500 font-bold text-lg transition flex items-center justify-center gap-2';
+        document.getElementById('btn-met-efectivo').className = dimEf;
+        document.getElementById('btn-met-transferencia').className = dimTr;
+        document.getElementById('btn-met-tarjeta').className = dimTa;
+
+        if(metodo === 'EFECTIVO') {
+            document.getElementById('seccion-efectivo').classList.remove('hidden');
+            document.getElementById('btn-met-efectivo').className = 'p-4 bg-green-600 border-2 border-green-400 rounded-xl text-white font-bold text-lg shadow-lg flex items-center justify-center gap-2';
+            document.getElementById('monto-recibido').focus();
+        } else if(metodo === 'TRANSFERENCIA') {
+            document.getElementById('seccion-transferencia').classList.remove('hidden');
+            document.getElementById('btn-met-transferencia').className = 'p-4 bg-blue-600 border-2 border-blue-400 rounded-xl text-white font-bold text-lg shadow-lg flex items-center justify-center gap-2';
+        } else if(metodo === 'TARJETA') {
+            document.getElementById('seccion-tarjeta').classList.remove('hidden');
+            document.getElementById('btn-met-tarjeta').className = 'p-4 bg-purple-600 border-2 border-purple-400 rounded-xl text-white font-bold text-lg shadow-lg flex items-center justify-center gap-2';
+        }
     }
 
-    // --- FILTROS ---
-    function filtrarProductos(id) { /* ... lógica anterior ... */ }
-    function buscarProducto() { /* ... lógica anterior ... */ }
-    function setTipoPedido(t) { /* ... lógica anterior ... */ }
+    function calcularCambio() {
+        const totalTexto = document.getElementById('total-carrito').innerText.replace('$', '');
+        const total = Math.round(parseFloat(totalTexto) * 100) / 100;
+        const recibido = Math.round(parseFloat(document.getElementById('monto-recibido').value) * 100) / 100 || 0;
+        const cambio = Math.round((recibido - total) * 100) / 100;
+        const display = document.getElementById('cambio-display');
+        if(cambio >= 0) {
+            display.innerText = '$' + cambio.toFixed(2);
+            display.className = 'text-3xl font-black text-green-400';
+        } else {
+            display.innerText = '-$' + Math.abs(cambio).toFixed(2);
+            display.className = 'text-3xl font-black text-red-400';
+        }
+    }
+
+    function setMontoRapido(monto) {
+        document.getElementById('monto-recibido').value = monto.toFixed(2);
+        calcularCambio();
+    }
+
+    function setMontoExacto() {
+        const totalTexto = document.getElementById('total-carrito').innerText.replace('$', '');
+        document.getElementById('monto-recibido').value = parseFloat(totalTexto).toFixed(2);
+        calcularCambio();
+    }
+    
+    function cerrarModalPago() { 
+        document.getElementById('modal-pago').classList.add('hidden'); 
+    }
+
+    function confirmarPago() {
+        if(!metodoSeleccionado) return alert('Selecciona un método de pago');
+
+        const totalTexto = document.getElementById('total-carrito').innerText.replace('$', '');
+        const totalFloat = Math.round(parseFloat(totalTexto) * 100) / 100;
+
+        if(metodoSeleccionado === 'EFECTIVO') {
+            const recibido = parseFloat(document.getElementById('monto-recibido').value) || 0;
+            if(recibido < totalFloat) {
+                return alert('⚠️ El monto recibido es menor al total');
+            }
+        }
+
+        const clienteNombre = document.getElementById('cliente-nombre').value || 'CONSUMIDOR FINAL';
+        
+        const data = {
+            total: totalFloat,
+            metodo_pago: metodoSeleccionado,
+            carrito: carrito,
+            cliente_nombre: clienteNombre,
+            cliente_id: clienteId,
+            tipo_pedido: tipoPedido,
+            monto_recibido: metodoSeleccionado === 'EFECTIVO' ? parseFloat(document.getElementById('monto-recibido').value) : totalFloat
+        };
+
+        fetch('/registrar_venta/', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === 'ok') {
+                // Imprimir todo en una sola ventana (Comanda + Ticket)
+                const wPrint = window.open('/imprimir/venta/' + data.ticket_id + '/', '_blank', 'width=350,height=600');
+                if(wPrint) {
+                    wPrint.addEventListener('load', function() {
+                        wPrint.print();
+                    });
+                }
+
+                carrito = [];
+                renderizar();
+                cerrarModalPago();
+                limpiarCliente();
+            } else {
+                alert('❌ Error: ' + data.mensaje);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error de conexión con el servidor');
+        });
+    }
+
+    // Animación CSS extra
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+      .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+    `;
+    document.head.appendChild(style);
+
+    // ══════════════ BADGE PEDIDOS WEB ══════════════
+    function checkPedidosWeb() {
+        fetch('/api/pedidos-web/')
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('badge-web');
+            if (data.count > 0) {
+                badge.innerText = data.count;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        })
+        .catch(() => {});
+    }
+    checkPedidosWeb();
+    setInterval(checkPedidosWeb, 20000);
+
 </script>
 {% endblock %}

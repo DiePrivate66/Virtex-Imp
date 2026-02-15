@@ -7,6 +7,9 @@ urlpatterns = [
     # Esto habilita el panel de administración
     path('admin/', admin.site.urls),
     
+    # PWA pedidos cliente (DEBE IR ANTES de la app POS)
+    path('pedido/', include('pedidos.urls')),
+    
     # IMPORTANTE: Aquí decimos "Cuando entres a la raíz, usa las rutas de la app POS"
     path('', include('pos.urls')),
 ]

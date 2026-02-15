@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte Cierre #{{ caja.id }}</title>
+    <style>
+        @page { margin: 0; size: 80mm auto; }
+        @media print {
+            .page-break { page-break-after: always; break-after: page; }
+            body { margin: 0; padding: 0; }
+        }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            width: 80mm;
+            margin: 0;
+            padding: 0;
+            font-size: 12px;
+            background-color: white;
+            color: black;
+        }
+        .section { padding: 5mm; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .font-black { font-weight: 900; }
+        .font-bold { font-weight: bold; }
+        .divider { border-top: 2px dashed black; margin: 6px 0; }
+        .divider-light { border-top: 1px dashed black; margin: 4px 0; }
+        .row { display: flex; justify-content: space-between; margin: 3px 0; }
+        .row-indent { display: flex; justify-content: space-between; margin: 2px 0; padding-left: 10px; }
+        .big { font-size: 16px; }
+        .small { font-size: 10px; }
+        .highlight { background: #eee; padding: 4px; margin: 4px 0; }
+    </style>
+</head>
+<body onload="window.print()">
+
+    <!-- ==================== COPIA 1: ADMINISTRACIÓN ==================== -->
+    <div class="section">
+        <div class="text-center">
+            <h1 style="margin:0; font-size:18px; font-weight:900; letter-spacing:3px;">RAMÓN</h1>
+            <p style="margin:2px 0;">REPORTE DE CIERRE DE CAJA</p>
+            <p class="font-bold big">COPIA ADMINISTRACIÓN</p>
+            <div class="divider"></div>
+        </div>
+
+        <div>
+            <div class="row"><span>Cajero:</span><span class="font-bold">{{ cajero_nombre }}</span></div>
+            <div class="row"><span>Caja #:</span><span class="font-bold">{{ caja.id }}</span></div>
+            <div class="row"><span>Apertura:</span><span>{{ caja.fecha_apertura|date:"d/m/Y H:i" }}</span></div>
+            <div class="row"><span>Cierre:</span><span>{{ caja.fecha_cierre|date:"d/m/Y H:i" }}</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="text-center font-bold" style="margin-bottom:5px;">RESUMEN DE VENTAS</div>
+        <div>
+            <div class="row"><span>Total Ventas:</span><span class="font-bold">{{ num_ventas }}</span></div>
+            <div class="divider-light"></div>
+            
+            <div class="row-indent"><span>💵 Efectivo ({{ num_efectivo }}):</span><span class="font-bold">${{ total_efectivo|floatformat:2 }}</span></div>
+            <div class="row-indent"><span>📱 Transferencia ({{ num_transferencia }}):</span><span class="font-bold">${{ total_transferencia|floatformat:2 }}</span></div>
+            <div class="row-indent"><span>💳 Tarjeta ({{ num_tarjeta }}):</span><span class="font-bold">${{ total_tarjeta|floatformat:2 }}</span></div>
+            
+            <div class="divider-light"></div>
+            <div class="row highlight"><span class="font-black">TOTAL VENDIDO:</span><span class="font-black big">${{ total_ventas|floatformat:2 }}</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="text-center font-bold" style="margin-bottom:5px;">CUADRE DE EFECTIVO</div>
+        <div>
+            <div class="row"><span>Base Inicial:</span><span>${{ caja.base_inicial|floatformat:2 }}</span></div>
+            <div class="row"><span>+ Ventas Efectivo:</span><span>${{ total_efectivo|floatformat:2 }}</span></div>
+            <div class="divider-light"></div>
+            <div class="row font-bold"><span>ESPERADO EN CAJA:</span><span>${{ esperado|floatformat:2 }}</span></div>
+            <div class="row font-bold"><span>DECLARADO:</span><span>${{ caja.monto_final_declarado|floatformat:2 }}</span></div>
+            
+            {% if conteo_detalle %}
+            <div class="divider-light"></div>
+            <div class="small" style="margin:3px 0;">CONTEO DETALLADO:</div>
+            {% for denom, cantidad, subtotal in conteo_detalle %}
+            <div class="row-indent small"><span>${{ denom }} x {{ cantidad }}</span><span>= ${{ subtotal|floatformat:2 }}</span></div>
+            {% endfor %}
+            {% endif %}
+            
+            <div class="divider-light"></div>
+            <div class="row highlight">
+                <span class="font-black">DIFERENCIA:</span>
+                <span class="font-black big">
+                    {% if caja.diferencia > 0 %}+{% endif %}${{ caja.diferencia|floatformat:2 }}
+                    {% if caja.diferencia == 0 %} ✅{% elif caja.diferencia > 0 %} ⬆{% else %} ⚠️{% endif %}
+                </span>
+            </div>
+            <div class="text-center small">
+                {% if caja.diferencia == 0 %}CUADRADO PERFECTO
+                {% elif caja.diferencia > 0 %}SOBRANTE
+                {% else %}FALTANTE{% endif %}
+            </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="text-center small" style="padding:8px 0;">
+            <p>Reporte generado: {{ ahora|date:"d/m/Y H:i" }}</p>
+            <p style="margin-top:20px;">________________________</p>
+            <p>Firma del Cajero</p>
+            <p style="margin-top:15px;">________________________</p>
+            <p>Firma del Administrador</p>
+        </div>
+    </div>
+
+    <!-- ==================== CORTE ==================== -->
+    <div class="page-break"></div>
+
+    <!-- ==================== COPIA 2: CAJERO ==================== -->
+    <div class="section">
+        <div class="text-center">
+            <h1 style="margin:0; font-size:18px; font-weight:900; letter-spacing:3px;">RAMÓN</h1>
+            <p style="margin:2px 0;">REPORTE DE CIERRE DE CAJA</p>
+            <p class="font-bold big">COPIA CAJERO</p>
+            <div class="divider"></div>
+        </div>
+
+        <div>
+            <div class="row"><span>Cajero:</span><span class="font-bold">{{ cajero_nombre }}</span></div>
+            <div class="row"><span>Caja #:</span><span class="font-bold">{{ caja.id }}</span></div>
+            <div class="row"><span>Apertura:</span><span>{{ caja.fecha_apertura|date:"d/m/Y H:i" }}</span></div>
+            <div class="row"><span>Cierre:</span><span>{{ caja.fecha_cierre|date:"d/m/Y H:i" }}</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="text-center font-bold" style="margin-bottom:5px;">RESUMEN DE VENTAS</div>
+        <div>
+            <div class="row"><span>Total Ventas:</span><span class="font-bold">{{ num_ventas }}</span></div>
+            <div class="divider-light"></div>
+            
+            <div class="row-indent"><span>💵 Efectivo ({{ num_efectivo }}):</span><span class="font-bold">${{ total_efectivo|floatformat:2 }}</span></div>
+            <div class="row-indent"><span>📱 Transferencia ({{ num_transferencia }}):</span><span class="font-bold">${{ total_transferencia|floatformat:2 }}</span></div>
+            <div class="row-indent"><span>💳 Tarjeta ({{ num_tarjeta }}):</span><span class="font-bold">${{ total_tarjeta|floatformat:2 }}</span></div>
+            
+            <div class="divider-light"></div>
+            <div class="row highlight"><span class="font-black">TOTAL VENDIDO:</span><span class="font-black big">${{ total_ventas|floatformat:2 }}</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="text-center font-bold" style="margin-bottom:5px;">CUADRE DE EFECTIVO</div>
+        <div>
+            <div class="row"><span>Base Inicial:</span><span>${{ caja.base_inicial|floatformat:2 }}</span></div>
+            <div class="row"><span>+ Ventas Efectivo:</span><span>${{ total_efectivo|floatformat:2 }}</span></div>
+            <div class="divider-light"></div>
+            <div class="row font-bold"><span>ESPERADO EN CAJA:</span><span>${{ esperado|floatformat:2 }}</span></div>
+            <div class="row font-bold"><span>DECLARADO:</span><span>${{ caja.monto_final_declarado|floatformat:2 }}</span></div>
+            
+            <div class="divider-light"></div>
+            <div class="row highlight">
+                <span class="font-black">DIFERENCIA:</span>
+                <span class="font-black big">
+                    {% if caja.diferencia > 0 %}+{% endif %}${{ caja.diferencia|floatformat:2 }}
+                    {% if caja.diferencia == 0 %} ✅{% elif caja.diferencia > 0 %} ⬆{% else %} ⚠️{% endif %}
+                </span>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="text-center small" style="padding:8px 0;">
+            <p>Reporte generado: {{ ahora|date:"d/m/Y H:i" }}</p>
+            <p style="margin-top:20px;">________________________</p>
+            <p>Firma del Cajero</p>
+        </div>
+    </div>
+</body>
+</html>

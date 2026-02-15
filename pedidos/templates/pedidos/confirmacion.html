@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a1a">
+    <title>Pedido #{{ venta.id }} — RAMÓN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { bosco: { dark: '#1a1a1a', gray: '#2d2d2d', orange: '#ff6600' } } } }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', -apple-system, sans-serif; }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.9); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        .pulse-ring::before {
+            content: '';
+            position: absolute;
+            inset: -8px;
+            border: 3px solid #ff6600;
+            border-radius: 50%;
+            animation: pulse-ring 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="bg-[#111] text-white min-h-screen flex flex-col items-center justify-center p-6">
+
+    <div class="text-center max-w-md w-full space-y-6">
+        
+        <!-- Ícono de Estado -->
+        <div class="relative inline-flex items-center justify-center">
+            <div class="relative pulse-ring w-24 h-24 bg-bosco-orange/20 rounded-full flex items-center justify-center">
+                {% if venta.estado == 'PENDIENTE_COTIZACION' %}
+                    <span class="text-5xl">📍</span>
+                {% elif venta.estado == 'PENDIENTE' %}
+                    <span class="text-5xl">⏳</span>
+                {% elif venta.estado == 'COCINA' %}
+                    <span class="text-5xl">🍳</span>
+                {% elif venta.estado == 'EN_CAMINO' %}
+                    <span class="text-5xl">🛵</span>
+                {% else %}
+                    <span class="text-5xl">✅</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Número de Orden -->
+        <div>
+            <p class="text-gray-500 text-xs font-black uppercase tracking-widest">TU PEDIDO</p>
+            <h1 class="text-6xl font-black text-bosco-orange mt-1">#{{ venta.id }}</h1>
+        </div>
+
+        <!-- Estado -->
+        <div class="bg-bosco-gray rounded-2xl p-5 border border-gray-700">
+            {% if venta.estado == 'PENDIENTE_COTIZACION' %}
+                <p class="text-yellow-400 font-black text-sm uppercase">📍 CONFIRMANDO COSTO DE ENVÍO</p>
+                <p class="text-gray-400 text-xs mt-2">Te contactaremos al <strong class="text-white">{{ venta.telefono_cliente }}</strong> para confirmar el costo de delivery</p>
+            {% elif venta.estado == 'PENDIENTE' %}
+                <p class="text-yellow-400 font-black text-sm uppercase">⏳ PEDIDO RECIBIDO</p>
+                <p class="text-gray-400 text-xs mt-2">Estamos procesando tu pedido</p>
+            {% elif venta.estado == 'COCINA' %}
+                <p class="text-orange-400 font-black text-sm uppercase">🔥 PREPARANDO TU PEDIDO</p>
+                <p class="text-gray-400 text-xs mt-2">Tu comida está siendo preparada</p>
+            {% elif venta.estado == 'EN_CAMINO' %}
+                <p class="text-blue-400 font-black text-sm uppercase">🛵 EN CAMINO</p>
+                <p class="text-gray-400 text-xs mt-2">Tu pedido va en camino</p>
+            {% elif venta.estado == 'LISTO' %}
+                <p class="text-green-400 font-black text-sm uppercase">✅ ENTREGADO</p>
+                <p class="text-gray-400 text-xs mt-2">¡Buen provecho!</p>
+            {% endif %}
+        </div>
+
+        <!-- Resumen -->
+        <div class="bg-bosco-gray rounded-2xl p-5 border border-gray-700 text-left space-y-3">
+            <div class="border-b border-gray-600 pb-3">
+                <p class="text-gray-500 text-[10px] font-black uppercase">RESUMEN</p>
+            </div>
+            {% for item in venta.detalles.all %}
+            <div class="flex justify-between text-sm">
+                <div>
+                    <span class="text-white font-bold">{{ item.cantidad }}x</span>
+                    <span class="text-gray-300 ml-1">{{ item.producto.nombre }}</span>
+                    {% if item.nota %}
+                        <span class="text-yellow-400 text-[10px] block ml-5 font-bold">{{ item.nota }}</span>
+                    {% endif %}
+                </div>
+                <span class="text-bosco-orange font-bold">${{ item.subtotal|floatformat:2 }}</span>
+            </div>
+            {% endfor %}
+            
+            <div class="border-t border-gray-600 pt-3 flex justify-between">
+                <span class="text-gray-400 font-bold text-sm">SUBTOTAL</span>
+                <span class="text-white font-black text-lg">${{ venta.total|floatformat:2 }}</span>
+            </div>
+            
+            {% if venta.tipo_pedido == 'DOMICILIO' %}
+            <div class="flex justify-between">
+                <span class="text-gray-400 font-bold text-sm">ENVÍO</span>
+                {% if venta.costo_envio > 0 %}
+                    <span class="text-white font-bold">${{ venta.costo_envio|floatformat:2 }}</span>
+                {% else %}
+                    <span class="text-yellow-400 text-xs font-bold">POR CONFIRMAR</span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Info Adicional -->
+        <div class="space-y-2 text-sm text-gray-500">
+            <p>📱 {{ venta.telefono_cliente }}</p>
+            {% if venta.direccion_envio %}
+                <p>📍 {{ venta.direccion_envio }}</p>
+            {% endif %}
+            <p>💳 {{ venta.get_metodo_pago_display }}</p>
+        </div>
+
+        <!-- Botones -->
+        <div class="space-y-3 pt-4">
+            <a href="/pedido/" class="block w-full bg-bosco-gray text-gray-400 font-bold py-4 rounded-xl text-center border border-gray-700 active:scale-95 transition-transform">
+                HACER OTRO PEDIDO
+            </a>
+        </div>
+
+        <!-- Brand -->
+        <p class="text-gray-700 text-[10px] font-bold tracking-widest mt-8">Powered by Ü Systems</p>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+    "name": "RAMÓN — Pide tu Comida",
+    "short_name": "RAMÓN",
+    "description": "Pide alitas, boneless y más desde tu celular",
+    "start_url": "/pedir/",
+    "display": "standalone",
+    "background_color": "#111111",
+    "theme_color": "#ff6600",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/static/pedidos/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/static/pedidos/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

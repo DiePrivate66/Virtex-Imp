@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-3xl font-black text-white tracking-tight">📦 CONTROL DE INVENTARIO</h1>
+            <p class="text-gray-500 text-xs font-bold mt-1">{{ total_productos }} productos · {{ bajo_stock }} bajo stock · {{ sin_stock }} sin stock</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{% url 'reporte_inventario_pdf' %}" target="_blank" class="bg-bosco-orange text-black px-4 py-2 rounded-lg text-sm font-black hover:bg-orange-500 transition">
+                📄 REPORTE PDF
+            </a>
+            <a href="{% url 'pos_index' %}" class="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+                ← VOLVER AL POS
+            </a>
+        </div>
+    </div>
+
+    <!-- Alertas -->
+    {% if bajo_stock > 0 %}
+    <div class="bg-red-900/20 border border-red-800 rounded-xl p-4 mb-4 flex items-center gap-3">
+        <span class="text-3xl">⚠️</span>
+        <div>
+            <p class="text-red-400 font-black text-sm">{{ bajo_stock }} PRODUCTO{{ bajo_stock|pluralize:"S" }} BAJO STOCK</p>
+            <p class="text-red-400/60 text-xs">Revisa los productos marcados en rojo y haz reposición</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Buscador -->
+    <div class="mb-4">
+        <input type="text" id="buscar-inv" onkeyup="buscarProductoInv()" placeholder="🔍 BUSCAR PRODUCTO..."
+            class="w-full bg-[#1a1a1a] text-white p-3 rounded-xl border border-gray-800 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600 uppercase">
+    </div>
+
+    <!-- Tabla de inventario -->
+    <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 overflow-hidden">
+        <table class="w-full">
+            <thead>
+                <tr class="text-gray-500 text-[10px] uppercase tracking-widest bg-black/30">
+                    <th class="text-left py-3 px-4">Producto</th>
+                    <th class="text-left py-3 px-2">Categoría</th>
+                    <th class="text-center py-3 px-2">Stock</th>
+                    <th class="text-center py-3 px-2">Mínimo</th>
+                    <th class="text-center py-3 px-2">Unidad</th>
+                    <th class="text-center py-3 px-2">Estado</th>
+                    <th class="text-center py-3 px-4">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-inv">
+                {% for inv in inventarios %}
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition fila-inv" data-nombre="{{ inv.producto.nombre|lower }}">
+                    <td class="py-3 px-4">
+                        <div>
+                            <p class="text-white font-bold text-sm">{{ inv.producto.nombre }}</p>
+                            <p class="text-gray-600 text-[10px]">${{ inv.producto.precio|floatformat:2 }}</p>
+                        </div>
+                    </td>
+                    <td class="py-3 px-2 text-gray-400 text-xs">{{ inv.producto.categoria.nombre }}</td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="text-2xl font-black {% if inv.stock_actual <= 0 %}text-red-500{% elif inv.alerta_bajo %}text-yellow-400{% else %}text-green-400{% endif %}" id="stock-{{ inv.producto.id }}">
+                            {{ inv.stock_actual }}
+                        </span>
+                    </td>
+                    <td class="py-3 px-2 text-center text-gray-500 text-sm font-bold">{{ inv.stock_minimo }}</td>
+                    <td class="py-3 px-2 text-center text-gray-500 text-xs">{{ inv.unidad }}</td>
+                    <td class="py-3 px-2 text-center">
+                        {% if inv.stock_actual <= 0 %}
+                            <span class="bg-red-900/50 text-red-400 text-[9px] font-black px-2 py-1 rounded-full">SIN STOCK</span>
+                        {% elif inv.alerta_bajo %}
+                            <span class="bg-yellow-900/50 text-yellow-400 text-[9px] font-black px-2 py-1 rounded-full">BAJO</span>
+                        {% else %}
+                            <span class="bg-green-900/50 text-green-400 text-[9px] font-black px-2 py-1 rounded-full">OK</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <div class="flex justify-center gap-1">
+                            <button onclick="abrirModalMov({{ inv.producto.id }}, '{{ inv.producto.nombre }}', {{ inv.stock_actual }}, 'ENTRADA')"
+                                class="bg-green-900/30 border border-green-800 text-green-400 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-green-900 transition" title="Entrada">
+                                +📥
+                            </button>
+                            <button onclick="abrirModalMov({{ inv.producto.id }}, '{{ inv.producto.nombre }}', {{ inv.stock_actual }}, 'SALIDA')"
+                                class="bg-red-900/30 border border-red-800 text-red-400 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-red-900 transition" title="Salida">
+                                -📤
+                            </button>
+                            <button onclick="abrirModalMov({{ inv.producto.id }}, '{{ inv.producto.nombre }}', {{ inv.stock_actual }}, 'AJUSTE')"
+                                class="bg-blue-900/30 border border-blue-800 text-blue-400 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-blue-900 transition" title="Ajuste">
+                                ✏️
+                            </button>
+                            <a href="{% url 'historial_inventario' inv.producto.id %}"
+                                class="bg-gray-800 border border-gray-700 text-gray-400 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-gray-700 transition" title="Historial">
+                                📋
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Movimiento -->
+<div id="modal-mov" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-[#1a1a1a] w-full max-w-md rounded-2xl border border-gray-700 overflow-hidden shadow-2xl">
+        <div class="bg-black p-4 border-b border-gray-800">
+            <h3 id="modal-mov-titulo" class="text-lg font-black text-white uppercase"></h3>
+            <p id="modal-mov-subtitulo" class="text-gray-500 text-xs mt-1"></p>
+        </div>
+        <div class="p-6 space-y-4">
+            <input type="hidden" id="mov-prod-id">
+            <input type="hidden" id="mov-tipo">
+            
+            <div>
+                <label class="text-gray-500 text-[10px] font-black uppercase tracking-widest">
+                    <span id="mov-label-cant">CANTIDAD</span>
+                </label>
+                <input type="number" id="mov-cantidad" min="1" value="1"
+                    class="w-full bg-gray-900 text-white p-4 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-3xl font-black text-center mt-1">
+            </div>
+            
+            <div>
+                <label class="text-gray-500 text-[10px] font-black uppercase tracking-widest">CONCEPTO / RAZÓN</label>
+                <input type="text" id="mov-concepto" placeholder="Ej: Compra proveedor / Ajuste conteo físico"
+                    class="w-full bg-gray-900 text-white p-3 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600 mt-1">
+            </div>
+            
+            <div class="flex gap-2 pt-2">
+                <button onclick="cerrarModalMov()" class="flex-1 bg-gray-800 text-gray-400 py-3 rounded-xl font-bold text-sm hover:bg-gray-700 transition">
+                    CANCELAR
+                </button>
+                <button onclick="confirmarMovInv()" id="btn-confirmar-mov"
+                    class="flex-1 bg-bosco-orange text-black py-3 rounded-xl font-black text-sm hover:bg-orange-500 transition">
+                    CONFIRMAR
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function buscarProductoInv() {
+        const q = document.getElementById('buscar-inv').value.toLowerCase();
+        document.querySelectorAll('.fila-inv').forEach(fila => {
+            fila.style.display = fila.dataset.nombre.includes(q) ? '' : 'none';
+        });
+    }
+
+    function abrirModalMov(prodId, prodNombre, stockActual, tipo) {
+        document.getElementById('mov-prod-id').value = prodId;
+        document.getElementById('mov-tipo').value = tipo;
+        document.getElementById('mov-cantidad').value = tipo === 'AJUSTE' ? stockActual : 1;
+        document.getElementById('mov-concepto').value = '';
+        
+        const colores = { ENTRADA: 'text-green-400', SALIDA: 'text-red-400', AJUSTE: 'text-blue-400', MERMA: 'text-yellow-400' };
+        const labels = { ENTRADA: '📥 ENTRADA DE STOCK', SALIDA: '📤 SALIDA DE STOCK', AJUSTE: '✏️ AJUSTE MANUAL', MERMA: '⚠️ MERMA' };
+        
+        document.getElementById('modal-mov-titulo').innerText = labels[tipo];
+        document.getElementById('modal-mov-titulo').className = 'text-lg font-black uppercase ' + colores[tipo];
+        document.getElementById('modal-mov-subtitulo').innerText = prodNombre + ' — Stock actual: ' + stockActual;
+        document.getElementById('mov-label-cant').innerText = tipo === 'AJUSTE' ? 'NUEVO STOCK REAL (conteo físico)' : 'CANTIDAD';
+        
+        document.getElementById('modal-mov').classList.remove('hidden');
+    }
+
+    function cerrarModalMov() {
+        document.getElementById('modal-mov').classList.add('hidden');
+    }
+
+    function confirmarMovInv() {
+        const prodId = document.getElementById('mov-prod-id').value;
+        const tipo = document.getElementById('mov-tipo').value;
+        const cantidad = parseInt(document.getElementById('mov-cantidad').value);
+        const concepto = document.getElementById('mov-concepto').value.trim();
+
+        if (!cantidad || cantidad < 0) return alert('⚠️ Cantidad inválida');
+
+        const btn = document.getElementById('btn-confirmar-mov');
+        btn.disabled = true;
+        btn.innerText = 'PROCESANDO...';
+
+        fetch('{% url "api_movimiento_inventario" %}', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({
+                producto_id: prodId,
+                tipo: tipo,
+                cantidad: cantidad,
+                concepto: concepto
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                window.location.reload();
+            } else {
+                alert('❌ ' + data.mensaje);
+                btn.disabled = false;
+                btn.innerText = 'CONFIRMAR';
+            }
+        })
+        .catch(() => {
+            alert('❌ Error de conexión');
+            btn.disabled = false;
+            btn.innerText = 'CONFIRMAR';
+        });
+    }
+
+    // Cerrar modal al hacer clic en el fondo
+    document.getElementById('modal-mov').addEventListener('click', function(e) {
+        if (e.target === this) cerrarModalMov();
+    });
+</script>
+{% endblock %}

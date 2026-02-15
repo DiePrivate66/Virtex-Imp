@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket #{{ venta.id }}</title>
+    <style>
+        @page { margin: 0; size: 80mm auto; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            width: 80mm;
+            margin: 0 auto;
+            padding: 4mm;
+            font-size: 11px;
+            background: white;
+            color: black;
+            line-height: 1.4;
+        }
+        .center { text-align: center; }
+        .right { text-align: right; }
+        .bold { font-weight: bold; }
+        .upper { text-transform: uppercase; }
+        .small { font-size: 9px; }
+        .tiny { font-size: 8px; color: #666; }
+        .divider { border-top: 1px dashed #000; margin: 5px 0; }
+        .double-divider { border-top: 2px solid #000; margin: 6px 0; }
+        
+        .logo { font-size: 28px; font-weight: 900; letter-spacing: 6px; margin-bottom: 2px; }
+        .tagline { font-size: 10px; letter-spacing: 2px; margin-bottom: 4px; }
+        
+        .info-block { margin: 3px 0; }
+        .info-block p { margin: 1px 0; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        table th { text-align: left; font-size: 10px; border-bottom: 1px solid #000; padding: 2px 0; }
+        table td { padding: 2px 0; vertical-align: top; }
+        table td.right { text-align: right; }
+        
+        .total-section { margin-top: 4px; }
+        .total-section p { margin: 1px 0; }
+        .grand-total { font-size: 16px; font-weight: 900; margin-top: 4px; }
+        
+        .footer { margin-top: 12px; }
+        @media print { body { margin: 0; } }
+    </style>
+</head>
+<body onload="window.print()">
+
+    <!-- ═══════ HEADER: DATOS DEL NEGOCIO ═══════ -->
+    <div class="center">
+        <div class="logo">RAMÓN</div>
+        <div class="tagline">by BOSCO</div>
+        <div class="divider"></div>
+        <div class="info-block small">
+            <p class="bold">CASTRO PARRA JUAN JOSE</p>
+            <p>RUC: 0105994735001</p>
+            <p>Dir: MACHANGARA / MACHANGARA SN Y SN</p>
+            <p>Tlf: 9999999999</p>
+        </div>
+    </div>
+
+    <div class="double-divider"></div>
+
+    <!-- ═══════ DATOS DE LA VENTA ═══════ -->
+    <div class="center bold">
+        NOTA DE VENTA
+    </div>
+    <div class="info-block">
+        <p><span class="bold"># ORDEN: {{ venta.id }}</span></p>
+        <p>Fecha: {{ venta.fecha|date:"Y-m-d H:i:s" }}</p>
+        <p>Obligado a llevar contabilidad: NO</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ DATOS DEL CLIENTE ═══════ -->
+    <div class="info-block">
+        {% if venta.cliente and venta.cliente.cedula_ruc %}
+        <p>CI/Ruc: {{ venta.cliente.cedula_ruc }}</p>
+        {% else %}
+        <p>CI/Ruc: 9999999999999</p>
+        {% endif %}
+        <p>Nombre: {{ venta.cliente_nombre|upper }}</p>
+        {% if venta.cliente and venta.cliente.direccion %}
+        <p>Dirección: {{ venta.cliente.direccion }}</p>
+        {% else %}
+        <p>Dirección: ECUADOR</p>
+        {% endif %}
+        {% if venta.cliente and venta.cliente.email %}
+        <p>Correo: {{ venta.cliente.email }}</p>
+        {% else %}
+        <p>Correo: NO POSEE CORREO</p>
+        {% endif %}
+        {% if venta.telefono_cliente %}
+        <p>Teléfono: {{ venta.telefono_cliente }}</p>
+        {% endif %}
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ DETALLE DE PRODUCTOS ═══════ -->
+    <table>
+        <thead>
+            <tr>
+                <th style="width:8%">C</th>
+                <th style="width:42%">DESCRIPCION</th>
+                <th class="right" style="width:22%">P.UNI</th>
+                <th class="right" style="width:28%">TOTAL</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in venta.detalles.all %}
+            <tr>
+                <td>{{ item.cantidad }}</td>
+                <td>
+                    {{ item.producto.nombre|upper }}
+                    {% if item.nota %}
+                    <br><span class="tiny">{{ item.nota }}</span>
+                    {% endif %}
+                </td>
+                <td class="right">{{ item.precio_unitario|floatformat:4 }}</td>
+                <td class="right">{{ item.subtotal|floatformat:4 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="double-divider"></div>
+
+    <!-- ═══════ TOTALES (ESTILO SRI) ═══════ -->
+    <div class="total-section">
+        <table>
+            <tr>
+                <td>Subtotal 15%:</td>
+                <td class="right">{{ subtotal_sin_iva|floatformat:2 }}</td>
+            </tr>
+            <tr>
+                <td>Subtotal 0%:</td>
+                <td class="right">0.00</td>
+            </tr>
+            <tr>
+                <td>Subtotal no objeto IVA:</td>
+                <td class="right">0.00</td>
+            </tr>
+            <tr>
+                <td>Subtotal sin impuesto:</td>
+                <td class="right">{{ subtotal_sin_iva|floatformat:2 }}</td>
+            </tr>
+            <tr>
+                <td>Descuento:</td>
+                <td class="right">0.00</td>
+            </tr>
+            <tr>
+                <td>Servicio 0.00%:</td>
+                <td class="right">0.00</td>
+            </tr>
+            <tr>
+                <td>ICE:</td>
+                <td class="right">0.00</td>
+            </tr>
+            <tr>
+                <td class="bold">IVA 15%:</td>
+                <td class="right bold">{{ iva_valor|floatformat:2 }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="double-divider"></div>
+
+    <!-- ═══════ TOTAL GRANDE ═══════ -->
+    <div class="center">
+        <p class="grand-total">TOTAL: ${{ venta.total|floatformat:2 }}</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ FORMA DE PAGO ═══════ -->
+    <div class="info-block">
+        <p>Forma de Pago: {{ venta.get_metodo_pago_display }} ${{ venta.total|floatformat:2 }}</p>
+        {% if venta.metodo_pago == 'EFECTIVO' and venta.monto_recibido > 0 %}
+        <p>Recibido: ${{ venta.monto_recibido|floatformat:2 }}</p>
+        <p class="bold">Cambio: ${{ venta.cambio|floatformat:2 }}</p>
+        {% endif %}
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ TIPO DE PEDIDO ═══════ -->
+    <div class="center small">
+        <p>{{ venta.get_tipo_pedido_display|upper }}</p>
+        {% if venta.tipo_pedido == 'DOMICILIO' and venta.direccion_envio %}
+        <p class="tiny">📍 {{ venta.direccion_envio }}</p>
+        {% endif %}
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ FOOTER ═══════ -->
+    <div class="footer center">
+        <p class="small bold">¡GRACIAS POR SU COMPRA!</p>
+        <p class="tiny">Síguenos en redes: @ramonbybosco</p>
+        <br>
+        <p class="tiny" style="font-size:10px; font-weight:900; letter-spacing:1px;">POWERED BY: Ü SYSTEMS</p>
+    </div>
+
+</body>
+</html>

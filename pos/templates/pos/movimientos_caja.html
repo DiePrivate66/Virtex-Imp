@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-3xl font-black text-white tracking-tight">💰 MOVIMIENTOS DE CAJA</h1>
+            <p class="text-gray-500 text-xs font-bold mt-1">Turno #{{ turno.id }} — Abierto: {{ turno.fecha_apertura|date:"d/m/Y H:i" }}</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{% url 'reporte_contadora' %}" class="bg-purple-900/30 border border-purple-700 text-purple-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-purple-900 hover:text-white transition">
+                📊 REPORTE CONTADORA
+            </a>
+            <a href="{% url 'pos_index' %}" class="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+                ← VOLVER AL POS
+            </a>
+        </div>
+    </div>
+
+    <!-- Resumen Rápido -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+        <div class="bg-green-900/20 border border-green-800 rounded-xl p-5 text-center">
+            <p class="text-green-500 text-[10px] font-black uppercase tracking-widest">INGRESOS</p>
+            <p class="text-green-400 text-3xl font-black mt-1">+${{ total_ingresos|floatformat:2 }}</p>
+        </div>
+        <div class="bg-red-900/20 border border-red-800 rounded-xl p-5 text-center">
+            <p class="text-red-500 text-[10px] font-black uppercase tracking-widest">EGRESOS</p>
+            <p class="text-red-400 text-3xl font-black mt-1">-${{ total_egresos|floatformat:2 }}</p>
+        </div>
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-5 text-center">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">BALANCE</p>
+            <p class="text-white text-3xl font-black mt-1 {% if balance < 0 %}text-red-400{% elif balance > 0 %}text-green-400{% endif %}">
+                ${{ balance|floatformat:2 }}
+            </p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-6">
+        <!-- Panel Izquierdo: Registrar -->
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">➕ REGISTRAR MOVIMIENTO</h2>
+            
+            <!-- Tipo toggle -->
+            <div class="flex bg-gray-800 rounded-lg p-1 mb-4">
+                <button onclick="setTipoMov('EGRESO')" id="btn-egreso" class="flex-1 py-3 rounded-lg font-bold text-sm bg-red-600 text-white transition">
+                    📤 EGRESO / GASTO
+                </button>
+                <button onclick="setTipoMov('INGRESO')" id="btn-ingreso" class="flex-1 py-3 rounded-lg font-bold text-sm text-gray-500 hover:text-white transition">
+                    📥 INGRESO
+                </button>
+            </div>
+
+            <!-- Conceptos Egreso -->
+            <div id="conceptos-egreso" class="grid grid-cols-2 gap-2 mb-4">
+                {% for val, label in conceptos_egreso %}
+                <button onclick="setConcepto('{{ val }}')" class="btn-concepto p-3 bg-gray-800 border border-gray-700 rounded-xl text-gray-400 text-xs font-bold hover:border-red-500 hover:text-red-400 transition text-left" data-val="{{ val }}">
+                    {% if val == 'ALMUERZO' %}🍽️{% elif val == 'GAS' %}🔥{% elif val == 'COMPRAS' %}🛒{% elif val == 'TRANSPORTE' %}🚗{% elif val == 'MANTENIMIENTO' %}🔧{% elif val == 'SERVICIOS' %}💡{% else %}📋{% endif %}
+                    {{ label }}
+                </button>
+                {% endfor %}
+            </div>
+
+            <!-- Conceptos Ingreso -->
+            <div id="conceptos-ingreso" class="hidden grid grid-cols-2 gap-2 mb-4">
+                {% for val, label in conceptos_ingreso %}
+                <button onclick="setConcepto('{{ val }}')" class="btn-concepto p-3 bg-gray-800 border border-gray-700 rounded-xl text-gray-400 text-xs font-bold hover:border-green-500 hover:text-green-400 transition text-left" data-val="{{ val }}">
+                    {% if val == 'PROPINA' %}💸{% elif val == 'DEVOLUCION' %}🔄{% else %}📋{% endif %}
+                    {{ label }}
+                </button>
+                {% endfor %}
+            </div>
+
+            <!-- Monto + Descripción -->
+            <div class="space-y-3">
+                <input type="number" id="mov-monto" step="0.01" min="0.01" placeholder="$ Monto *"
+                    class="w-full bg-gray-900 text-white p-4 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-2xl font-black text-center placeholder-gray-600">
+                
+                <input type="text" id="mov-descripcion" placeholder="Detalle (ej: Almuerzo 3 empleados — Don Luis)"
+                    class="w-full bg-gray-900 text-white p-3 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600">
+                
+                <button onclick="registrarMovimiento()" id="btn-registrar"
+                    class="w-full bg-bosco-orange text-black py-4 rounded-xl font-black text-lg hover:bg-orange-500 transition active:scale-95">
+                    REGISTRAR
+                </button>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: Historial del turno -->
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">📋 HISTORIAL DEL TURNO</h2>
+            
+            <div id="lista-movimientos" class="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                {% for mov in movimientos %}
+                <div class="flex items-center justify-between bg-gray-800/50 rounded-xl p-4 border border-gray-700/50 hover:border-gray-600 transition" data-id="{{ mov.id }}">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            {% if mov.tipo == 'INGRESO' %}
+                                <span class="bg-green-900/50 text-green-400 text-[9px] font-black px-2 py-0.5 rounded-full">INGRESO</span>
+                            {% else %}
+                                <span class="bg-red-900/50 text-red-400 text-[9px] font-black px-2 py-0.5 rounded-full">EGRESO</span>
+                            {% endif %}
+                            <span class="text-white font-bold text-sm">{{ mov.concepto }}</span>
+                        </div>
+                        {% if mov.descripcion %}
+                            <p class="text-gray-500 text-xs mt-1">{{ mov.descripcion }}</p>
+                        {% endif %}
+                        <p class="text-gray-600 text-[10px] mt-1">{{ mov.fecha|date:"H:i" }} — {{ mov.registrado_por.username }}</p>
+                    </div>
+                    <div class="text-right flex items-center gap-3">
+                        <span class="font-black text-lg {% if mov.tipo == 'INGRESO' %}text-green-400{% else %}text-red-400{% endif %}">
+                            {% if mov.tipo == 'INGRESO' %}+{% else %}-{% endif %}${{ mov.monto|floatformat:2 }}
+                        </span>
+                        <button onclick="eliminarMov({{ mov.id }})" class="text-gray-600 hover:text-red-400 transition text-lg" title="Eliminar">🗑️</button>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center text-gray-600 py-12">
+                    <p class="text-4xl mb-2">📭</p>
+                    <p class="font-bold text-sm">No hay movimientos en este turno</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let tipoMov = 'EGRESO';
+    let conceptoMov = '';
+
+    function setTipoMov(tipo) {
+        tipoMov = tipo;
+        conceptoMov = '';
+        document.querySelectorAll('.btn-concepto').forEach(b => {
+            b.classList.remove('border-red-500', 'text-red-400', 'border-green-500', 'text-green-400', 'bg-red-900/30', 'bg-green-900/30');
+        });
+
+        if (tipo === 'EGRESO') {
+            document.getElementById('btn-egreso').className = 'flex-1 py-3 rounded-lg font-bold text-sm bg-red-600 text-white transition';
+            document.getElementById('btn-ingreso').className = 'flex-1 py-3 rounded-lg font-bold text-sm text-gray-500 hover:text-white transition';
+            document.getElementById('conceptos-egreso').classList.remove('hidden');
+            document.getElementById('conceptos-ingreso').classList.add('hidden');
+        } else {
+            document.getElementById('btn-ingreso').className = 'flex-1 py-3 rounded-lg font-bold text-sm bg-green-600 text-white transition';
+            document.getElementById('btn-egreso').className = 'flex-1 py-3 rounded-lg font-bold text-sm text-gray-500 hover:text-white transition';
+            document.getElementById('conceptos-ingreso').classList.remove('hidden');
+            document.getElementById('conceptos-egreso').classList.add('hidden');
+        }
+    }
+
+    function setConcepto(val) {
+        conceptoMov = val;
+        const color = tipoMov === 'EGRESO' ? ['border-red-500', 'text-red-400', 'bg-red-900/30'] : ['border-green-500', 'text-green-400', 'bg-green-900/30'];
+        document.querySelectorAll('.btn-concepto').forEach(b => {
+            b.classList.remove('border-red-500', 'text-red-400', 'border-green-500', 'text-green-400', 'bg-red-900/30', 'bg-green-900/30');
+            if (b.dataset.val === val) {
+                color.forEach(c => b.classList.add(c));
+            }
+        });
+    }
+
+    function registrarMovimiento() {
+        const monto = parseFloat(document.getElementById('mov-monto').value);
+        const desc = document.getElementById('mov-descripcion').value.trim();
+
+        if (!conceptoMov) return alert('⚠️ Selecciona un concepto');
+        if (!monto || monto <= 0) return alert('⚠️ Ingresa un monto válido');
+
+        const btn = document.getElementById('btn-registrar');
+        btn.disabled = true;
+        btn.innerText = 'REGISTRANDO...';
+
+        fetch('{% url "api_registrar_movimiento" %}', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({
+                tipo: tipoMov,
+                concepto: conceptoMov,
+                descripcion: desc,
+                monto: monto,
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                window.location.reload();
+            } else {
+                alert('❌ ' + data.mensaje);
+                btn.disabled = false;
+                btn.innerText = 'REGISTRAR';
+            }
+        })
+        .catch(() => {
+            alert('❌ Error de conexión');
+            btn.disabled = false;
+            btn.innerText = 'REGISTRAR';
+        });
+    }
+
+    function eliminarMov(id) {
+        if (!confirm('¿Eliminar este movimiento?')) return;
+        
+        fetch('{% url "api_eliminar_movimiento" %}', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ id: id })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') window.location.reload();
+            else alert('❌ ' + data.mensaje);
+        });
+    }
+</script>
+{% endblock %}

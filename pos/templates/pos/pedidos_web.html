@@ -1,0 +1,432 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="min-h-screen bg-bosco-dark">
+
+    <!-- HEADER -->
+    <header class="sticky top-0 z-40 bg-black border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-black text-white uppercase">📱 PEDIDOS WEB</h1>
+            <p class="text-[10px] text-gray-500">Gestión de pedidos desde la app cliente</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="pedido-count" class="bg-bosco-orange text-black font-black px-3 py-1 rounded-full text-sm">{{ pedidos|length }}</span>
+            <a href="/" class="bg-gray-800 text-gray-300 text-xs font-bold px-3 py-2 rounded-lg hover:bg-gray-700">← POS</a>
+        </div>
+    </header>
+
+    <!-- FILTROS DE ESTADO -->
+    <div class="flex gap-2 px-4 py-3 overflow-x-auto border-b border-gray-800 bg-black/50">
+        <button onclick="filtrarEstado(this,'todos')" class="filtro-btn active whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-orange text-black">
+            TODOS
+        </button>
+        <button onclick="filtrarEstado(this,'PENDIENTE_COTIZACION')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-yellow-400 border border-gray-700">
+            📍 COTIZACIÓN
+        </button>
+        <button onclick="filtrarEstado(this,'PENDIENTE')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-orange-400 border border-gray-700">
+            ⏳ PENDIENTE
+        </button>
+        <button onclick="filtrarEstado(this,'COCINA')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-red-400 border border-gray-700">
+            🔥 COCINA
+        </button>
+        <button onclick="filtrarEstado(this,'EN_CAMINO')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-blue-400 border border-gray-700">
+            🛵 EN CAMINO
+        </button>
+        <button onclick="filtrarEstado(this,'LISTO')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-green-400 border border-gray-700">
+            ✅ LISTO
+        </button>
+    </div>
+
+    <!-- GRID DE PEDIDOS -->
+    <div class="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="grid-pedidos">
+        {% for p in pedidos %}
+        <div class="pedido-card bg-bosco-gray rounded-xl border border-gray-700 overflow-hidden transition-all hover:border-gray-500"
+             data-estado="{{ p.estado }}" data-id="{{ p.id }}">
+            
+            <!-- Header con # y Estado -->
+            <div class="p-4 flex items-center justify-between 
+                {% if p.estado == 'PENDIENTE_COTIZACION' %}bg-yellow-900/20 border-b border-yellow-800/30
+                {% elif p.estado == 'PENDIENTE' %}bg-orange-900/20 border-b border-orange-800/30
+                {% elif p.estado == 'COCINA' %}bg-red-900/20 border-b border-red-800/30
+                {% elif p.estado == 'EN_CAMINO' %}bg-blue-900/20 border-b border-blue-800/30
+                {% elif p.estado == 'LISTO' %}bg-green-900/20 border-b border-green-800/30
+                {% endif %}">
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl font-black text-white">#{{ p.id }}</span>
+                    <div>
+                        <span class="text-xs font-black px-2 py-0.5 rounded-full
+                            {% if p.estado == 'PENDIENTE_COTIZACION' %}bg-yellow-400/20 text-yellow-400
+                            {% elif p.estado == 'PENDIENTE' %}bg-orange-400/20 text-orange-400
+                            {% elif p.estado == 'COCINA' %}bg-red-400/20 text-red-400
+                            {% elif p.estado == 'EN_CAMINO' %}bg-blue-400/20 text-blue-400
+                            {% elif p.estado == 'LISTO' %}bg-green-400/20 text-green-400
+                            {% endif %}">
+                            {{ p.get_estado_display|upper }}
+                        </span>
+                        <p class="text-gray-500 text-[10px] mt-0.5">{{ p.fecha|date:"d/m/Y H:i" }}</p>
+                    </div>
+                </div>
+                <!-- TOTAL VISIBLE EN GRANDE -->
+                <div class="text-right">
+                    <span class="text-xs text-gray-500 font-bold">TOTAL</span>
+                    <p class="text-2xl font-black text-bosco-orange">${{ p.total|floatformat:2 }}</p>
+                </div>
+            </div>
+
+            <!-- Info COMPLETA del Cliente -->
+            <div class="p-4 space-y-3">
+                
+                <!-- Datos del cliente -->
+                <div class="bg-[#1a1a1a] p-3 rounded-lg space-y-1.5">
+                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider">DATOS DEL CLIENTE</p>
+                    <div class="flex items-center justify-between">
+                        <span class="text-white font-black text-sm uppercase">👤 {{ p.cliente_nombre }}</span>
+                        {% if p.telefono_cliente %}
+                        <a href="https://wa.me/593{{ p.telefono_cliente|slice:'1:' }}" target="_blank" 
+                           class="bg-green-600 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
+                            📱 WhatsApp
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% if p.telefono_cliente %}
+                    <p class="text-gray-400 text-xs">📞 {{ p.telefono_cliente }}</p>
+                    {% endif %}
+                    {% if p.cliente and p.cliente.cedula_ruc %}
+                    <p class="text-gray-400 text-xs">🪪 CI/RUC: {{ p.cliente.cedula_ruc }}</p>
+                    {% endif %}
+                    {% if p.cliente and p.cliente.email %}
+                    <p class="text-gray-400 text-xs">📧 {{ p.cliente.email }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Tipo de pedido + Entrega -->
+                <div class="flex gap-2">
+                    <span class="text-[10px] font-black px-2 py-1 rounded
+                        {% if p.tipo_pedido == 'DOMICILIO' %}bg-blue-900/30 text-blue-400 border border-blue-800/50
+                        {% elif p.tipo_pedido == 'LLEVAR' %}bg-purple-900/30 text-purple-400 border border-purple-800/50
+                        {% else %}bg-gray-700 text-gray-400 border border-gray-600
+                        {% endif %}">
+                        {% if p.tipo_pedido == 'DOMICILIO' %}🛵 DOMICILIO{% elif p.tipo_pedido == 'LLEVAR' %}📦 RETIRO{% else %}🍽️ SERVIR{% endif %}
+                    </span>
+                    <span class="text-[10px] font-black px-2 py-1 rounded
+                        {% if p.metodo_pago == 'EFECTIVO' %}bg-green-900/30 text-green-400 border border-green-800/50
+                        {% elif p.metodo_pago == 'TRANSFERENCIA' %}bg-blue-900/30 text-blue-400 border border-blue-800/50
+                        {% else %}bg-yellow-900/30 text-yellow-400 border border-yellow-800/50
+                        {% endif %}">
+                        {% if p.metodo_pago == 'EFECTIVO' %}💵 EFECTIVO{% elif p.metodo_pago == 'TRANSFERENCIA' %}📱 TRANSFERENCIA{% else %}💳 TARJETA{% endif %}
+                    </span>
+                </div>
+
+                <!-- Dirección + Ubicación GPS -->
+                {% if p.tipo_pedido == 'DOMICILIO' %}
+                <div class="bg-[#1a1a1a] p-3 rounded-lg space-y-2">
+                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider">📍 ENTREGA</p>
+                    {% if p.direccion_envio %}
+                    <p class="text-gray-300 text-xs leading-relaxed">{{ p.direccion_envio }}</p>
+                    {% endif %}
+                    {% if p.ubicacion_lat and p.ubicacion_lng %}
+                    <a href="https://www.google.com/maps?q={{ p.ubicacion_lat }},{{ p.ubicacion_lng }}" target="_blank"
+                       class="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-blue-500 transition-colors">
+                        🗺️ VER EN GOOGLE MAPS
+                    </a>
+                    <!-- Botón copiar ubicación para reenviar a delivery -->
+                    <button onclick="copiarUbicacion('{{ p.ubicacion_lat }}', '{{ p.ubicacion_lng }}', '{{ p.direccion_envio|escapejs }}')"
+                        class="inline-flex items-center gap-1 bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-green-500 transition-colors ml-1">
+                        📋 COPIAR PARA DELIVERY
+                    </button>
+                    {% else %}
+                    <p class="text-yellow-500 text-[10px] font-bold">⚠️ Cliente no compartió GPS</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Comprobante de transferencia -->
+                {% if p.metodo_pago == 'TRANSFERENCIA' %}
+                <div class="bg-[#1a1a1a] p-3 rounded-lg">
+                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider mb-1">💳 COMPROBANTE</p>
+                    {% if p.comprobante_foto %}
+                    <a href="{{ p.comprobante_foto.url }}" target="_blank" class="bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded inline-flex items-center gap-1 hover:bg-blue-500">
+                        📎 VER COMPROBANTE
+                    </a>
+                    {% else %}
+                    <p class="text-red-400 text-[10px] font-bold">⚠️ SIN COMPROBANTE — verificar con el cliente</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Items del pedido -->
+                <div class="space-y-1 border-t border-gray-700 pt-3 mt-2">
+                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider mb-1">🧾 DETALLE DEL PEDIDO</p>
+                    {% for item in p.detalles.all %}
+                    <div class="flex justify-between text-xs py-0.5">
+                        <div>
+                            <span class="text-white font-bold">{{ item.cantidad }}×</span> 
+                            <span class="text-gray-300 ml-1">{{ item.producto.nombre }}</span>
+                            {% if item.nota %}
+                                <span class="text-yellow-400 text-[10px] font-bold block ml-5">📝 {{ item.nota }}</span>
+                            {% endif %}
+                        </div>
+                        <span class="text-bosco-orange font-bold">${{ item.subtotal|floatformat:2 }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Resumen Financiero -->
+                <div class="bg-[#1a1a1a] p-3 rounded-lg space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-500">Subtotal ({{ p.detalles.count }} items)</span>
+                        <span class="text-white font-bold">${{ p.total|floatformat:2 }}</span>
+                    </div>
+                    {% if p.tipo_pedido == 'DOMICILIO' %}
+                    <div class="flex justify-between text-xs items-center">
+                        <span class="text-gray-500">🛵 Envío (cobra delivery)</span>
+                        <div class="flex items-center gap-1">
+                            <span class="text-gray-400">$</span>
+                            <input type="number" step="0.50" min="0" value="{{ p.costo_envio|floatformat:2 }}"
+                                   class="w-16 bg-black border border-gray-600 text-white text-right p-1 rounded text-xs font-bold focus:border-bosco-orange outline-none"
+                                   onchange="actualizarEnvio({{ p.id }}, this.value)">
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if p.metodo_pago == 'EFECTIVO' and p.monto_recibido > 0 %}
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-500">Recibido</span>
+                        <span class="text-white font-bold">${{ p.monto_recibido|floatformat:2 }}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-500">Cambio</span>
+                        <span class="text-green-400 font-bold">${{ p.cambio|floatformat:2 }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex justify-between border-t border-gray-700 pt-1.5 mt-1">
+                        <span class="text-white font-black text-sm">TOTAL A COBRAR</span>
+                        <span class="text-bosco-orange font-black text-lg">${{ p.total|floatformat:2 }}</span>
+                    </div>
+                </div>
+
+                <!-- BOTONES DE ACCIÓN -->
+                <div class="flex gap-2 mt-2">
+                    {% if p.estado == 'PENDIENTE_COTIZACION' or p.estado == 'PENDIENTE' %}
+                        <button onclick="cambiarEstado({{ p.id }}, 'COCINA')" 
+                            class="flex-1 bg-red-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
+                            🔥 ENVIAR A COCINA
+                        </button>
+                        <button onclick="imprimirComanda({{ p.id }})"
+                            class="bg-gray-700 text-white font-bold px-4 py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform" title="Imprimir comanda">
+                            🖨️
+                        </button>
+                    {% elif p.estado == 'COCINA' %}
+                        {% if p.tipo_pedido == 'DOMICILIO' %}
+                        <button onclick="cambiarEstado({{ p.id }}, 'EN_CAMINO')" 
+                            class="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
+                            🛵 EN CAMINO
+                        </button>
+                        {% endif %}
+                        <button onclick="cambiarEstado({{ p.id }}, 'LISTO')" 
+                            class="flex-1 bg-green-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
+                            ✅ LISTO
+                        </button>
+                        <button onclick="imprimirComanda({{ p.id }})"
+                            class="bg-gray-700 text-white font-bold px-4 py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform">
+                            🖨️
+                        </button>
+                    {% elif p.estado == 'EN_CAMINO' %}
+                        <button onclick="cambiarEstado({{ p.id }}, 'LISTO')" 
+                            class="flex-1 bg-green-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
+                            ✅ ENTREGADO
+                        </button>
+                    {% elif p.estado == 'LISTO' %}
+                        <span class="flex-1 text-center text-green-400 font-bold text-xs py-3">✅ COMPLETADO</span>
+                    {% endif %}
+                    
+                    {% if p.estado != 'LISTO' and p.estado != 'CANCELADO' %}
+                    <button onclick="cambiarEstado({{ p.id }}, 'CANCELADO')" 
+                        class="bg-gray-800 text-red-500 font-bold px-3 py-3 rounded-lg text-[10px] active:scale-95 transition-transform border border-gray-700"
+                        title="Cancelar pedido">
+                        ✕
+                    </button>
+                    {% endif %}
+                </div>
+
+                <!-- BOTÓN WHATSAPP SHARE -->
+                {% if p.telefono_cliente %}
+                <button onclick="compartirWhatsApp('{{ p.telefono_cliente|escapejs }}', {{ p.id }}, '{{ p.cliente_nombre|escapejs }}', '{{ p.total|floatformat:2 }}', '{{ p.get_estado_display|escapejs }}', '{{ p.tipo_pedido }}', '{{ p.direccion_envio|escapejs }}')"
+                    class="w-full mt-2 bg-green-700 hover:bg-green-600 text-white font-bold py-2.5 rounded-lg text-xs uppercase active:scale-95 transition-all flex items-center justify-center gap-2">
+                    📲 COMPARTIR PEDIDO POR WHATSAPP
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full text-center py-20">
+            <span class="text-6xl">📭</span>
+            <p class="text-gray-500 font-bold mt-4 text-lg">NO HAY PEDIDOS WEB</p>
+            <p class="text-gray-600 text-sm mt-2">Cuando un cliente ordene desde la app, aparecerá aquí</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center py-6 text-gray-700 text-[10px] font-bold tracking-widest">
+        Powered by Ü Systems
+    </div>
+</div>
+
+<!-- Notificación visual de nuevo pedido (sin sonido) -->
+<div id="notif-nuevo" class="hidden fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-red-600 via-orange-500 to-red-600 p-4 text-center animate-pulse shadow-2xl">
+    <p class="text-white text-xl font-black uppercase tracking-wider">🔔 ¡NUEVO PEDIDO WEB!</p>
+    <p class="text-white/80 text-sm font-bold">La página se actualizará automáticamente...</p>
+</div>
+
+<style>
+    @keyframes notifPulse {
+        0%, 100% { background: #ff6600; transform: scale(1); }
+        50% { background: #ef4444; transform: scale(1.3); }
+    }
+    .notif-pulse {
+        animation: notifPulse 0.6s ease-in-out infinite;
+    }
+    @keyframes headerGlow {
+        0%, 100% { border-color: #333; }
+        50% { border-color: #ef4444; }
+    }
+    .header-glow {
+        animation: headerGlow 1s ease-in-out infinite;
+    }
+</style>
+
+<script>
+    let lastCount = {{ pedidos|length }};
+    let originalTitle = document.title;
+
+    // ══════════════ FILTRAR ══════════════
+    function filtrarEstado(btn, estado) {
+        document.querySelectorAll('.filtro-btn').forEach(b => {
+            b.classList.remove('bg-bosco-orange', 'text-black');
+            b.classList.add('bg-bosco-gray', 'text-gray-400');
+        });
+        btn.classList.remove('bg-bosco-gray', 'text-gray-400');
+        btn.classList.add('bg-bosco-orange', 'text-black');
+
+        document.querySelectorAll('.pedido-card').forEach(card => {
+            card.style.display = (estado === 'todos' || card.dataset.estado === estado) ? '' : 'none';
+        });
+    }
+
+    // ══════════════ CAMBIAR ESTADO ══════════════
+    function cambiarEstado(pedidoId, nuevoEstado) {
+        const msgs = {
+            'COCINA': '🔥 ¿Enviar pedido #' + pedidoId + ' a COCINA?',
+            'EN_CAMINO': '🛵 ¿Marcar pedido #' + pedidoId + ' como EN CAMINO?',
+            'LISTO': '✅ ¿Marcar pedido #' + pedidoId + ' como ENTREGADO?',
+            'CANCELADO': '⚠️ ¿CANCELAR el pedido #' + pedidoId + '? Esta acción no se puede deshacer.',
+        };
+        if (!confirm(msgs[nuevoEstado] || '¿Confirmar cambio?')) return;
+
+        fetch('/api/actualizar-pedido/', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ pedido_id: pedidoId, estado: nuevoEstado })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                if (nuevoEstado === 'COCINA') imprimirComanda(pedidoId);
+                location.reload();
+            } else {
+                alert('Error: ' + data.mensaje);
+            }
+        });
+    }
+
+    // ══════════════ ACTUALIZAR ENVÍO ══════════════
+    function actualizarEnvio(pedidoId, valor) {
+        fetch('/api/actualizar-pedido/', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ pedido_id: pedidoId, costo_envio: parseFloat(valor) || 0 })
+        })
+        .then(r => r.json())
+        .then(data => { if (data.status !== 'ok') alert('Error: ' + data.mensaje); });
+    }
+
+    // ══════════════ COPIAR UBICACIÓN PARA DELIVERY ══════════════
+    function copiarUbicacion(lat, lng, dir) {
+        const texto = `📍 PEDIDO PARA DELIVERY\nDirección: ${dir}\nUbicación: https://www.google.com/maps?q=${lat},${lng}`;
+        navigator.clipboard.writeText(texto).then(() => {
+            alert('✅ Ubicación copiada — pégala en el grupo de delivery por WhatsApp');
+        }).catch(() => {
+            // Fallback
+            prompt('Copia este texto:', texto);
+        });
+    }
+
+    // ══════════════ IMPRIMIR COMANDA ══════════════
+    function imprimirComanda(pedidoId) {
+        const w = window.open('/imprimir/venta/' + pedidoId + '/', '_blank', 'width=350,height=600');
+        if (w) w.addEventListener('load', function() { w.print(); });
+    }
+
+    // ══════════════ COMPARTIR POR WHATSAPP ══════════════
+    function compartirWhatsApp(telefono, pedidoId, cliente, total, estado, tipo, direccion) {
+        // Limpiar teléfono (quitar 0 inicial y agregar código Ecuador)
+        let tel = telefono.replace(/\s/g, '').replace(/^0/, '');
+        if (!tel.startsWith('593')) tel = '593' + tel;
+        
+        // Construir mensaje
+        let msg = `🍗 *RAMÓN by Bosco*\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        msg += `📋 *Pedido #${pedidoId}*\n`;
+        msg += `👤 ${cliente}\n`;
+        msg += `📌 Estado: ${estado}\n`;
+        
+        if (tipo === 'DOMICILIO' && direccion) {
+            msg += `📍 Enviar a: ${direccion}\n`;
+        } else if (tipo === 'LLEVAR') {
+            msg += `📦 Para retirar en local\n`;
+        }
+        
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        msg += `💰 *Total: $${total}*\n\n`;
+        msg += `¡Gracias por tu pedido! 🙌`;
+        
+        // Abrir WhatsApp
+        const url = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+        window.open(url, '_blank');
+    }
+
+    // ══════════════ AUTO-REFRESH CON NOTIFICACIÓN VISUAL (10s) ══════════════
+    setInterval(function() {
+        fetch('/api/pedidos-web/')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('pedido-count').innerText = data.count;
+            if (data.count > lastCount) {
+                // NOTIFICACIÓN VISUAL — sin sonido
+                document.getElementById('notif-nuevo').classList.remove('hidden');
+                document.getElementById('pedido-count').classList.add('notif-pulse');
+                document.querySelector('header').classList.add('header-glow');
+                document.title = '🔴 ¡NUEVO PEDIDO! — RAMÓN';
+                
+                // También intentar notificación del navegador
+                if (Notification.permission === 'granted') {
+                    new Notification('🔔 Nuevo pedido web', { body: 'Un cliente ha realizado un pedido', icon: '📱' });
+                } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission();
+                }
+                
+                // Recargar después de 2 segundos para mostrar el badge
+                setTimeout(() => { location.reload(); }, 2000);
+            }
+            lastCount = data.count;
+        })
+        .catch(() => {});
+    }, 10000);
+
+    // Pedir permisos de notificación al cargar
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+</script>
+{% endblock %}

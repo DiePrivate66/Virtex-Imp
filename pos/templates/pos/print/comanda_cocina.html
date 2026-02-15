@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Comanda #{{ venta.id }}</title>
+    <style>
+        @page { margin: 0; size: 80mm auto; }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            width: 80mm;
+            margin: 0;
+            padding: 5mm;
+            font-size: 14px;
+            background-color: white;
+            color: black;
+        }
+        .text-center { text-align: center; }
+        .font-black { font-weight: 900; }
+        .font-bold { font-weight: bold; }
+        .uppercase { text-transform: uppercase; }
+        .divider { border-top: 2px dashed black; margin: 8px 0; }
+        .big-text { font-size: 20px; }
+        .huge-text { font-size: 26px; }
+        .item { margin-bottom: 12px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+        .nota { background-color: #ddd; padding: 4px 6px; font-weight: bold; font-size: 13px; margin-top: 4px; }
+        .tipo-badge {
+            display: inline-block;
+            border: 2px solid black;
+            padding: 4px 12px;
+            font-weight: 900;
+            font-size: 18px;
+            margin: 6px 0;
+        }
+    </style>
+</head>
+<body onload="window.print()">
+    <div class="text-center">
+        <h1 class="font-black huge-text">🍳 COCINA</h1>
+        <p class="font-bold big-text">#{{ venta.id }}</p>
+        <p>{{ venta.fecha|date:"H:i" }}</p>
+        
+        <!-- TIPO DE PEDIDO - MUY VISIBLE -->
+        <div class="tipo-badge">
+            {% if venta.tipo_pedido == 'LLEVAR' %}
+                📦 PARA LLEVAR
+            {% elif venta.tipo_pedido == 'DOMICILIO' %}
+                🛵 DOMICILIO
+            {% else %}
+                🍽️ PARA SERVIR
+            {% endif %}
+        </div>
+        
+        <p class="uppercase font-bold">{{ venta.cliente_nombre }}</p>
+        <div class="divider"></div>
+    </div>
+
+    <div>
+        {% for item in venta.detalles.all %}
+        <div class="item">
+            <div style="display: flex; justify-content: space-between;">
+                <span class="font-black big-text">{{ item.cantidad }}x</span>
+                <span class="font-bold big-text" style="flex: 1; margin-left: 10px;">{{ item.producto.nombre }}</span>
+            </div>
+            {% if item.nota %}
+            <div class="nota uppercase">⚠️ {{ item.nota }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="divider"></div>
+    <div class="text-center font-bold">
+        FIN DE COMANDA
+    </div>
+</body>
+</html>

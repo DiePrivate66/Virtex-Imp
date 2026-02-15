@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Impresión Venta #{{ venta.id }}</title>
+    <style>
+        @page { margin: 0; size: 80mm auto; }
+        @media print {
+            .page-break { 
+                page-break-after: always;
+                break-after: page;
+            }
+            .corte-visual { display: none; }
+            body { margin: 0; padding: 0; }
+        }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            width: 80mm;
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+            background-color: white;
+            color: black;
+        }
+        .section { padding: 5mm; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .font-black { font-weight: 900; }
+        .font-bold { font-weight: bold; }
+        .uppercase { text-transform: uppercase; }
+        .divider { border-top: 2px dashed black; margin: 8px 0; }
+        .divider-light { border-top: 1px dashed black; margin: 5px 0; }
+        .big-text { font-size: 20px; }
+        .huge-text { font-size: 26px; }
+        .small-text { font-size: 12px; }
+        .item { margin-bottom: 12px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+        .nota { background-color: #ddd; padding: 4px 6px; font-weight: bold; font-size: 13px; margin-top: 4px; }
+        .tipo-badge {
+            display: inline-block;
+            border: 3px solid black;
+            padding: 6px 16px;
+            font-weight: 900;
+            font-size: 18px;
+            margin: 6px 0;
+        }
+        table.items { width: 100%; border-collapse: collapse; }
+        table.items th { border-bottom: 1px solid black; text-align: left; font-size: 12px; padding: 2px 0; }
+        table.items td { padding: 3px 0; vertical-align: top; font-size: 12px; }
+        .corte-visual {
+            text-align: center;
+            padding: 15px 0;
+            font-size: 12px;
+            color: #999;
+            letter-spacing: 2px;
+        }
+        .corte-visual span {
+            display: block;
+            border-top: 3px dashed #aaa;
+            margin-top: 5px;
+        }
+        .info-row { display: flex; justify-content: space-between; margin: 2px 0; }
+        .info-label { color: #555; font-size: 12px; }
+        .info-value { font-weight: bold; font-size: 12px; }
+    </style>
+</head>
+<body onload="window.print()">
+
+    <!-- ==================== COMANDA (COCINA) ==================== -->
+    <div class="section">
+        <div class="text-center">
+            <h1 class="font-black huge-text" style="margin:0;">🍳 COCINA</h1>
+            <p class="font-bold big-text" style="margin:5px 0;">#{{ venta.id }}</p>
+            <p style="margin:2px 0;">{{ venta.fecha|date:"d/m/Y H:i" }}</p>
+            
+            <div class="tipo-badge">
+                {% if venta.tipo_pedido == 'LLEVAR' %}
+                    📦 PARA LLEVAR
+                {% elif venta.tipo_pedido == 'DOMICILIO' %}
+                    🛵 DOMICILIO
+                {% else %}
+                    🍽️ PARA SERVIR
+                {% endif %}
+            </div>
+            
+            <p class="uppercase font-bold" style="margin:5px 0; font-size:16px;">{{ venta.cliente_nombre }}</p>
+            <div class="divider"></div>
+        </div>
+
+        <div>
+            {% for item in venta.detalles.all %}
+            <div class="item">
+                <div style="display: flex; align-items: flex-start;">
+                    <span class="font-black big-text" style="min-width:45px;">{{ item.cantidad }}x</span>
+                    <span class="font-bold big-text" style="flex: 1;">{{ item.producto.nombre }}</span>
+                </div>
+                {% if item.nota %}
+                <div class="nota uppercase">⚠️ {{ item.nota }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="divider"></div>
+        <div class="text-center font-bold" style="font-size:16px;">
+            TOTAL ITEMS: {{ venta.detalles.count }}
+        </div>
+        <div class="text-center font-bold" style="margin-top:10px; font-size:12px;">
+            ─── FIN DE COMANDA ───
+        </div>
+    </div>
+
+    <!-- ==================== CORTE DE PAPEL ==================== -->
+    <div class="corte-visual">
+        ✂ ─ ─ ─ CORTAR AQUÍ ─ ─ ─ ✂
+        <span></span>
+    </div>
+    <div class="page-break"></div>
+
+    <!-- ==================== FACTURA / TICKET (CLIENTE) ==================== -->
+    <div class="section">
+        <div class="text-center">
+            <h1 style="margin:0; font-size:20px; font-weight:900; letter-spacing:3px;">RAMÓN</h1>
+            <p style="margin:2px 0; font-size:11px;">by Bosco</p>
+            <p style="margin:2px 0; font-size:11px;">RUC: 0999999999001</p>
+            <p style="margin:2px 0; font-size:11px;">Dir: Av. Principal y Calle 1</p>
+            <p style="margin:2px 0; font-size:11px;">Tel: 0991234567</p>
+            <div class="divider"></div>
+            <p class="font-bold" style="font-size:16px;">COMPROBANTE DE VENTA</p>
+            <p style="font-size:12px;">#{{ venta.id }} | {{ venta.fecha|date:"d/m/Y H:i" }}</p>
+            <div class="divider-light"></div>
+        </div>
+
+        <!-- DATOS DEL CLIENTE -->
+        <div style="margin-bottom:8px;">
+            {% if venta.cliente %}
+            <div class="info-row"><span class="info-label">CLIENTE:</span><span class="info-value">{{ venta.cliente.nombre|upper }}</span></div>
+            <div class="info-row"><span class="info-label">RUC/CI:</span><span class="info-value">{{ venta.cliente.cedula_ruc }}</span></div>
+            {% if venta.cliente.direccion %}
+            <div class="info-row"><span class="info-label">DIR:</span><span class="info-value">{{ venta.cliente.direccion }}</span></div>
+            {% endif %}
+            {% if venta.cliente.telefono %}
+            <div class="info-row"><span class="info-label">TEL:</span><span class="info-value">{{ venta.cliente.telefono }}</span></div>
+            {% endif %}
+            {% if venta.cliente.email %}
+            <div class="info-row"><span class="info-label">EMAIL:</span><span class="info-value">{{ venta.cliente.email }}</span></div>
+            {% endif %}
+            {% else %}
+            <div class="info-row"><span class="info-label">CLIENTE:</span><span class="info-value">CONSUMIDOR FINAL</span></div>
+            {% endif %}
+            <div class="info-row"><span class="info-label">PAGO:</span><span class="info-value">{{ venta.get_metodo_pago_display }}</span></div>
+            <div class="info-row"><span class="info-label">PEDIDO:</span><span class="info-value">{{ venta.get_tipo_pedido_display }}</span></div>
+            <div class="divider-light"></div>
+        </div>
+
+        <!-- DETALLE DE PRODUCTOS -->
+        <table class="items">
+            <thead>
+                <tr>
+                    <th width="8%">C</th>
+                    <th width="52%">DESCRIPCIÓN</th>
+                    <th width="20%" class="text-right">P/U</th>
+                    <th width="20%" class="text-right">SUBT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in venta.detalles.all %}
+                <tr>
+                    <td>{{ item.cantidad }}</td>
+                    <td>
+                        {{ item.producto.nombre }}
+                        {% if item.nota %}
+                        <br><small style="color:#555;">({{ item.nota }})</small>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">${{ item.precio_unitario|floatformat:2 }}</td>
+                    <td class="text-right">${{ item.subtotal|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <!-- TOTALES -->
+        <div style="font-size:13px;">
+            <div class="info-row">
+                <span>SUBTOTAL ({{ venta.detalles.count }} items):</span>
+                <span class="font-bold">${{ venta.total|floatformat:2 }}</span>
+            </div>
+            <div class="info-row" style="font-size:16px; margin-top:5px;">
+                <span class="font-black">TOTAL:</span>
+                <span class="font-black">${{ venta.total|floatformat:2 }}</span>
+            </div>
+            {% if venta.metodo_pago == 'EFECTIVO' %}
+            <div class="divider-light"></div>
+            <div class="info-row">
+                <span>RECIBIDO:</span>
+                <span class="font-bold">${{ venta.monto_recibido|floatformat:2 }}</span>
+            </div>
+            <div class="info-row" style="font-size:15px;">
+                <span class="font-black">CAMBIO:</span>
+                <span class="font-black">${{ venta.cambio|floatformat:2 }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="divider"></div>
+        <div class="text-center small-text" style="padding:8px 0;">
+            <p style="margin:2px 0;">¡GRACIAS POR SU PREFERENCIA!</p>
+            <p style="margin:2px 0; font-size:10px;">Este documento es un comprobante de venta</p>
+            <p style="margin:8px 0 2px; font-size:9px; color:#888;">Ü Systems v1.0</p>
+        </div>
+    </div>
+</body>
+</html>

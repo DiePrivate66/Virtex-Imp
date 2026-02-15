@@ -32,10 +32,33 @@
         ::-webkit-scrollbar-thumb { background: #ff6600; border-radius: 4px; }
     </style>
 </head>
-<body class="bg-bosco-dark text-bosco-text h-screen overflow-hidden font-sans">
+<body class="bg-bosco-dark text-bosco-text min-h-screen font-sans">
     
     {% block content %}
     {% endblock %}
 
+<script>
+    // ═══════ CSRF TOKEN HELPER (GLOBAL) ═══════
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    function getHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+        };
+    }
+</script>
 </body>
 </html>

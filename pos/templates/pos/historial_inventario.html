@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-black text-white tracking-tight">📋 HISTORIAL: {{ producto.nombre }}</h1>
+            <p class="text-gray-500 text-xs font-bold mt-1">Stock actual: <span class="text-white">{{ inventario.stock_actual }} {{ inventario.unidad }}</span> · Mínimo: {{ inventario.stock_minimo }}</p>
+        </div>
+        <a href="{% url 'panel_inventario' %}" class="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+            ← VOLVER AL INVENTARIO
+        </a>
+    </div>
+
+    <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-gray-500 text-[10px] uppercase tracking-widest bg-black/30">
+                    <th class="text-left py-3 px-4">Fecha/Hora</th>
+                    <th class="text-center py-3 px-2">Tipo</th>
+                    <th class="text-center py-3 px-2">Cantidad</th>
+                    <th class="text-center py-3 px-2">Stock Anterior</th>
+                    <th class="text-center py-3 px-2">Stock Nuevo</th>
+                    <th class="text-left py-3 px-2">Concepto</th>
+                    <th class="text-left py-3 px-2">Usuario</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mov in movimientos %}
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                    <td class="py-3 px-4 text-gray-400 text-xs">{{ mov.fecha|date:"d/m/Y H:i" }}</td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="text-[10px] font-black px-2 py-0.5 rounded-full 
+                            {% if mov.tipo == 'ENTRADA' %}bg-green-900/50 text-green-400
+                            {% elif mov.tipo == 'SALIDA' %}bg-red-900/50 text-red-400
+                            {% elif mov.tipo == 'AJUSTE' %}bg-blue-900/50 text-blue-400
+                            {% else %}bg-yellow-900/50 text-yellow-400{% endif %}">
+                            {{ mov.tipo }}
+                        </span>
+                    </td>
+                    <td class="py-3 px-2 text-center font-black text-lg
+                        {% if mov.cantidad > 0 %}text-green-400{% else %}text-red-400{% endif %}">
+                        {% if mov.cantidad > 0 %}+{% endif %}{{ mov.cantidad }}
+                    </td>
+                    <td class="py-3 px-2 text-center text-gray-500 font-bold">{{ mov.stock_anterior }}</td>
+                    <td class="py-3 px-2 text-center text-white font-black">{{ mov.stock_nuevo }}</td>
+                    <td class="py-3 px-2 text-gray-400 text-xs">{{ mov.concepto|default:"-" }}</td>
+                    <td class="py-3 px-2 text-gray-500 text-xs">{{ mov.registrado_por.username|default:"sistema" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center text-gray-600 py-12 text-sm">Sin movimientos registrados</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
