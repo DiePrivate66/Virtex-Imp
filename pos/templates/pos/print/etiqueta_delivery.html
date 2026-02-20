@@ -1,0 +1,111 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Delivery #{{ venta.id }}</title>
+    <style>
+        @page { margin: 0; }
+        body {
+            font-family: 'Courier New', monospace; /* Monospace para alineación en térmica */
+            width: 80mm;
+            margin: 0;
+            padding: 5px;
+            font-size: 12px;
+            color: #000;
+        }
+        .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 5px; margin-bottom: 5px; }
+        .title { font-size: 16px; font-weight: bold; }
+        .big-id { font-size: 24px; font-weight: black; margin: 5px 0; }
+        .section { margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 5px; }
+        .label { font-size: 10px; font-weight: bold; text-transform: uppercase; }
+        .value { font-size: 14px; font-weight: bold; word-wrap: break-word; }
+        .items { width: 100%; border-collapse: collapse; margin-top: 5px; }
+        .items td { padding: 2px 0; vertical-align: top; }
+        .checkbox { font-size: 14px; font-weight: bold; }
+        .total-box { border: 2px solid #000; padding: 5px; text-align: center; margin-top: 5px; border-radius: 5px; }
+        .qr-box { text-align: center; margin-top: 10px; }
+        .qr-img { width: 120px; height: 120px; }
+        .footer { text-align: center; font-size: 10px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="title">RAMÓN by Bosco</div>
+        <div>DELIVERY</div>
+        <div class="big-id">#{{ venta.id }}</div>
+        <div>{{ venta.fecha|date:"d/m/Y H:i" }}</div>
+    </div>
+
+    <!-- DATOS DE ENTREGA -->
+    <div class="section">
+        <div class="label">CLIENTE:</div>
+        <div class="value">{{ venta.cliente_nombre|upper }}</div>
+        <div>{{ venta.cliente.telefono|default:venta.telefono_cliente }}</div>
+    </div>
+
+    <div class="section">
+        <div class="label">DIRECCIÓN DE ENTREGA:</div>
+        <div class="value" style="font-size: 16px;">{{ venta.direccion_envio|upper }}</div>
+    </div>
+
+    <!-- QR PARA MOTORIZADO -->
+    {% if venta.ubicacion_lat and venta.ubicacion_lng %}
+    <div class="qr-box">
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://www.google.com/maps?q={{ venta.ubicacion_lat }},{{ venta.ubicacion_lng }}" alt="QR GPS">
+        <div style="font-size: 9px; font-weight: bold;">ESCANEAR PARA GPS</div>
+    </div>
+    {% else %}
+    <div class="qr-box" style="border: 1px dashed black; padding: 10px;">
+        SIN UBICACIÓN GPS
+    </div>
+    {% endif %}
+
+    <!-- CHECKLIST PRODUCTOS (Para que el motorizado revise) -->
+    <div class="section">
+        <div class="label">CONTENIDO (REVISAR):</div>
+        <table class="items">
+            {% for item in venta.detalles.all %}
+            <tr>
+                <td width="20" class="checkbox">[ ]</td>
+                <td style="font-weight: bold;">{{ item.cantidad }}x</td>
+                <td>
+                    {{ item.producto.nombre }}
+                    {% if item.nota %}
+                    <div style="font-size: 10px; font-style: italic;">({{ item.nota }})</div>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <!-- COBRO -->
+    <div class="total-box">
+        <div class="label">TOTAL A COBRAR:</div>
+        <div style="font-size: 20px; font-weight: black;">
+            ${{ venta.total|floatformat:2 }}
+        </div>
+        <div style="font-size: 10px; margin-top: 2px;">
+            MÉTODO: {{ venta.get_metodo_pago_display|upper }}
+        </div>
+    </div>
+
+    {% if venta.metodo_pago == 'EFECTIVO' %}
+    <div style="text-align: center; font-size: 11px; margin-top: 5px;">
+        (El cliente espera cambio de ${{ venta.cambio|floatformat:2 }})
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        Powered by Ü Systems<br>
+        Ticket de Entrega
+    </div>
+
+    <script>
+        // Auto-imprimir al cargar
+        window.onload = function() { window.print(); }
+    </script>
+</body>
+</html>

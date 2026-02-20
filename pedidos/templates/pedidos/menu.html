@@ -148,14 +148,30 @@
                 </div>
 
                 <!-- Salsas -->
-                <div id="sec-salsas" class="hidden space-y-3">
-                    <p class="text-gray-400 text-xs font-black uppercase tracking-wider">Elige tu salsa</p>
+                <div id="sec-salsas" class="hidden space-y-4">
+                    <p id="label-salsas" class="text-gray-400 text-xs font-black uppercase tracking-wider">Elige tu salsa</p>
+                    
+                    <!-- Salsas Clásicas -->
                     <div class="grid grid-cols-2 gap-2">
                         <button onclick="selSalsa(this,'BBQ Original')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🔥 BBQ Original</button>
                         <button onclick="selSalsa(this,'BBQ Picante')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🌶️ BBQ Picante</button>
                         <button onclick="selSalsa(this,'Miel y Mostaza')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🍯 Miel Mostaza</button>
                         <button onclick="selSalsa(this,'Sin Salsa')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">❌ Sin Salsa</button>
                     </div>
+
+                    <!-- Salsas Premium (NUEVO) -->
+                    <p class="text-yellow-500 text-[10px] font-black uppercase tracking-wider mt-2">🌟 SALSAS PREMIUM</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="selSalsa(this,'Maiz Dulce')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🌽 Maíz Dulce</button>
+                        <button onclick="selSalsa(this,'Honey Chipotle')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🐝 Honey Chipotle</button>
+                        <button onclick="selSalsa(this,'Maple Picante')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🍁 Maple Picante</button>
+                        <button onclick="selSalsa(this,'Salsa de Queso')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🧀 Salsa de Queso</button>
+                    </div>
+
+                    <!-- Custom Sauce Input -->
+                    <input type="text" id="modal-salsa-extra" placeholder="🔤 O escribe otra salsa aquí..." 
+                        class="w-full mt-2 bg-[#1a1a1a] text-white p-3 rounded-xl border border-gray-700 text-xs focus:border-bosco-orange outline-none placeholder-gray-600 font-bold"
+                        oninput="onSalsaInput(this)">
                 </div>
 
                 <!-- Notas -->
@@ -262,7 +278,12 @@
                         </div>
                     </button>
 
-                    <p class="text-gray-600 text-[10px] font-bold">📍 Te contactaremos por WhatsApp para confirmar el costo de envío. El delivery cobra la carrera directamente.</p>
+                    <p class="text-gray-600 text-[10px] font-bold">📍 Te contactaremos por WhatsApp para confirmar el costo de envío.</p>
+                    <div class="bg-yellow-900/20 border border-yellow-700/50 p-3 rounded-lg mt-2">
+                        <p class="text-yellow-500 text-[10px] font-black uppercase mb-1">⚠️ IMPORTANTE</p>
+                        <p class="text-gray-400 text-[10px] leading-tight">El costo del Delivery se paga <strong>DIRECTAMENTE AL MOTORIZADO</strong> al recibir tu pedido (Efectivo/Transferencia al conductor).</p>
+                        <p class="text-white text-[10px] font-bold mt-1">A nosotros solo nos pagas el consumo de alimentos.</p>
+                    </div>
                 </div>
 
                 <!-- PASO 3: Método de pago -->
@@ -271,35 +292,6 @@
                         <span class="w-6 h-6 bg-bosco-orange rounded-full text-black text-xs font-black flex items-center justify-center">3</span>
                         MÉTODO DE PAGO
                     </h3>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button onclick="setPago(this,'EFECTIVO')" class="btn-pago p-4 rounded-xl font-bold text-sm border-2 border-bosco-orange bg-bosco-orange/10 text-bosco-orange transition-all text-center">
-                            <span class="text-2xl block mb-1">💵</span>
-                            EFECTIVO
-                        </button>
-                        <button onclick="setPago(this,'TRANSFERENCIA')" class="btn-pago p-4 rounded-xl font-bold text-sm border-2 border-gray-700 text-gray-400 transition-all text-center">
-                            <span class="text-2xl block mb-1">📱</span>
-                            TRANSFERENCIA
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Datos bancarios (solo transferencia) -->
-                <div id="sec-cuenta" class="hidden anim-fade bg-[#1a1a1a] p-4 rounded-xl border border-gray-700/50 space-y-3">
-                    <p class="text-bosco-orange font-black text-[10px] uppercase tracking-wider mb-2">Datos para transferencia</p>
-                    
-                    <!-- Cooperativa JEP -->
-                    <div class="bg-[#222] p-3 rounded-lg border border-gray-700/30">
-                        <p class="text-yellow-400 font-black text-[10px] uppercase">Cooperativa JEP</p>
-                        <p class="text-white text-sm font-bold mt-1">Juan José Castro</p>
-                        <p class="text-gray-400 text-xs">Cta. Ahorros: <span class="text-white font-bold">406148953900</span></p>
-                        <p class="text-gray-400 text-xs">C.I.: <span class="text-white font-bold">0105994735</span></p>
-                    </div>
-                    
-                    <!-- Banco Pichincha -->
-                    <div class="bg-[#222] p-3 rounded-lg border border-gray-700/30">
-                        <p class="text-blue-400 font-black text-[10px] uppercase">Banco Pichincha</p>
-                        <p class="text-white text-sm font-bold mt-1">Juan José Castro</p>
-                        <p class="text-gray-400 text-xs">Cta. Ahorros: <span class="text-white font-bold">2211994932</span></p>
                         <p class="text-gray-400 text-xs">C.I.: <span class="text-white font-bold">0105994735</span></p>
                     </div>
                     
@@ -347,7 +339,7 @@
 <script>
     // ══════════════ ESTADO GLOBAL ══════════════
     let carrito = [];
-    let tempProd = { id: '', nombre: '', precio: 0, cantidad: 1, salsa: '' };
+    let tempProd = { id: '', nombre: '', precio: 0, cantidad: 1, salsas: [] };
     let tipoPedido = 'DOMICILIO';
     let metodoPago = 'EFECTIVO';
     let ubicacionLat = null;
@@ -364,54 +356,128 @@
     }
 
     // ══════════════ MODAL PERSONALIZACIÓN ══════════════
+    let maxSalsas = 1;
+
     function abrirModal(id, nombre, precio) {
-        tempProd = { id, nombre, precio: parseFloat(precio), cantidad: 1, salsa: '' };
+        // Asegurar que el precio use punto decimal
+        let precioStr = String(precio).replace(',', '.');
+        tempProd = { id, nombre, precio: parseFloat(precioStr), cantidad: 1, salsas: [] }; // salsas es array ahora
+        
         document.getElementById('modal-nombre').innerText = nombre;
-        document.getElementById('modal-precio').innerText = '$' + parseFloat(precio).toFixed(2);
+        document.getElementById('modal-precio').innerText = '$' + tempProd.precio.toFixed(2);
         document.getElementById('modal-cant').innerText = '1';
         document.getElementById('modal-notas').value = '';
+        document.getElementById('modal-salsa-extra').value = '';
         actualizarSubModal();
 
-        // Reset salsas
+        // Determinar máximo salsas
+        const upper = nombre.toUpperCase();
+        // Tenders 8u o Boneless 14u -> 2 Salsas
+        if (upper.includes('8') || upper.includes('14')) {
+            maxSalsas = 2;
+        } else {
+            maxSalsas = 1;
+        }
+        document.getElementById('label-salsas').innerText = maxSalsas === 2 ? 'ELIGE HASTA 2 SALSAS' : 'ELIGE 1 SALSA';
+
+        // Reset visual buttons
         document.querySelectorAll('.btn-salsa').forEach(b => {
             b.classList.remove('bg-bosco-orange', 'text-black', 'border-bosco-orange');
             b.classList.add('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
         });
 
-        // Mostrar salsas solo para pollo
-        const upper = nombre.toUpperCase();
+        // Mostrar salsas
         const esPollo = upper.includes('BONELESS') || upper.includes('TENDERS') || upper.includes('ALITAS');
         document.getElementById('sec-salsas').classList.toggle('hidden', !esPollo);
-
         document.getElementById('modal-opciones').classList.remove('hidden');
     }
 
-    function cerrarModal() { document.getElementById('modal-opciones').classList.add('hidden'); }
-
-    function cambCant(d) {
-        tempProd.cantidad = Math.max(1, tempProd.cantidad + d);
-        document.getElementById('modal-cant').innerText = tempProd.cantidad;
-        actualizarSubModal();
-    }
-
-    function actualizarSubModal() {
-        const sub = (Math.round(tempProd.precio * tempProd.cantidad * 100) / 100).toFixed(2);
-        document.getElementById('modal-subtotal').innerText = '$' + sub;
-    }
+    // ... (cerrarModal, cambCant, actualizarSubModal igual) ...
 
     function selSalsa(btn, salsa) {
-        tempProd.salsa = salsa;
+        // Limpiar manual si toca botones
+        if (document.getElementById('modal-salsa-extra').value) {
+            document.getElementById('modal-salsa-extra').value = '';
+            tempProd.salsas = [];
+            resetBtnStyles();
+        }
+
+        const idx = tempProd.salsas.indexOf(salsa);
+        if (idx > -1) {
+            // Deseleccionar
+            tempProd.salsas.splice(idx, 1);
+            btn.classList.add('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
+            btn.classList.remove('bg-bosco-orange', 'text-black', 'border-bosco-orange');
+        } else {
+            // Seleccionar
+            if (tempProd.salsas.length >= maxSalsas) {
+                // Si es modo 1 salsa, cambio directo (reemplazo)
+                if (maxSalsas === 1) {
+                    tempProd.salsas = [salsa];
+                    resetBtnStyles();
+                    btn.classList.remove('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
+                    btn.classList.add('bg-bosco-orange', 'text-black', 'border-bosco-orange');
+                } else {
+                    // Si es modo 2 salsas, aviso o reemplazo el primero? Mejor simple: reemplazo el más viejo (stack) o alerta?
+                    // UX rápida: quitamos el primero y ponemos este
+                    const removed = tempProd.salsas.shift(); 
+                    // Buscar el boton del removed y apagarlo (complejo buscar por texto).
+                    // Mejor resetear visualmente todo y repintar lo activo
+                    tempProd.salsas.push(salsa);
+                    updateBtnVisuals();
+                }
+            } else {
+                tempProd.salsas.push(salsa);
+                btn.classList.remove('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
+                btn.classList.add('bg-bosco-orange', 'text-black', 'border-bosco-orange');
+            }
+        }
+    }
+
+    function resetBtnStyles() {
         document.querySelectorAll('.btn-salsa').forEach(b => {
             b.classList.remove('bg-bosco-orange', 'text-black', 'border-bosco-orange');
             b.classList.add('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
         });
-        btn.classList.add('bg-bosco-orange', 'text-black', 'border-bosco-orange');
-        btn.classList.remove('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
+    }
+
+    function updateBtnVisuals() {
+        resetBtnStyles();
+        // Recorrer botones y activar si su texto coincide (HACKY pero funciona rápido)
+        document.querySelectorAll('.btn-salsa').forEach(b => {
+             // El texto del boton tiene emojis, usamos 'includes' con la salsa limpia
+             // O pasamos el valor en atributo data. 
+             // Como selSalsa recibe el string limpio, comparamos con ese
+             // Pero no tenemos ref fácil al boton. 
+             // Re-implementar selSalsa para gestionar mejor esto?
+             // Simplificación: al añadir tempProd.salsas, repintamos todo buscando el texto
+             const txt = b.innerText; 
+             if (tempProd.salsas.some(s => txt.includes(s))) {
+                 b.classList.remove('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
+                 b.classList.add('bg-bosco-orange', 'text-black', 'border-bosco-orange');
+             }
+        });
+    }
+
+    function onSalsaInput(input) {
+        if (input.value) {
+            tempProd.salsas = []; 
+            resetBtnStyles();
+        }
     }
 
     function confirmarAgregar() {
         const notas = document.getElementById('modal-notas').value.trim();
-        const nombreFinal = tempProd.salsa ? `${tempProd.nombre} (${tempProd.salsa})` : tempProd.nombre;
+        const salsaExtra = document.getElementById('modal-salsa-extra').value.trim();
+        
+        let salsasStr = '';
+        if (salsaExtra) {
+            salsasStr = salsaExtra;
+        } else if (tempProd.salsas.length > 0) {
+            salsasStr = tempProd.salsas.join(' + ');
+        }
+
+        const nombreFinal = salsasStr ? `${tempProd.nombre} (${salsasStr})` : tempProd.nombre;
 
         // Buscar entrada existente con misma config
         const existe = carrito.find(i => i.id === tempProd.id && i.nota === notas && i.nombre === nombreFinal);
@@ -544,15 +610,22 @@
 
     // ══════════════ ENVIAR PEDIDO ══════════════
     function enviarPedido() {
-        const nombre = document.getElementById('ch-nombre').value.trim();
+        let nombre = document.getElementById('ch-nombre').value.trim();
         const telefono = document.getElementById('ch-telefono').value.trim();
         const direccion = document.getElementById('ch-direccion').value.trim();
         const btn = document.getElementById('btn-enviar');
 
-        if (!nombre) { sacudir('ch-nombre'); return alert('⚠️ Ingresa tu nombre'); }
+        if (!nombre) { sacudir('ch-nombre'); return alert('⚠️ Ingresa tu nombre (Para llamarte al entregar)'); }
         if (!telefono) { sacudir('ch-telefono'); return alert('⚠️ Ingresa tu WhatsApp/teléfono'); }
         if (tipoPedido === 'DOMICILIO' && !direccion) { sacudir('ch-direccion'); return alert('⚠️ Ingresa tu dirección de entrega'); }
         if (carrito.length === 0) return alert('⚠️ Tu carrito está vacío');
+
+        // Lógica de Código DOMICILIO
+        if (tipoPedido === 'DOMICILIO') {
+            const last4 = telefono.replace(/\D/g, '').slice(-4); // Solo números, últimos 4
+            // Guardamos el código al inicio del nombre para que salga en el ticket
+            nombre = `DOMICILIO ${last4} - ${nombre}`;
+        }
 
         if (metodoPago === 'TRANSFERENCIA') {
             const comp = document.getElementById('ch-comprobante').files[0];

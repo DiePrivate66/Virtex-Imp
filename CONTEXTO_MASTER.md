@@ -4,7 +4,7 @@
 
 ---
 
-**ESTADO ACTUAL DEL PROYECTO (14-Feb-2026)**
+**ESTADO ACTUAL DEL PROYECTO (15-Feb-2026)**
 
 Eres un desarrollador experto en Django y Tailwind uniéndote al equipo de "Ramón by Bosco".
 Estamos creando un sistema POS (Punto de Venta) y Web App de Pedidos.
@@ -14,6 +14,7 @@ Estamos creando un sistema POS (Punto de Venta) y Web App de Pedidos.
 - **Frontend:** HTML5 + TailwindCSS (CDN). Interfaz tipo SPA con Vanilla JS.
 - **Base de Datos:** SQLite (Dev) -> PostgreSQL (Prod).
 - **Estilo:** Dark Mode Industrial (`#1a1a1a`, `#ff6600`).
+- **Deploy:** Railway (Configurado).
 
 ## 2. Modelos de Datos (`pos/models.py`)
 - **`Producto`**: Menú (Hamburguesas, Alitas).
@@ -25,24 +26,26 @@ Estamos creando un sistema POS (Punto de Venta) y Web App de Pedidos.
     - `origen`: 'POS' (Caja) o 'WEB' (Cliente).
     - `estado`: 'PENDIENTE' -> 'COCINA' -> 'LISTO'.
 - **`Cliente`**: Datos recurrentes (RUC, WhatsApp, Dirección).
-- **`PerfilUsuario`**: PIN de 4-6 dígitos para login rápido en POS.
+- **`Empleado`**: Roles (ADMIN/CAJERO) y Asistencia.
 
 ## 3. Flujo Crítico de Caja (Logic Flow)
 1.  **Login:** Empleado ingresa PIN en `/login/`.
-2.  **Apertura:** Si no tiene turno abierto, el sistema lo obliga a ir a `/apertura/` e ingresar el monto inicial.
-3.  **Venta (POS):**
-    - Interfaz táctil de 3 columnas (Categorías, Productos, Ticket).
-    - Botón "Cobrar" abre modal de pago (Efectivo/Transferencia).
-    - Al cobrar, se imprime Ticket y Comanda (window.open).
-4.  **Cierre:**
-    - Cajero cuenta dinero físico.
-    - Ingresa cantidad de billetes/monedas en `/cierre/`.
-    - Sistema compara con registro digital y muestra diferencia.
+2.  **Apertura:** Si no tiene turno abierto, sistema obliga a apertura.
+3.  **Venta (POS):** Interfaz táctil, cobro con modal, impresión de Ticket/Comanda.
+4.  **Cierre:** Conteo de dinero físico vs sistema.
 
-## 4. Tareas Pendientes / En Progreso
-- [ ] Implementar la Web App para clientes en `/pedido/`.
-- [ ] Reportes de ventas por rando de fechas.
-- [ ] Subida de comprobantes de pago en la Web App.
+## 4. LO QUE YA ESTÁ LISTO (Done)
+- [x] POS Core y Caja Completa.
+- [x] Web App (PWA) para clientes en `/menu/`.
+- [x] Geolocalización GPS y pedidos por WhatsApp.
+- [x] Seguridad CSRF y Roles (Admin vs Cajero).
+- [x] Dashboard Analytics y Reportes Contables.
+- [x] Ticket con datos reales y normativa SRI (visual).
+
+## 5. Próximos Pasos (Phase 2)
+- [ ] Conexión real SRI (Factura Electrónica).
+- [ ] Pagos Online (Datil/PayPhone).
+- [ ] Landing Page Comercial (`usystems.ec`).
 
 ---
 **Instrucción para la IA:**

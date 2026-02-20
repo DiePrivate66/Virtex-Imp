@@ -265,3 +265,7 @@ def imprimir_cierre(request, caja_id):
     }
     
     return render(request, 'pos/print/reporte_cierre.html', context)
+
+def imprimir_etiqueta_delivery(request, venta_id):
+    venta = Venta.objects.get(id=venta_id)
+    return render(request, 'pos/print/etiqueta_delivery.html', {'venta': venta})

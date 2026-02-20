@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, views_caja, views_empleados, views_movimientos, views_inventario, views_analytics
+from . import views, views_caja, views_empleados, views_movimientos, views_inventario, views_analytics, views_delivery
 
 urlpatterns = [
     path('', views.pos_index, name='pos_index'),
@@ -16,6 +16,8 @@ urlpatterns = [
     
     # Rutas de Impresión
     path('imprimir/ticket/<int:venta_id>/', views.imprimir_ticket, name='imprimir_ticket'),
+    path('imprimir/etiqueta-delivery/<int:venta_id>/', views.imprimir_etiqueta_delivery, name='imprimir_etiqueta_delivery'), # Nueva URL
+    path('imprimir/etiqueta/<int:venta_id>/', views.imprimir_etiqueta_delivery, name='imprimir_etiqueta'), # Nueva URL
     path('imprimir/comanda/<int:venta_id>/', views.imprimir_comanda, name='imprimir_comanda'),
     path('imprimir/venta/<int:venta_id>/', views.imprimir_venta_completa, name='imprimir_venta_completa'),
     path('imprimir/cierre/<int:caja_id>/', views.imprimir_cierre, name='imprimir_cierre'),
@@ -24,7 +26,11 @@ urlpatterns = [
     path('pedidos-web/', views.panel_pedidos_web, name='panel_pedidos_web'),
     path('api/actualizar-pedido/', views.api_actualizar_pedido, name='api_actualizar_pedido'),
     path('api/pedidos-web/', views.api_pedidos_web_json, name='api_pedidos_web_json'),
-
+    
+    # Delivery Portal
+    path('soy-delivery/', views_delivery.delivery_portal, name='delivery_portal'),
+    path('api/fijar-precio-carrera/', views_delivery.api_fijar_precio, name='api_fijar_precio'),
+    
     # Rutas de Empleados
     path('empleados/', views_empleados.lista_empleados, name='lista_empleados'),
     path('api/empleado/', views_empleados.guardar_empleado, name='api_guardar_empleado'),

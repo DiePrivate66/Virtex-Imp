@@ -3,7 +3,7 @@ Dashboard de Analíticas para el dueño del negocio.
 Top productos, horas pico, ticket promedio, comparativas.
 """
 from decimal import Decimal
-from datetime import timedelta
+from datetime import timedelta, datetime
 from django.shortcuts import render, redirect
 from django.db.models import Sum, Count, Avg, F, Q
 from django.db.models.functions import ExtractHour, ExtractWeekDay, TruncDate
@@ -139,6 +139,37 @@ def dashboard_analytics(request):
         ('mes', '30 días'),
     ]
     
+    # ═══════ ASISTENCIA DE EMPLEADOS ═══════
+    from .models import Asistencia
+    
+    asistencias = Asistencia.objects.filter(
+        fecha__gte=desde, 
+        fecha__lte=hasta
+    ).select_related('empleado').order_by('-fecha', '-hora_entrada')
+
+    # Calcular horas trabajadas
+    asistencia_data = []
+    for a in asistencias:
+        horas = 0
+        estado = 'Abierto'
+        if a.hora_salida:
+            # Calcular diferencia
+            entrada = datetime.combine(datetime.today(), a.hora_entrada)
+            salida = datetime.combine(datetime.today(), a.hora_salida)
+            diff = salida - entrada
+            horas = round(diff.total_seconds() / 3600, 2)
+            estado = 'Cerrado'
+        
+        asistencia_data.append({
+            'empleado': a.empleado.nombre,
+            'rol': a.empleado.get_rol_display(),
+            'fecha': a.fecha,
+            'entrada': a.hora_entrada,
+            'salida': a.hora_salida,
+            'horas': horas,
+            'estado': estado
+        })
+
     context = {
         # Período
         'periodo': periodo,
@@ -173,5 +204,8 @@ def dashboard_analytics(request):
         'total_egresos': total_egresos,
         'total_ingresos_extra': total_ingresos,
         'ganancia_estimada': ganancia_estimada,
+        
+        # Personal
+        'asistencias': asistencia_data,
     }
     return render(request, 'pos/dashboard.html', context)

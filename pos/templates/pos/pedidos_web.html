@@ -208,13 +208,9 @@
                 <!-- BOTONES DE ACCIÓN -->
                 <div class="flex gap-2 mt-2">
                     {% if p.estado == 'PENDIENTE_COTIZACION' or p.estado == 'PENDIENTE' %}
-                        <button onclick="cambiarEstado({{ p.id }}, 'COCINA')" 
-                            class="flex-1 bg-red-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
-                            🔥 ENVIAR A COCINA
-                        </button>
-                        <button onclick="imprimirComanda({{ p.id }})"
-                            class="bg-gray-700 text-white font-bold px-4 py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform" title="Imprimir comanda">
-                            🖨️
+                        <button onclick="aceptarPedidoRapido({{ p.id }}, '{{ p.metodo_pago }}')" 
+                            class="flex-1 bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl text-sm uppercase active:scale-95 transition-all shadow-lg hover:shadow-green-900/50 flex items-center justify-center gap-2 animate-pulse">
+                            ⚡ ACEPTAR PEDIDO
                         </button>
                     {% elif p.estado == 'COCINA' %}
                         {% if p.tipo_pedido == 'DOMICILIO' %}
@@ -365,7 +361,58 @@
     // ══════════════ IMPRIMIR COMANDA ══════════════
     function imprimirComanda(pedidoId) {
         const w = window.open('/imprimir/venta/' + pedidoId + '/', '_blank', 'width=350,height=600');
-        if (w) w.addEventListener('load', function() { w.print(); });
+        // No cerramos automáticamente para dar tiempo a imprimir
+    }
+    
+    // ══════════════ IMPRIMIR ETIQUETA DELIVERY ══════════════
+    function imprimirEtiqueta(pedidoId) {
+        const w = window.open('/imprimir/etiqueta-delivery/' + pedidoId + '/', '_blank', 'width=350,height=400');
+    }
+
+    // ══════════════ ⚡ ONE-CLICK ACCEPT ══════════════
+    function aceptarPedidoRapido(pedidoId, metodoPago) {
+        let confirmMsg = '⚡ ¿ACEPTAR PEDIDO RAPIDO?\n\n1. Enviar a Cocina\n2. Imprimir Comanda\n3. Imprimir Etiqueta Delivery';
+        
+        if (metodoPago === 'TRANSFERENCIA') {
+            confirmMsg = '⚠️ ALERTA DE SEGURIDAD ⚠️\n\nEste pedido es por TRANSFERENCIA.\n\n¿YA VERIFICASTE QUE EL DINERO ESTÉ EN LA CUENTA BANCARIA?\n\nSi no has verificado, presiona CANCELAR.';
+        } else if (metodoPago === 'TARJETA') {
+            confirmMsg = '💳 PAGO ONLINE (PAYPHONE/LINK)\n\n¿Ya confirmaste que el pago llego a la APP?\n\nNO envíes el pedido hasta confirmar el pago.';
+        }
+
+        if (!confirm(confirmMsg)) return;
+        
+        // 1. Cambiar Estado
+        fetch('/api/actualizar-pedido/', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ pedido_id: pedidoId, estado: 'COCINA' })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                // 2. Imprimir Comanda (Cocina)
+                imprimirComanda(pedidoId);
+                
+                // 3. Esperar 1s y Imprimir Etiqueta (Delivery) -> Solo si es domicilio
+                setTimeout(() => {
+                    imprimirEtiqueta(pedidoId);
+                }, 1000);
+                
+                // 4. Esperar y Recargar
+                setTimeout(() => {
+                    location.reload();
+                }, 3000);
+            } else {
+                alert('Error: ' + data.mensaje);
+            }
+        });
+    }
+
+    // ══════════════ COMPARTIR COMPROBANTE ══════════════
+    function enviarComprobanteWA(id, url, total) {
+        const fullUrl = window.location.origin + url;
+        const msg = `🧾 *COMPROBANTE PEDIDO #${id}*\n💰 Total: $${total}\n📎 Ver foto: ${fullUrl}`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
     // ══════════════ COMPARTIR POR WHATSAPP ══════════════
@@ -396,20 +443,26 @@
         window.open(url, '_blank');
     }
 
-    // ══════════════ AUTO-REFRESH CON NOTIFICACIÓN VISUAL (10s) ══════════════
+    // ══════════════ SONIDO DE ALERTA ══════════════
+    const audioAlerta = new Audio('https://www.soundjay.com/buttons/beeps/beep-07.mp3');
+
+    // ══════════════ AUTO-REFRESH CON NOTIFICACIÓN VISUAL Y SONORA (10s) ══════════════
     setInterval(function() {
         fetch('/api/pedidos-web/')
         .then(r => r.json())
         .then(data => {
             document.getElementById('pedido-count').innerText = data.count;
             if (data.count > lastCount) {
-                // NOTIFICACIÓN VISUAL — sin sonido
+                // 1. SONIDO
+                audioAlerta.play().catch(e => console.log('Interacción requerida para audio', e));
+                
+                // 2. VISUAL (Sin sonido)
                 document.getElementById('notif-nuevo').classList.remove('hidden');
                 document.getElementById('pedido-count').classList.add('notif-pulse');
                 document.querySelector('header').classList.add('header-glow');
                 document.title = '🔴 ¡NUEVO PEDIDO! — RAMÓN';
                 
-                // También intentar notificación del navegador
+                // 3. NAVEGADOR
                 if (Notification.permission === 'granted') {
                     new Notification('🔔 Nuevo pedido web', { body: 'Un cliente ha realizado un pedido', icon: '📱' });
                 } else if (Notification.permission !== 'denied') {
