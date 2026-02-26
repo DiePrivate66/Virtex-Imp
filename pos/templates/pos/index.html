@@ -76,6 +76,65 @@
             </div>
             {% endfor %}
         </div>
+
+        <!-- Confirmacion compra (centro) -->
+        <div id="confirmacion-compra" class="hidden absolute inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center">
+            <div class="bg-[#1f1f1f] border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+                <h3 class="text-xl font-black text-white mb-2 text-center">CONFIRMAR COMPRA</h3>
+                <p class="text-gray-400 text-sm text-center mb-6">Seleccione tipo de comprobante</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="seleccionarConsumidorFinal()" class="bg-bosco-orange text-black py-3 rounded-xl font-black hover:bg-orange-500 transition">CONSUMIDOR FINAL</button>
+                    <button onclick="mostrarFacturaDatos()" class="bg-gray-800 text-white py-3 rounded-xl font-black hover:bg-gray-700 transition">CON DATOS</button>
+                </div>
+                <button onclick="cancelarConfirmacionCompra()" class="w-full mt-3 border border-gray-600 text-gray-300 py-2 rounded-xl font-bold hover:bg-gray-700 transition">CANCELAR</button>
+            </div>
+        </div>
+
+        <!-- Formulario factura (centro) -->
+        <div id="factura-datos" class="hidden absolute inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center">
+            <div class="bg-[#1f1f1f] border border-gray-700 rounded-2xl p-6 w-full max-w-xl shadow-2xl">
+                <h3 class="text-xl font-black text-white mb-4 text-center">DATOS PARA FACTURA</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2">
+                        <label class="block text-gray-400 text-xs font-bold uppercase mb-1">C.I / RUC (10 o 13 digitos)</label>
+                        <div class="relative">
+                            <input type="text" id="factura-cedula" oninput="sanitizarCedulaFactura()" maxlength="13" inputmode="numeric" pattern="\\d*" class="w-full bg-black text-white p-3 pr-12 rounded-xl border border-gray-600 focus:border-bosco-orange outline-none">
+                            <button type="button" data-dictado-target="factura-cedula" onclick="iniciarDictado('factura-cedula', true)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-gray-800 text-white border border-gray-600 hover:border-bosco-orange text-sm leading-none">🎤</button>
+                        </div>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-gray-400 text-xs font-bold uppercase mb-1">Nombre / Razon social</label>
+                        <div class="relative">
+                            <input type="text" id="factura-nombre" class="w-full bg-black text-white p-3 pr-12 rounded-xl border border-gray-600 focus:border-bosco-orange outline-none uppercase">
+                            <button type="button" data-dictado-target="factura-nombre" onclick="iniciarDictado('factura-nombre')" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-gray-800 text-white border border-gray-600 hover:border-bosco-orange text-sm leading-none">🎤</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-xs font-bold uppercase mb-1">Telefono</label>
+                        <div class="relative">
+                            <input type="text" id="factura-telefono" oninput="sanitizarTelefonoFactura()" class="w-full bg-black text-white p-3 pr-12 rounded-xl border border-gray-600 focus:border-bosco-orange outline-none">
+                            <button type="button" data-dictado-target="factura-telefono" onclick="iniciarDictado('factura-telefono', true)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-gray-800 text-white border border-gray-600 hover:border-bosco-orange text-sm leading-none">🎤</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-xs font-bold uppercase mb-1">Email</label>
+                        <input type="email" id="factura-email" class="w-full bg-black text-white p-3 rounded-xl border border-gray-600 focus:border-bosco-orange outline-none">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-gray-400 text-xs font-bold uppercase mb-1">Direccion</label>
+                        <div class="relative">
+                            <input type="text" id="factura-direccion" class="w-full bg-black text-white p-3 pr-12 rounded-xl border border-gray-600 focus:border-bosco-orange outline-none">
+                            <button type="button" data-dictado-target="factura-direccion" onclick="iniciarDictado('factura-direccion')" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-gray-800 text-white border border-gray-600 hover:border-bosco-orange text-sm leading-none">🎤</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="factura-error" class="hidden text-xs font-bold text-red-400 mt-3"></div>
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                    <button onclick="cancelarFacturaDatos()" class="border border-gray-600 text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-700 transition">CANCELAR</button>
+                    <button onclick="continuarFacturaDatos()" class="bg-bosco-orange text-black py-3 rounded-xl font-black hover:bg-orange-500 transition">CONTINUAR</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="w-2/6 bg-white flex flex-col shadow-2xl z-30 h-full border-l border-gray-900 text-gray-900">
@@ -84,12 +143,12 @@
                 <button id="btn-servir" onclick="setTipoPedido('SERVIR')" class="flex-1 py-2 rounded font-bold text-sm bg-white shadow text-black transition">PARA SERVIR</button>
                 <button id="btn-llevar" onclick="setTipoPedido('LLEVAR')" class="flex-1 py-2 rounded font-bold text-sm text-gray-600 hover:bg-gray-200 transition">PARA LLEVAR</button>
             </div>
-            <div class="grid grid-cols-3 gap-2">
-                <div class="col-span-1 relative">
-                    <input type="text" id="cliente-cedula" onkeydown="if(event.key==='Enter')buscarCliente()" placeholder="C.I. / RUC" class="w-full bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none">
+            <div class="grid grid-cols-1 gap-2 hidden">
+                <div class="col-span-1 relative hidden">
+                    <input type="text" id="cliente-cedula-hidden" placeholder="C.I. / RUC" maxlength="13" inputmode="numeric" pattern="\\d*" class="w-full bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none">
                     <button onclick="buscarCliente()" class="absolute right-1 top-1 text-gray-400 hover:text-black text-lg">🔍</button>
                 </div>
-                <input type="text" id="cliente-nombre" placeholder="NOMBRE COMPLETO" class="col-span-2 bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none uppercase">
+                <input type="text" id="cliente-nombre" placeholder="NOMBRE COMPLETO" class="w-full bg-white border border-gray-300 p-2 rounded text-sm font-bold focus:border-bosco-orange outline-none uppercase">
             </div>
             
             <!-- Estado del cliente -->
@@ -223,7 +282,7 @@
 
         <div class="grid grid-cols-2 gap-4">
             <button onclick="cerrarModalPago()" class="p-4 border border-gray-600 rounded-xl text-gray-400 font-bold hover:border-white hover:text-white transition">CANCELAR</button>
-            <button onclick="confirmarPago()" id="btn-confirmar-pago" class="hidden p-4 bg-bosco-orange text-black rounded-xl font-black text-lg hover:bg-orange-500 shadow-lg transition transform active:scale-95">✅ CONFIRMAR VENTA</button>
+            <button onclick="confirmarPago()" id="btn-confirmar-pago" class="hidden p-4 bg-bosco-orange text-black rounded-xl font-black text-lg hover:bg-orange-500 shadow-lg transition transform active:scale-95">CONFIRMAR COMPRA</button>
         </div>
     </div>
 </div>
@@ -233,6 +292,15 @@
     let carrito = [];
     let prodTemp = {}; // Producto siendo editado en el modal
     let tipoPedido = 'SERVIR';
+    let pagoData = null;
+    let consumidorFinal = true;
+    let clienteNombreActual = 'CONSUMIDOR FINAL';
+    let clienteCedulaActual = '';
+    let dictadoReconocimiento = null;
+    let dictadoActivo = false;
+    let dictadoInputId = null;
+    let dictadoSoloDigitos = false;
+    let dictadoTextoBase = '';
 
     // --- LÓGICA FILTROS ---
     function filtrarProductos(catId) {
@@ -274,7 +342,7 @@
 
     // --- LÓGICA MODAL OPCIONES ---
     function abrirModalOpciones(id, nombre, precio) {
-        prodTemp = { id, nombre, precio: parseFloat(precio), cantidad: 1, salsa: '', notas: '' };
+        prodTemp = { id, nombre, precio: parseFloat(precio), cantidad: 1, salsas: [], notas: '' };
         
         document.getElementById('modal-prod-nombre').innerText = nombre;
         document.getElementById('modal-cantidad').innerText = "1";
@@ -302,10 +370,31 @@
     }
 
     function selSalsa(salsa) {
-        prodTemp.salsa = salsa;
+        const maxSalsas = 3;
+        const sinSalsaLabel = 'Sin Salsa';
+
+        // Si elige "Sin Salsa", se limpia todo y queda solo esa
+        if (salsa === sinSalsaLabel) {
+            prodTemp.salsas = [sinSalsaLabel];
+        } else {
+            // Si estaba "Sin Salsa", quitarla
+            prodTemp.salsas = prodTemp.salsas.filter(s => s !== sinSalsaLabel);
+
+            // Toggle de la salsa seleccionada
+            if (prodTemp.salsas.includes(salsa)) {
+                prodTemp.salsas = prodTemp.salsas.filter(s => s !== salsa);
+            } else {
+                if (prodTemp.salsas.length >= maxSalsas) {
+                    alert('Maximo 3 salsas por orden');
+                    return;
+                }
+                prodTemp.salsas.push(salsa);
+            }
+        }
+
         // Visual Update
         document.querySelectorAll('.btn-salsa').forEach(btn => {
-            if(btn.innerText === salsa) {
+            if (prodTemp.salsas.includes(btn.innerText)) {
                 btn.classList.add('bg-bosco-orange', 'text-black');
                 btn.classList.remove('text-gray-300');
             } else {
@@ -321,7 +410,10 @@
 
     function confirmarAgregar() {
         const notas = document.getElementById('modal-notas').value;
-        const nombreFinal = prodTemp.salsa ? `${prodTemp.nombre} (${prodTemp.salsa})` : prodTemp.nombre;
+        const salsasTexto = (prodTemp.salsas && prodTemp.salsas.length)
+            ? prodTemp.salsas.join(' + ')
+            : '';
+        const nombreFinal = salsasTexto ? `${prodTemp.nombre} (${salsasTexto})` : prodTemp.nombre;
         const notaFinal = notas.trim();
 
         // Agregar al carrito
@@ -406,20 +498,232 @@
 
     let clienteId = null;
 
+    function sanitizarCedulaFactura() {
+        const input = document.getElementById('factura-cedula');
+        if (!input) return;
+        const digits = input.value.replace(/\D/g, '').slice(0, 13);
+        if (input.value !== digits) input.value = digits;
+
+        if (digits.length === 0) {
+            ocultarErrorFactura();
+            return;
+        }
+        if (!esCedulaRucValido(digits)) {
+            mostrarErrorFactura('C.I/RUC invalido: solo 10 o 13 digitos');
+        } else {
+            ocultarErrorFactura();
+        }
+    }
+
+    function setEstadoBotonDictado(inputId, activo) {
+        const botones = document.querySelectorAll('[data-dictado-target]');
+        botones.forEach(btn => {
+            const esActual = btn.dataset.dictadoTarget === inputId;
+            if (activo && esActual) {
+                btn.classList.add('bg-red-600', 'border-red-400');
+                btn.classList.remove('bg-gray-800', 'border-gray-600');
+            } else {
+                btn.classList.remove('bg-red-600', 'border-red-400');
+                btn.classList.add('bg-gray-800', 'border-gray-600');
+            }
+        });
+    }
+
+    function cerrarDictadoActivo() {
+        dictadoActivo = false;
+        dictadoInputId = null;
+        dictadoSoloDigitos = false;
+        dictadoTextoBase = '';
+        setEstadoBotonDictado('', false);
+    }
+
+    function normalizarEmailDictado(texto) {
+        let valor = (texto || '').toLowerCase();
+        valor = valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+        // Simbolos comunes dictados
+        valor = valor.replace(/\barroba\b/g, '@');
+        valor = valor.replace(/\barrobas\b/g, '@');
+        valor = valor.replace(/\baroba\b/g, '@');
+        valor = valor.replace(/\bat\b/g, '@');
+        valor = valor.replace(/\bpunto\b/g, '.');
+        valor = valor.replace(/\bdot\b/g, '.');
+        valor = valor.replace(/\bguion bajo\b/g, '_');
+        valor = valor.replace(/\bunderscore\b/g, '_');
+        valor = valor.replace(/\bguion\b/g, '-');
+        valor = valor.replace(/\bdash\b/g, '-');
+        valor = valor.replace(/\bmas\b/g, '+');
+        valor = valor.replace(/\bplus\b/g, '+');
+
+        // Numeros dictados como palabras
+        valor = valor.replace(/\bcero\b/g, '0');
+        valor = valor.replace(/\bzero\b/g, '0');
+        valor = valor.replace(/\buno\b/g, '1');
+        valor = valor.replace(/\bdos\b/g, '2');
+        valor = valor.replace(/\btres\b/g, '3');
+        valor = valor.replace(/\bcuatro\b/g, '4');
+        valor = valor.replace(/\bcinco\b/g, '5');
+        valor = valor.replace(/\bseis\b/g, '6');
+        valor = valor.replace(/\bsiete\b/g, '7');
+        valor = valor.replace(/\bocho\b/g, '8');
+        valor = valor.replace(/\bnueve\b/g, '9');
+
+        valor = valor.replace(/\s*@\s*/g, '@');
+        valor = valor.replace(/\s*\.\s*/g, '.');
+        valor = valor.replace(/\s*_\s*/g, '_');
+        valor = valor.replace(/\s*-\s*/g, '-');
+        valor = valor.replace(/\s*\+\s*/g, '+');
+        valor = valor.replace(/\s+/g, '');
+        valor = valor.replace(/[^a-z0-9@._+\-]/g, '');
+        return valor;
+    }
+
+    function normalizarTelefonoConCero(texto, maxLen = 15) {
+        let valor = (texto || '').replace(/\D/g, '');
+        if (!valor) return '';
+        if (!valor.startsWith('0')) valor = '0' + valor;
+        return valor.slice(0, maxLen);
+    }
+
+    function sanitizarTelefonoFactura() {
+        const input = document.getElementById('factura-telefono');
+        if (!input) return;
+        input.value = normalizarTelefonoConCero(input.value, 15);
+    }
+
+    function iniciarDictado(inputId, soloDigitos = false) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            mostrarErrorFactura('Dictado por voz no soportado en este navegador');
+            return;
+        }
+
+        if (!dictadoReconocimiento) {
+            dictadoReconocimiento = new SpeechRecognition();
+            dictadoReconocimiento.lang = 'es-EC';
+            dictadoReconocimiento.interimResults = true;
+            dictadoReconocimiento.continuous = false;
+            dictadoReconocimiento.maxAlternatives = 1;
+
+            dictadoReconocimiento.onresult = function (event) {
+                const target = document.getElementById(dictadoInputId);
+                if (!target) return;
+
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript + ' ';
+                }
+
+                let valor = (dictadoTextoBase + ' ' + transcript).trim();
+                if (dictadoInputId === 'factura-telefono') {
+                    valor = normalizarTelefonoConCero(valor, 15);
+                } else if (dictadoSoloDigitos) {
+                    const maxLen = dictadoInputId === 'factura-cedula' ? 13 : 15;
+                    valor = valor.replace(/\D/g, '').slice(0, maxLen);
+                }
+                if (dictadoInputId === 'factura-email') {
+                    valor = normalizarEmailDictado(valor);
+                }
+                target.value = valor;
+
+                if (dictadoInputId === 'factura-cedula') {
+                    sanitizarCedulaFactura();
+                }
+            };
+
+            dictadoReconocimiento.onend = function () {
+                cerrarDictadoActivo();
+            };
+
+            dictadoReconocimiento.onerror = function () {
+                mostrarErrorFactura('No se pudo completar el dictado por voz');
+                cerrarDictadoActivo();
+            };
+        }
+
+        if (dictadoActivo && dictadoInputId === inputId) {
+            dictadoReconocimiento.stop();
+            return;
+        }
+
+        if (dictadoActivo) {
+            dictadoReconocimiento.stop();
+        }
+
+        ocultarErrorFactura();
+        dictadoInputId = inputId;
+        dictadoSoloDigitos = !!soloDigitos;
+        dictadoTextoBase = input.value.trim();
+        dictadoActivo = true;
+        setEstadoBotonDictado(inputId, true);
+
+        try {
+            dictadoReconocimiento.start();
+        } catch (e) {
+            cerrarDictadoActivo();
+            mostrarErrorFactura('No se pudo iniciar el dictado por voz');
+        }
+    }
+
+    function esCedulaRucValido(cedula) {
+        if (!cedula) return false;
+        if (!/^\d+$/.test(cedula)) return false;
+        return cedula.length === 10 || cedula.length === 13;
+    }
+
+    function mostrarErrorFactura(texto) {
+        const err = document.getElementById('factura-error');
+        if (!err) return;
+        err.innerText = texto;
+        err.classList.remove('hidden');
+    }
+
+    function ocultarErrorFactura() {
+        const err = document.getElementById('factura-error');
+        if (!err) return;
+        err.classList.add('hidden');
+    }
+
+    function mostrarEstadoCliente(texto, clases) {
+        const status = document.getElementById('cliente-status');
+        status.innerText = texto;
+        status.className = 'text-xs font-bold px-2 py-1 rounded text-center ' + clases;
+        status.classList.remove('hidden');
+    }
+
+    function ocultarEstadoCliente() {
+        const status = document.getElementById('cliente-status');
+        status.classList.add('hidden');
+    }
+
     // --- CLIENTE ---
     function buscarCliente() {
-        const cedula = document.getElementById('cliente-cedula').value.trim();
-        if(cedula.length < 3) return;
+        const cedula = document.getElementById('factura-cedula').value.trim();
+        if (!esCedulaRucValido(cedula)) {
+            mostrarErrorFactura('C.I/RUC invalido: solo 10 o 13 digitos');
+            return;
+        }
+        ocultarErrorFactura();
 
         fetch(`/api/cliente/?cedula=${cedula}`)
         .then(res => res.json())
         .then(data => {
             if(data.encontrado) {
                 clienteId = data.id;
-                document.getElementById('cliente-nombre').value = data.nombre;
-                document.getElementById('cliente-telefono').value = data.telefono || '';
-                document.getElementById('cliente-email').value = data.email || '';
-                document.getElementById('cliente-direccion').value = data.direccion || '';
+                const nombreInput = document.getElementById('factura-nombre');
+                if (nombreInput) nombreInput.value = data.nombre || '';
+                const telInput = document.getElementById('factura-telefono');
+                if (telInput) telInput.value = normalizarTelefonoConCero(data.telefono || '', 15);
+                const emailInput = document.getElementById('factura-email');
+                if (emailInput) emailInput.value = data.email || '';
+                const dirInput = document.getElementById('factura-direccion');
+                if (dirInput) dirInput.value = data.direccion || '';
+                clienteNombreActual = data.nombre || 'CONSUMIDOR FINAL';
+                clienteCedulaActual = cedula;
+                consumidorFinal = false;
                 
                 // Mostrar campos en modo lectura
                 document.getElementById('extra-cliente').classList.remove('hidden');
@@ -432,8 +736,11 @@
                 status.classList.remove('hidden');
             } else {
                 clienteId = null;
-                document.getElementById('cliente-nombre').value = '';
-                document.getElementById('cliente-nombre').focus();
+                const nombreInput = document.getElementById('factura-nombre');
+                if (nombreInput) {
+                    nombreInput.value = '';
+                    nombreInput.focus();
+                }
                 document.getElementById('extra-cliente').classList.remove('hidden');
                 document.getElementById('btn-guardar-cliente').innerText = '💾 GUARDAR CLIENTE NUEVO';
                 
@@ -446,28 +753,44 @@
     }
 
     function limpiarCliente() {
+        if (dictadoActivo && dictadoReconocimiento) dictadoReconocimiento.stop();
         clienteId = null;
-        document.getElementById('cliente-cedula').value = '';
-        document.getElementById('cliente-nombre').value = '';
-        document.getElementById('cliente-telefono').value = '';
-        document.getElementById('cliente-email').value = '';
-        document.getElementById('cliente-direccion').value = '';
+        const cedulaInput = document.getElementById('factura-cedula');
+        if (cedulaInput) cedulaInput.value = '';
+        const nombreInput = document.getElementById('factura-nombre');
+        if (nombreInput) nombreInput.value = '';
+        const telInput = document.getElementById('factura-telefono');
+        if (telInput) telInput.value = '';
+        const emailInput = document.getElementById('factura-email');
+        if (emailInput) emailInput.value = '';
+        const dirInput = document.getElementById('factura-direccion');
+        if (dirInput) dirInput.value = '';
         document.getElementById('extra-cliente').classList.add('hidden');
+        ocultarEstadoCliente();
         document.getElementById('cliente-status').classList.add('hidden');
+        ocultarErrorFactura();
+        clienteNombreActual = 'CONSUMIDOR FINAL';
+        clienteCedulaActual = '';
+        consumidorFinal = true;
     }
 
     function guardarCliente() {
-        const cedula = document.getElementById('cliente-cedula').value.trim();
+        const cedula = document.getElementById('factura-cedula').value.trim();
+        if (!esCedulaRucValido(cedula)) {
+            mostrarErrorFactura('C.I/RUC invalido: solo 10 o 13 digitos');
+            return;
+        }
+        ocultarErrorFactura();
         if(!cedula) return alert('⚠️ Ingrese la cédula primero');
-        const nombre = document.getElementById('cliente-nombre').value.trim();
+        const nombre = document.getElementById('factura-nombre').value.trim();
         if(!nombre) return alert('⚠️ Ingrese el nombre del cliente');
 
         const data = {
             cedula: cedula,
             nombre: nombre,
-            telefono: document.getElementById('cliente-telefono').value,
-            email: document.getElementById('cliente-email').value,
-            direccion: document.getElementById('cliente-direccion').value
+            telefono: normalizarTelefonoConCero(document.getElementById('factura-telefono').value, 15),
+            email: document.getElementById('factura-email').value,
+            direccion: document.getElementById('factura-direccion').value
         };
 
         fetch('/api/cliente/', {
@@ -479,7 +802,11 @@
         .then(res => {
             if(res.status === 'ok') {
                 clienteId = res.cliente_id;
-                document.getElementById('cliente-nombre').value = res.nombre;
+                const nombreInput = document.getElementById('factura-nombre');
+                if (nombreInput) nombreInput.value = res.nombre;
+                clienteNombreActual = res.nombre || 'CONSUMIDOR FINAL';
+                clienteCedulaActual = cedula;
+                consumidorFinal = false;
                 
                 // Mostrar indicador verde
                 const status = document.getElementById('cliente-status');
@@ -508,6 +835,7 @@
         document.getElementById('cambio-display').innerText = '$0.00';
         if(document.getElementById('ref-transferencia')) document.getElementById('ref-transferencia').value = '';
         if(document.getElementById('ref-tarjeta')) document.getElementById('ref-tarjeta').value = '';
+        ocultarErrorFactura();
         
         // Reset all method buttons
         const baseEf = 'p-4 bg-green-900/40 border-2 border-green-600 rounded-xl text-white font-bold text-lg hover:bg-green-900 transition flex items-center justify-center gap-2';
@@ -580,7 +908,16 @@
     }
 
     function confirmarPago() {
-        if(!metodoSeleccionado) return alert('Selecciona un método de pago');
+        if (!prepararPago()) return;
+        cerrarModalPago();
+        abrirConfirmacionCompra();
+    }
+
+    function prepararPago() {
+        if(!metodoSeleccionado) {
+            alert('Selecciona un metodo de pago');
+            return false;
+        }
 
         const totalTexto = document.getElementById('total-carrito').innerText.replace('$', '');
         const totalFloat = Math.round(parseFloat(totalTexto) * 100) / 100;
@@ -588,20 +925,118 @@
         if(metodoSeleccionado === 'EFECTIVO') {
             const recibido = parseFloat(document.getElementById('monto-recibido').value) || 0;
             if(recibido < totalFloat) {
-                return alert('⚠️ El monto recibido es menor al total');
+                alert('El monto recibido es menor al total');
+                return false;
             }
         }
 
-        const clienteNombre = document.getElementById('cliente-nombre').value || 'CONSUMIDOR FINAL';
-        
-        const data = {
+        pagoData = {
             total: totalFloat,
             metodo_pago: metodoSeleccionado,
+            monto_recibido: metodoSeleccionado === 'EFECTIVO'
+                ? parseFloat(document.getElementById('monto-recibido').value)
+                : totalFloat
+        };
+        return true;
+    }
+
+    function abrirConfirmacionCompra() {
+        document.getElementById('confirmacion-compra').classList.remove('hidden');
+    }
+
+    function cancelarConfirmacionCompra() {
+        document.getElementById('confirmacion-compra').classList.add('hidden');
+        document.getElementById('modal-pago').classList.remove('hidden');
+    }
+
+    function seleccionarConsumidorFinal() {
+        consumidorFinal = true;
+        clienteId = null;
+        clienteNombreActual = 'CONSUMIDOR FINAL';
+        clienteCedulaActual = '';
+        document.getElementById('confirmacion-compra').classList.add('hidden');
+        document.getElementById('factura-datos').classList.add('hidden');
+        finalizarVenta();
+    }
+
+    function mostrarFacturaDatos() {
+        document.getElementById('confirmacion-compra').classList.add('hidden');
+        document.getElementById('factura-datos').classList.remove('hidden');
+        ocultarErrorFactura();
+        const cedulaInput = document.getElementById('factura-cedula');
+        if (cedulaInput) cedulaInput.focus();
+    }
+
+    function cancelarFacturaDatos() {
+        if (dictadoActivo && dictadoReconocimiento) dictadoReconocimiento.stop();
+        document.getElementById('factura-datos').classList.add('hidden');
+        document.getElementById('confirmacion-compra').classList.remove('hidden');
+        ocultarErrorFactura();
+    }
+
+    function continuarFacturaDatos() {
+        ocultarErrorFactura();
+        const cedula = document.getElementById('factura-cedula').value.trim();
+        const nombre = document.getElementById('factura-nombre').value.trim();
+        const telefono = normalizarTelefonoConCero(document.getElementById('factura-telefono').value.trim(), 15);
+        document.getElementById('factura-telefono').value = telefono;
+        const email = document.getElementById('factura-email').value.trim();
+        const direccion = document.getElementById('factura-direccion').value.trim();
+
+        if (!esCedulaRucValido(cedula)) {
+            mostrarErrorFactura('C.I/RUC invalido: solo 10 o 13 digitos');
+            return;
+        }
+        if (!nombre) {
+            mostrarErrorFactura('Nombre requerido');
+            return;
+        }
+        if (!telefono) {
+            mostrarErrorFactura('Telefono requerido');
+            return;
+        }
+        if (!direccion) {
+            mostrarErrorFactura('Direccion requerida');
+            return;
+        }
+
+        const data = { cedula, nombre, telefono, email, direccion };
+        fetch('/api/cliente/', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.status === 'ok') {
+                clienteId = res.cliente_id;
+                clienteNombreActual = res.nombre || nombre;
+                clienteCedulaActual = cedula;
+                consumidorFinal = false;
+                document.getElementById('factura-datos').classList.add('hidden');
+                finalizarVenta();
+            } else {
+                mostrarErrorFactura(res.mensaje || 'Error al guardar cliente');
+            }
+        })
+        .catch(() => {
+            mostrarErrorFactura('Error de conexion');
+        });
+    }
+
+    function finalizarVenta() {
+        if (!pagoData) return;
+
+        const data = {
+            total: pagoData.total,
+            metodo_pago: pagoData.metodo_pago,
             carrito: carrito,
-            cliente_nombre: clienteNombre,
-            cliente_id: clienteId,
+            cliente_nombre: clienteNombreActual || 'CONSUMIDOR FINAL',
+            cliente_id: consumidorFinal ? null : clienteId,
+            cliente_cedula: consumidorFinal ? '' : clienteCedulaActual,
+            consumidor_final: consumidorFinal,
             tipo_pedido: tipoPedido,
-            monto_recibido: metodoSeleccionado === 'EFECTIVO' ? parseFloat(document.getElementById('monto-recibido').value) : totalFloat
+            monto_recibido: pagoData.monto_recibido
         };
 
         fetch('/registrar_venta/', {
@@ -612,7 +1047,6 @@
         .then(response => response.json())
         .then(data => {
             if(data.status === 'ok') {
-                // Imprimir todo en una sola ventana (Comanda + Ticket)
                 const wPrint = window.open('/imprimir/venta/' + data.ticket_id + '/', '_blank', 'width=350,height=600');
                 if(wPrint) {
                     wPrint.addEventListener('load', function() {
@@ -622,19 +1056,18 @@
 
                 carrito = [];
                 renderizar();
-                cerrarModalPago();
+                pagoData = null;
                 limpiarCliente();
             } else {
-                alert('❌ Error: ' + data.mensaje);
+                alert('Error: ' + data.mensaje);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error de conexión con el servidor');
+            alert('Error de conexion con el servidor');
         });
     }
-
-    // Animación CSS extra
+// Animación CSS extra
     const style = document.createElement('style');
     style.innerHTML = `
       @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }

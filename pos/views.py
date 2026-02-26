@@ -38,14 +38,29 @@ def registrar_venta(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
+
+            def _cedula_valida(valor):
+                return bool(valor) and valor.isdigit() and len(valor) in (10, 13)
+
+            cedula_input = (data.get('cliente_cedula') or '').strip()
+            consumidor_final = bool(data.get('consumidor_final'))
             
             # Buscar turno activo para asociar la venta
             turno_activo = CajaTurno.objects.filter(usuario=request.user, fecha_cierre__isnull=True).first()
 
             # --- Buscar Cliente si enviaron ID ---
             cliente = None
-            if data.get('cliente_id'):
+            if consumidor_final:
+                cliente = None
+            elif data.get('cliente_id'):
                 cliente = Cliente.objects.filter(id=data.get('cliente_id')).first()
+                if not cliente:
+                    return JsonResponse({'status': 'error', 'mensaje': 'Cliente no encontrado'}, status=400)
+                if not _cedula_valida(cliente.cedula_ruc):
+                    return JsonResponse({'status': 'error', 'mensaje': 'C.I/RUC invalido (10 o 13 digitos)'}, status=400)
+            else:
+                if not _cedula_valida(cedula_input):
+                    return JsonResponse({'status': 'error', 'mensaje': 'C.I/RUC invalido (10 o 13 digitos)'}, status=400)
 
             venta = Venta.objects.create(
                 cliente_nombre=data.get('cliente_nombre', 'CONSUMIDOR FINAL'),

@@ -128,9 +128,14 @@ def buscar_crear_cliente(request):
     if not request.user.is_authenticated:
         return JsonResponse({'status': 'error', 'mensaje': 'No autenticado'}, status=401)
 
+    def _cedula_valida(valor):
+        return bool(valor) and valor.isdigit() and len(valor) in (10, 13)
+
     if request.method == 'POST':
         data = json.loads(request.body)
         cedula = data.get('cedula')
+        if not _cedula_valida(cedula):
+            return JsonResponse({'status': 'error', 'mensaje': 'C.I/RUC invalido (10 o 13 digitos)'}, status=400)
         
         cliente, created = Cliente.objects.get_or_create(
             cedula_ruc=cedula,
@@ -155,6 +160,8 @@ def buscar_crear_cliente(request):
     # Si es GET (búsqueda simple)
     cedula = request.GET.get('cedula')
     if cedula:
+        if not _cedula_valida(cedula):
+            return JsonResponse({'status': 'error', 'mensaje': 'C.I/RUC invalido (10 o 13 digitos)'}, status=400)
         try:
             c = Cliente.objects.get(cedula_ruc=cedula)
             return JsonResponse({
