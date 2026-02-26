@@ -3,6 +3,7 @@ from django.http import JsonResponse
 
 from django.contrib.auth.models import User
 from django.utils import timezone
+import re
 import json
 from .models import Empleado, Asistencia
 
@@ -22,6 +23,12 @@ def guardar_empleado(request):
     if request.method == 'POST':
         data = json.loads(request.body)
         empleado_id = data.get('id')
+        cedula_raw = str(data.get('cedula') or '').strip()
+        cedula_limpia = re.sub(r'\D', '', cedula_raw)
+        cedula_valor = cedula_limpia if cedula_limpia else None
+
+        if cedula_valor and not re.fullmatch(r'\d{10}', cedula_valor):
+            return JsonResponse({'status': 'error', 'mensaje': 'La cédula debe tener exactamente 10 dígitos'})
         
         try:
             if empleado_id: # Edición
@@ -33,7 +40,7 @@ def guardar_empleado(request):
                     return JsonResponse({'status': 'error', 'mensaje': 'El PIN ya está en uso por otro empleado'})
                 
                 emp.nombre = data.get('nombre')
-                emp.cedula = data.get('cedula')
+                emp.cedula = cedula_valor
                 emp.telefono = data.get('telefono')
                 emp.direccion = data.get('direccion')
                 emp.rol = data.get('rol')
@@ -46,7 +53,7 @@ def guardar_empleado(request):
                 
                 emp = Empleado(
                     nombre=data.get('nombre'),
-                    cedula=data.get('cedula'),
+                    cedula=cedula_valor,
                     telefono=data.get('telefono'),
                     direccion=data.get('direccion'),
                     rol=data.get('rol'),

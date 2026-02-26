@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal, InvalidOperation
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -27,6 +28,16 @@ def verificar_pin(request):
             # Solo CAJERO o ADMIN pueden entrar al POS
             if empleado.rol in ['ADMIN', 'CAJERO']:
                 if empleado.usuario:
+                    # Asistencia automática de ENTRADA al iniciar sesión en caja.
+                    hoy = timezone.localtime().date()
+                    ya_abierta = Asistencia.objects.filter(
+                        empleado=empleado,
+                        fecha=hoy,
+                        hora_salida__isnull=True
+                    ).exists()
+                    if not ya_abierta:
+                        Asistencia.objects.create(empleado=empleado)
+
                     login(request, empleado.usuario)
                     return JsonResponse({'status': 'ok', 'rol': empleado.rol})
                 else:
@@ -46,24 +57,40 @@ def apertura_caja(request):
         
     # Verificar si ya tiene caja abierta
     caja_abierta = CajaTurno.objects.filter(usuario=request.user, fecha_cierre__isnull=True).first()
-    if caja_abierta:
-        return redirect('pos_index') # Ya tiene caja, ir a vender
-        
-    return render(request, 'pos/apertura.html')
+    return render(request, 'pos/apertura.html', {'caja_abierta': caja_abierta})
 
 def abrir_caja(request):
     if not request.user.is_authenticated:
         return JsonResponse({'status': 'error', 'mensaje': 'No autenticado'}, status=401)
 
     if request.method == 'POST':
+        # Si ya existe caja abierta, devolvemos datos para continuar sin crear otra.
+        caja_abierta = CajaTurno.objects.filter(usuario=request.user, fecha_cierre__isnull=True).first()
+        if caja_abierta:
+            return JsonResponse({
+                'status': 'ok',
+                'ya_abierta': True,
+                'base_inicial': f"{caja_abierta.base_inicial:.2f}"
+            })
+
         data = json.loads(request.body)
-        monto = data.get('monto_inicial')
+        monto_raw = data.get('monto_inicial', 0)
+        try:
+            monto = Decimal(str(monto_raw)).quantize(Decimal('0.01'))
+        except (InvalidOperation, TypeError, ValueError):
+            return JsonResponse({'status': 'error', 'mensaje': 'Monto inicial inválido'}, status=400)
+        if monto < 0:
+            return JsonResponse({'status': 'error', 'mensaje': 'El monto inicial no puede ser negativo'}, status=400)
         
-        CajaTurno.objects.create(
+        caja = CajaTurno.objects.create(
             usuario=request.user,
             base_inicial=monto
         )
-        return JsonResponse({'status': 'ok'})
+        return JsonResponse({
+            'status': 'ok',
+            'ya_abierta': False,
+            'base_inicial': f"{caja.base_inicial:.2f}"
+        })
 
 # --- VISTA: CIERRE DE CAJA ---
 def cierre_caja(request):
@@ -111,6 +138,18 @@ def procesar_cierre(request):
         
         caja = CajaTurno.objects.filter(usuario=request.user, fecha_cierre__isnull=True).first()
         if caja:
+            # Asistencia automática de SALIDA al cerrar caja (si existe entrada abierta hoy).
+            empleado = getattr(request.user, 'empleado', None)
+            if empleado:
+                hoy = timezone.localtime().date()
+                asistencia_abierta = Asistencia.objects.filter(
+                    empleado=empleado,
+                    fecha=hoy,
+                    hora_salida__isnull=True
+                ).last()
+                if asistencia_abierta:
+                    asistencia_abierta.registrar_salida()
+
             caja.cerrar_caja(total_efectivo_real, conteo)
             caja_id = caja.id
             logout(request) # Cerrar sesión al terminar turno

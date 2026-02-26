@@ -3,17 +3,19 @@
 <div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-        <div>
-            <h1 class="text-3xl font-black text-white tracking-tight">💰 MOVIMIENTOS DE CAJA</h1>
-            <p class="text-gray-500 text-xs font-bold mt-1">Turno #{{ turno.id }} — Abierto: {{ turno.fecha_apertura|date:"d/m/Y H:i" }}</p>
+    <div class="flex items-start justify-between mb-6">
+        <div class="flex flex-col gap-3">
+            <a href="{% url 'pos_index' %}" class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+                ← VOLVER AL POS
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tight">💰 MOVIMIENTOS DE CAJA</h1>
+                <p class="text-gray-500 text-xs font-bold mt-1">Turno #{{ turno.id }} — Abierto: {{ turno.fecha_apertura|date:"d/m/Y H:i" }}</p>
+            </div>
         </div>
         <div class="flex gap-2">
             <a href="{% url 'reporte_contadora' %}" class="bg-purple-900/30 border border-purple-700 text-purple-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-purple-900 hover:text-white transition">
                 📊 REPORTE CONTADORA
-            </a>
-            <a href="{% url 'pos_index' %}" class="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
-                ← VOLVER AL POS
             </a>
         </div>
     </div>

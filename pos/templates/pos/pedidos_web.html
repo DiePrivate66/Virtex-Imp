@@ -5,14 +5,12 @@
 <div class="min-h-screen bg-bosco-dark">
 
     <!-- HEADER -->
-    <header class="sticky top-0 z-40 bg-black border-b border-gray-800 px-4 py-3 flex items-center justify-between">
-        <div>
+    <header class="sticky top-0 z-40 bg-black border-b border-gray-800 px-4 py-3 relative">
+        <a href="/" class="absolute left-4 top-1/2 -translate-y-1/2 bg-gray-800 text-gray-300 text-xs font-bold px-3 py-2 rounded-lg hover:bg-gray-700">← POS</a>
+        <span id="pedido-count" class="absolute right-4 top-1/2 -translate-y-1/2 bg-bosco-orange text-black font-black px-3 py-1 rounded-full text-sm">{{ pedidos|length }}</span>
+        <div class="text-center">
             <h1 class="text-xl font-black text-white uppercase">📱 PEDIDOS WEB</h1>
             <p class="text-[10px] text-gray-500">Gestión de pedidos desde la app cliente</p>
-        </div>
-        <div class="flex items-center gap-3">
-            <span id="pedido-count" class="bg-bosco-orange text-black font-black px-3 py-1 rounded-full text-sm">{{ pedidos|length }}</span>
-            <a href="/" class="bg-gray-800 text-gray-300 text-xs font-bold px-3 py-2 rounded-lg hover:bg-gray-700">← POS</a>
         </div>
     </header>
 

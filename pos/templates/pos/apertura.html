@@ -3,6 +3,20 @@
 {% block content %}
 <div class="min-h-screen flex items-center justify-center bg-bosco-dark">
     <div class="bg-[#1a1a1a] p-8 rounded-2xl shadow-2xl border border-gray-800 w-full max-w-lg text-center">
+        {% if caja_abierta %}
+        <h1 class="text-3xl font-black text-white mb-2 uppercase">Caja ya abierta</h1>
+        <p class="text-gray-400 mb-6">YA HAY UN TURNO ACTIVO PARA ESTE USUARIO</p>
+
+        <div class="mb-8 bg-black border border-gray-700 rounded-xl p-5">
+            <p class="text-gray-500 text-xs font-bold uppercase mb-2">Dinero inicial en caja</p>
+            <p class="text-bosco-orange text-5xl font-black">${{ caja_abierta.base_inicial|floatformat:2 }}</p>
+            <p class="text-gray-500 text-xs mt-3">Apertura: {{ caja_abierta.fecha_apertura|date:"d/m/Y H:i" }}</p>
+        </div>
+
+        <button onclick="irMenu()" class="w-full bg-bosco-orange text-black font-black py-4 rounded-xl text-xl hover:bg-orange-500 transition-transform active:scale-95 shadow-lg shadow-orange-900/20">
+            IR AL MENÚ
+        </button>
+        {% else %}
         <h1 class="text-3xl font-black text-white mb-2 uppercase">Apertura de Caja</h1>
         <p class="text-gray-400 mb-8">INICIA TU TURNO INGRESANDO EL FONDO DE CAJA</p>
 
@@ -10,19 +24,43 @@
             <label class="block text-gray-500 text-sm font-bold mb-2 uppercase">Base Inicial ($)</label>
             <div class="relative">
                 <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-2xl font-bold">$</span>
-                <input type="number" id="monto-inicial" class="w-full bg-black text-white text-4xl font-black py-4 pl-10 pr-4 rounded-xl border border-gray-700 focus:border-bosco-orange focus:outline-none text-center" placeholder="0.00" step="0.01">
+                <input type="number" id="monto-inicial" class="w-full bg-black text-white text-4xl font-black py-4 pl-10 pr-4 rounded-xl border border-gray-700 focus:border-bosco-orange focus:outline-none text-center" placeholder="0.00" step="0.01" min="0">
             </div>
         </div>
 
         <button onclick="abrirCaja()" class="w-full bg-bosco-orange text-black font-black py-4 rounded-xl text-xl hover:bg-orange-500 transition-transform active:scale-95 shadow-lg shadow-orange-900/20">
             ABRIR CAJA
         </button>
+        {% endif %}
         
         <a href="/login/" class="block mt-6 text-gray-500 text-sm hover:text-white underline">Cancelar / Salir</a>
     </div>
 </div>
 
+<div id="modal-apertura-ok" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-[#1a1a1a] border border-gray-700 rounded-2xl p-6 w-full max-w-md text-center shadow-2xl">
+        <h3 class="text-2xl font-black text-white uppercase mb-2">Caja lista</h3>
+        <p class="text-gray-400 text-sm mb-5">DINERO INICIAL REGISTRADO</p>
+        <div class="bg-black border border-gray-700 rounded-xl p-5 mb-6">
+            <p class="text-gray-500 text-xs font-bold uppercase mb-2">Monto en caja</p>
+            <p id="monto-registrado" class="text-bosco-orange text-5xl font-black">$0.00</p>
+        </div>
+        <button onclick="irMenu()" class="w-full bg-bosco-orange text-black font-black py-3 rounded-xl text-lg hover:bg-orange-500 transition">
+            CONTINUAR AL MENÚ
+        </button>
+    </div>
+</div>
+
 <script>
+    function irMenu() {
+        window.location.href = '/';
+    }
+
+    function mostrarModalApertura(monto) {
+        document.getElementById('monto-registrado').innerText = '$' + monto.toFixed(2);
+        document.getElementById('modal-apertura-ok').classList.remove('hidden');
+    }
+
     function abrirCaja() {
         const monto = parseFloat(document.getElementById('monto-inicial').value) || 0;
         
@@ -36,9 +74,10 @@
         .then(res => res.json())
         .then(data => {
             if(data.status === 'ok') {
-                window.location.href = '/'; // Ir al POS
+                const montoRegistrado = parseFloat(data.base_inicial || monto || 0);
+                mostrarModalApertura(montoRegistrado);
             } else {
-                alert("Error al abrir caja");
+                alert(data.mensaje || "Error al abrir caja");
             }
         });
     }

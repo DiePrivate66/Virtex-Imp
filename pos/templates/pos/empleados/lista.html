@@ -1,7 +1,11 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="min-h-screen bg-bosco-dark p-8">
+<div class="min-h-screen bg-bosco-dark p-8 relative">
+    <a href="{% url 'pos_index' %}" class="absolute top-6 left-6 inline-flex items-center gap-2 bg-[#1f2937] text-white px-4 py-2 rounded-xl font-bold hover:bg-[#374151] border border-gray-600 transition transform active:scale-95">
+        <span aria-hidden="true">←</span>
+        <span>VOLVER</span>
+    </a>
     <div class="max-w-6xl mx-auto">
         <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-black text-white uppercase">Gestión de Empleados</h1>
@@ -67,7 +71,7 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="block text-gray-400 text-xs font-bold uppercase mb-1">Cédula</label>
-                    <input type="text" id="emp-cedula" class="w-full bg-[#1a1a1a] text-white p-3 rounded border border-gray-600 focus:border-bosco-orange outline-none">
+                    <input type="text" id="emp-cedula" maxlength="10" inputmode="numeric" pattern="\d*" oninput="sanitizarCedulaEmpleado()" class="w-full bg-[#1a1a1a] text-white p-3 rounded border border-gray-600 focus:border-bosco-orange outline-none" placeholder="10 dígitos">
                 </div>
                 <div>
                     <label class="block text-gray-400 text-xs font-bold uppercase mb-1">Teléfono</label>
@@ -111,6 +115,12 @@
 </div>
 
 <script>
+    function sanitizarCedulaEmpleado() {
+        const input = document.getElementById('emp-cedula');
+        if (!input) return;
+        input.value = input.value.replace(/\D/g, '').slice(0, 10);
+    }
+
     function abrirModalEmpleado() {
         document.getElementById('form-empleado').reset();
         document.getElementById('emp-id').value = "";
@@ -127,16 +137,26 @@
         document.getElementById('emp-rol').value = rol;
         document.getElementById('emp-pin').value = pin;
         document.getElementById('emp-activo').checked = activo;
+        sanitizarCedulaEmpleado();
         
         document.getElementById('modal-titulo').innerText = "EDITAR EMPLEADO";
         document.getElementById('modal-empleado').classList.remove('hidden');
     }
 
     function guardar() {
+        const cedulaInput = document.getElementById('emp-cedula');
+        const cedula = cedulaInput.value.replace(/\D/g, '').slice(0, 10);
+        cedulaInput.value = cedula;
+
+        if (cedula && cedula.length !== 10) {
+            alert("La cédula debe tener exactamente 10 dígitos");
+            return;
+        }
+
         const data = {
             id: document.getElementById('emp-id').value || null,
             nombre: document.getElementById('emp-nombre').value,
-            cedula: document.getElementById('emp-cedula').value,
+            cedula: cedula,
             telefono: document.getElementById('emp-telefono').value,
             direccion: document.getElementById('emp-direccion').value,
             rol: document.getElementById('emp-rol').value,

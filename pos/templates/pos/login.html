@@ -8,12 +8,6 @@
             <p class="text-gray-400 text-sm tracking-wide">SISTEMA INTEGRAL</p>
         </div>
 
-        <!-- TABS -->
-        <div class="flex bg-black p-1 rounded-xl mb-6">
-            <button onclick="setMode('POS')" id="tab-pos" class="flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-bosco-orange text-black shadow">ENTRAR A CAJA</button>
-            <button onclick="setMode('ASISTENCIA')" id="tab-asistencia" class="flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-white">MARCAR ASISTENCIA</button>
-        </div>
-
         <!-- Pantalla del PIN -->
         <div class="mb-6 relative">
             <div class="bg-black p-4 rounded-xl border border-gray-700 flex justify-center items-center gap-3 h-20">
@@ -23,12 +17,6 @@
                 <span class="dot w-5 h-5 rounded-full bg-gray-800 transition-colors"></span>
             </div>
             <p id="mensaje-estado" class="text-center text-xs mt-2 font-bold h-4 text-gray-400"></p>
-        </div>
-
-        <!-- Botones Asistencia (Solo visibles en modo asistencia) -->
-        <div id="botones-asistencia" class="hidden grid grid-cols-2 gap-4 mb-4">
-            <button onclick="setAsistenciaAction('ENTRADA')" id="btn-entrada" class="py-2 bg-green-900/50 text-green-400 border border-green-800 rounded font-bold hover:bg-green-900 transition">ENTRADA</button>
-            <button onclick="setAsistenciaAction('SALIDA')" id="btn-salida" class="py-2 bg-red-900/50 text-red-400 border border-red-800 rounded font-bold hover:bg-red-900 transition">SALIDA</button>
         </div>
 
         <!-- Teclado Numérico -->
@@ -72,35 +60,6 @@
 
 <script>
     let pin = "";
-    let mode = 'POS'; // POS | ASISTENCIA
-    let asistenciaAction = 'ENTRADA'; 
-
-    function setMode(newMode) {
-        mode = newMode;
-        pin = "";
-        updateDots();
-        document.getElementById('mensaje-estado').innerText = "";
-        
-        const tabPos = document.getElementById('tab-pos');
-        const tabAsistencia = document.getElementById('tab-asistencia');
-        const botsAsistencia = document.getElementById('botones-asistencia');
-
-        if(mode === 'POS') {
-            tabPos.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-bosco-orange text-black shadow";
-            tabAsistencia.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-white";
-            botsAsistencia.classList.add('hidden');
-        } else {
-            tabPos.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-white";
-            tabAsistencia.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-blue-600 text-white shadow";
-            botsAsistencia.classList.remove('hidden');
-        }
-    }
-
-    function setAsistenciaAction(action) {
-        asistenciaAction = action;
-        document.getElementById('btn-entrada').className = action === 'ENTRADA' ? "py-2 bg-green-600 text-white rounded font-bold transition shadow" : "py-2 bg-green-900/50 text-green-400 border border-green-800 rounded font-bold hover:bg-green-900 transition";
-        document.getElementById('btn-salida').className = action === 'SALIDA' ? "py-2 bg-red-600 text-white rounded font-bold transition shadow" : "py-2 bg-red-900/50 text-red-400 border border-red-800 rounded font-bold hover:bg-red-900 transition";
-    }
 
     function addDigit(digit) {
         if(pin.length < 4) {
@@ -128,52 +87,36 @@
     }
 
     function submitPin() {
-        if(pin.length < 4) return;
+        if(pin.length < 4) {
+            showError("INGRESA PIN DE 4 DÍGITOS");
+            return;
+        }
 
         const csrftoken = getCookie('csrftoken');
         const hdrs = {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken};
 
-        if(mode === 'POS') {
-            // Login normal
-            fetch('/api/verificar-pin/', {
-                method: 'POST',
-                headers: hdrs,
-                body: JSON.stringify({ pin: pin })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.status === 'ok') {
-                    // Si viene de la PWA y es ADMIN, ir al Dashboard
-                    const urlParams = new URLSearchParams(window.location.search);
-                    if (urlParams.get('src') === 'pwa' && data.rol === 'ADMIN') {
-                        window.location.href = '/dashboard/';
-                    } else {
-                        window.location.href = '/apertura/';
-                    }
+        // Ingreso a POS con asistencia automática.
+        fetch('/api/verificar-pin/', {
+            method: 'POST',
+            headers: hdrs,
+            body: JSON.stringify({ pin: pin })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === 'ok') {
+                // Si viene de la PWA y es ADMIN, ir al Dashboard
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('src') === 'pwa' && data.rol === 'ADMIN') {
+                    window.location.href = '/dashboard/';
                 } else {
-                    showError("PIN INCORRECTO O NO AUTORIZADO");
+                    window.location.href = '/apertura/';
                 }
-            });
-        } else {
-            // Asistencia
-            fetch('/api/asistencia/', {
-                method: 'POST',
-                headers: hdrs,
-                body: JSON.stringify({ pin: pin, accion: asistenciaAction })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.status === 'ok') {
-                    showSuccess(data.mensaje);
-                    pin = "";
-                    updateDots();
-                } else {
-                    showError(data.mensaje);
-                    pin = "";
-                    updateDots();
-                }
-            });
-        }
+            } else {
+                showError(data.mensaje || "PIN INCORRECTO O NO AUTORIZADO");
+                pin = "";
+                updateDots();
+            }
+        });
     }
 
     function showError(msg) {
@@ -196,7 +139,5 @@
         if(e.key === 'Enter') submitPin();
     });
     
-    // Init state
-    setAsistenciaAction('ENTRADA');
 </script>
 {% endblock %}

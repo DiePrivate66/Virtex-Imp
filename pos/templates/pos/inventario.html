@@ -3,17 +3,19 @@
 <div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-        <div>
-            <h1 class="text-3xl font-black text-white tracking-tight">📦 CONTROL DE INVENTARIO</h1>
-            <p class="text-gray-500 text-xs font-bold mt-1">{{ total_productos }} productos · {{ bajo_stock }} bajo stock · {{ sin_stock }} sin stock</p>
+    <div class="flex items-start justify-between mb-6">
+        <div class="flex flex-col gap-3">
+            <a href="{% url 'pos_index' %}" class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+                ← VOLVER AL POS
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tight">📦 CONTROL DE INVENTARIO</h1>
+                <p class="text-gray-500 text-xs font-bold mt-1">{{ total_productos }} productos · {{ bajo_stock }} bajo stock · {{ sin_stock }} sin stock</p>
+            </div>
         </div>
         <div class="flex gap-2">
             <a href="{% url 'reporte_inventario_pdf' %}" target="_blank" class="bg-bosco-orange text-black px-4 py-2 rounded-lg text-sm font-black hover:bg-orange-500 transition">
                 📄 REPORTE PDF
-            </a>
-            <a href="{% url 'pos_index' %}" class="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
-                ← VOLVER AL POS
             </a>
         </div>
     </div>

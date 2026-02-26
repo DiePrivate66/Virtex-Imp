@@ -52,7 +52,7 @@
         </div>
     </div>
 
-    <div class="w-3/6 bg-[#1a1a1a] p-6 flex flex-col relative">
+    <div id="columna-productos" class="flex-1 bg-[#1a1a1a] p-6 flex flex-col relative transition-all duration-300">
         <div class="mb-4">
             <input type="text" id="buscador" onkeyup="buscarProducto()" placeholder="BUSCAR (EJ: BONELESS)..." 
                    class="w-full bg-[#2d2d2d] text-white p-4 pl-6 rounded-xl border border-gray-700 focus:outline-none focus:border-bosco-orange placeholder-gray-500 uppercase font-bold">
@@ -137,7 +137,7 @@
         </div>
     </div>
 
-    <div class="w-2/6 bg-white flex flex-col shadow-2xl z-30 h-full border-l border-gray-900 text-gray-900">
+    <div id="columna-carrito" class="w-[24%] min-w-[290px] max-w-[640px] bg-white flex flex-col shadow-2xl z-30 h-full border-l border-gray-900 text-gray-900 transition-all duration-300">
         <div class="p-4 bg-gray-100 border-b border-gray-300 space-y-3">
             <div class="flex bg-gray-300 rounded p-1">
                 <button id="btn-servir" onclick="setTipoPedido('SERVIR')" class="flex-1 py-2 rounded font-bold text-sm bg-white shadow text-black transition">PARA SERVIR</button>
@@ -175,7 +175,7 @@
                 <span class="text-gray-500 font-bold text-sm uppercase">Total</span>
                 <span id="total-carrito" class="font-black text-5xl text-gray-900 tracking-tighter">$0.00</span>
             </div>
-            <button onclick="abrirModalPago()" class="w-full bg-bosco-orange text-black py-4 rounded-xl font-black text-xl hover:bg-orange-500 transition-colors shadow-lg active:translate-y-1">
+            <button id="btn-cobrar" onclick="abrirModalPago()" class="w-full bg-bosco-orange text-black py-4 rounded-xl font-black text-xl hover:bg-orange-500 transition-colors shadow-lg active:translate-y-1">
                 COBRAR
             </button>
         </div>
@@ -340,6 +340,38 @@
         }
     }
 
+    function enfocarBuscadorRapido() {
+        const buscador = document.getElementById('buscador');
+        if (!buscador) return;
+        buscador.focus();
+        buscador.select();
+    }
+
+    function actualizarLayoutSidebarDerecha() {
+        const columnaCarrito = document.getElementById('columna-carrito');
+        if (!columnaCarrito) return;
+
+        const carritoVacio = carrito.length === 0;
+        if (carritoVacio) {
+            columnaCarrito.classList.remove('w-[34%]');
+            columnaCarrito.classList.add('w-[24%]');
+        } else {
+            columnaCarrito.classList.remove('w-[24%]');
+            columnaCarrito.classList.add('w-[34%]');
+        }
+    }
+
+    function actualizarEstadoBotonCobro() {
+        const btnCobrar = document.getElementById('btn-cobrar');
+        if (!btnCobrar) return;
+
+        const habilitado = carrito.length > 0;
+        btnCobrar.disabled = !habilitado;
+        btnCobrar.classList.toggle('opacity-40', !habilitado);
+        btnCobrar.classList.toggle('cursor-not-allowed', !habilitado);
+        btnCobrar.classList.toggle('hover:bg-bosco-orange', !habilitado);
+    }
+
     // --- LÓGICA MODAL OPCIONES ---
     function abrirModalOpciones(id, nombre, precio) {
         prodTemp = { id, nombre, precio: parseFloat(precio), cantidad: 1, salsas: [], notas: '' };
@@ -445,10 +477,25 @@
 
         if (carrito.length === 0) {
             lista.innerHTML = `
-                <div class="h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
-                    <p class="font-bold text-sm">CARRITO VACÍO</p>
+                <div class="h-full flex flex-col gap-4 justify-center">
+                    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <p class="font-black text-sm text-gray-700 uppercase">Carrito vacío</p>
+                        <p class="text-xs text-gray-500 mt-1">Agrega productos desde el panel central para iniciar la venta.</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="enfocarBuscadorRapido()" class="bg-gray-900 text-white text-xs font-bold py-2 rounded-lg hover:bg-black transition">🔎 BUSCAR</button>
+                        <button onclick="filtrarProductos('todos')" class="bg-gray-200 text-gray-700 text-xs font-bold py-2 rounded-lg hover:bg-gray-300 transition">📋 TODO MENÚ</button>
+                        <button onclick="setTipoPedido('SERVIR')" class="bg-gray-200 text-gray-700 text-xs font-bold py-2 rounded-lg hover:bg-gray-300 transition">🍽️ SERVIR</button>
+                        <button onclick="setTipoPedido('LLEVAR')" class="bg-gray-200 text-gray-700 text-xs font-bold py-2 rounded-lg hover:bg-gray-300 transition">🥡 LLEVAR</button>
+                    </div>
+                    <div class="bg-orange-50 border border-orange-200 rounded-xl p-3">
+                        <p class="text-[11px] text-orange-700 font-bold uppercase">Tip rápido</p>
+                        <p class="text-[11px] text-orange-600 mt-1">Escribe el nombre del producto en el buscador para cobrar más rápido.</p>
+                    </div>
                 </div>`;
             totalElem.innerText = '$0.00';
+            actualizarLayoutSidebarDerecha();
+            actualizarEstadoBotonCobro();
             return;
         }
 
@@ -477,6 +524,8 @@
             lista.appendChild(row);
         });
         totalElem.innerText = '$' + total.toFixed(2);
+        actualizarLayoutSidebarDerecha();
+        actualizarEstadoBotonCobro();
     }
 
     function eliminar(idx) {
@@ -1076,6 +1125,8 @@
     document.head.appendChild(style);
 
     // ══════════════ BADGE PEDIDOS WEB ══════════════
+    renderizar();
+
     function checkPedidosWeb() {
         fetch('/api/pedidos-web/')
         .then(r => r.json())
