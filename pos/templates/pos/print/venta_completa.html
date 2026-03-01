@@ -148,7 +148,19 @@
             <div class="info-row"><span class="info-label">CLIENTE:</span><span class="info-value">CONSUMIDOR FINAL</span></div>
             {% endif %}
             <div class="info-row"><span class="info-label">PAGO:</span><span class="info-value">{{ venta.get_metodo_pago_display }}</span></div>
+            {% if venta.estado_pago %}
+            <div class="info-row"><span class="info-label">ESTADO PAGO:</span><span class="info-value">{{ venta.get_estado_pago_display|upper }}</span></div>
+            {% endif %}
             <div class="info-row"><span class="info-label">PEDIDO:</span><span class="info-value">{{ venta.get_tipo_pedido_display }}</span></div>
+            {% if venta.referencia_pago %}
+            <div class="info-row"><span class="info-label">REF:</span><span class="info-value">{{ venta.referencia_pago }}</span></div>
+            {% endif %}
+            {% if venta.metodo_pago == 'TARJETA' and venta.tarjeta_tipo %}
+            <div class="info-row"><span class="info-label">TIPO TARJETA:</span><span class="info-value">{{ venta.tarjeta_tipo }}</span></div>
+            {% endif %}
+            {% if venta.metodo_pago == 'TARJETA' and venta.tarjeta_marca %}
+            <div class="info-row"><span class="info-label">MARCA:</span><span class="info-value">{{ venta.tarjeta_marca }}</span></div>
+            {% endif %}
             <div class="divider-light"></div>
         </div>
 
@@ -201,6 +213,26 @@
                 <span class="font-black">CAMBIO:</span>
                 <span class="font-black">${{ venta.cambio|floatformat:2 }}</span>
             </div>
+            {% elif venta.metodo_pago == 'TARJETA' %}
+            <div class="divider-light"></div>
+            {% if venta.referencia_pago %}
+            <div class="info-row">
+                <span>REF TARJETA:</span>
+                <span class="font-bold">{{ venta.referencia_pago }}</span>
+            </div>
+            {% endif %}
+            {% if venta.tarjeta_tipo %}
+            <div class="info-row">
+                <span>TIPO:</span>
+                <span class="font-bold">{{ venta.tarjeta_tipo }}</span>
+            </div>
+            {% endif %}
+            {% if venta.tarjeta_marca %}
+            <div class="info-row">
+                <span>MARCA:</span>
+                <span class="font-bold">{{ venta.tarjeta_marca }}</span>
+            </div>
+            {% endif %}
             {% endif %}
         </div>
 

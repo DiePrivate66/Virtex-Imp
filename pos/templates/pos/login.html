@@ -6,6 +6,7 @@
         <div class="text-center mb-6">
             <h1 class="text-4xl font-black text-bosco-orange tracking-widest mb-2">RAMÓN</h1>
             <p class="text-gray-400 text-sm tracking-wide">SISTEMA INTEGRAL</p>
+            <p id="mensaje-bienvenida" class="text-bosco-orange text-sm font-semibold mt-2 h-5"></p>
         </div>
 
         <!-- Pantalla del PIN -->
@@ -76,6 +77,7 @@
         pin = pin.slice(0, -1);
         updateDots();
         document.getElementById('mensaje-estado').innerText = "";
+        clearWelcome();
     }
 
     function updateDots() {
@@ -104,15 +106,22 @@
         .then(res => res.json())
         .then(data => {
             if(data.status === 'ok') {
+                const nombre = (data.empleado_nombre || "").trim();
+                showWelcome(nombre ? `Bienvenido ${nombre}` : "Bienvenido");
                 // Si viene de la PWA y es ADMIN, ir al Dashboard
                 const urlParams = new URLSearchParams(window.location.search);
                 if (urlParams.get('src') === 'pwa' && data.rol === 'ADMIN') {
-                    window.location.href = '/dashboard/';
+                    setTimeout(() => {
+                        window.location.href = '/dashboard/';
+                    }, 900);
                 } else {
-                    window.location.href = '/apertura/';
+                    setTimeout(() => {
+                        window.location.href = '/apertura/';
+                    }, 900);
                 }
             } else {
                 showError(data.mensaje || "PIN INCORRECTO O NO AUTORIZADO");
+                clearWelcome();
                 pin = "";
                 updateDots();
             }
@@ -130,6 +139,16 @@
         el.innerText = msg;
         el.className = "text-center text-xs mt-2 font-bold h-4 text-green-500";
         setTimeout(() => { el.innerText = ""; }, 3000);
+    }
+
+    function showWelcome(msg) {
+        const el = document.getElementById('mensaje-bienvenida');
+        el.innerText = msg;
+    }
+
+    function clearWelcome() {
+        const el = document.getElementById('mensaje-bienvenida');
+        el.innerText = "";
     }
 
     // Teclado físico support

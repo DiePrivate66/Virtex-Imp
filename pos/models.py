@@ -76,6 +76,12 @@ class CajaTurno(models.Model):
 # --- PEDIDOS (UNIFICADO WEB + POS) ---
 class Venta(models.Model):
     METODOS = [('EFECTIVO', 'Efectivo'), ('TRANSFERENCIA', 'Transferencia'), ('TARJETA', 'Tarjeta/Medianet')]
+    ESTADOS_PAGO = [
+        ('PENDIENTE', 'Pendiente'),
+        ('APROBADO', 'Aprobado'),
+        ('RECHAZADO', 'Rechazado'),
+        ('ANULADO', 'Anulado'),
+    ]
     ORIGEN = [('POS', 'Local'), ('WEB', 'Web App')]
     ESTADO = [
         ('PENDIENTE', 'Por Confirmar'),
@@ -98,6 +104,10 @@ class Venta(models.Model):
     
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     metodo_pago = models.CharField(max_length=20, choices=METODOS)
+    referencia_pago = models.CharField(max_length=40, blank=True, help_text='Referencia/Lote/Aprobación de pago')
+    tarjeta_tipo = models.CharField(max_length=12, blank=True, help_text='CREDITO o DEBITO')
+    tarjeta_marca = models.CharField(max_length=20, blank=True, help_text='VISA, MASTERCARD, etc.')
+    estado_pago = models.CharField(max_length=12, choices=ESTADOS_PAGO, default='APROBADO')
     monto_recibido = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     costo_envio = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     comprobante_foto = models.ImageField(upload_to='pagos/', null=True, blank=True)

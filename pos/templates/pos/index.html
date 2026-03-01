@@ -276,8 +276,23 @@
                 <p class="text-gray-300 text-sm font-bold">💳 PAGO CON TARJETA / DATAFAST</p>
                 <p class="text-gray-500 text-xs mt-2">El pago se procesa en el terminal POS externo</p>
             </div>
-            <label class="block text-gray-400 text-xs font-bold uppercase mt-3">REF. LOTE / APROBACIÓN (OPCIONAL)</label>
-            <input type="text" id="ref-tarjeta" class="w-full bg-black text-white text-xl font-bold p-3 rounded-xl border border-gray-600 focus:border-purple-500 outline-none text-center uppercase" placeholder="# LOTE O APROBACIÓN">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold uppercase mb-1">TIPO TARJETA</label>
+                    <select id="tipo-tarjeta" class="w-full bg-black text-white text-sm font-bold p-3 rounded-xl border border-gray-600 focus:border-purple-500 outline-none uppercase">
+                        <option value="">SELECCIONAR</option>
+                        <option value="CREDITO">CRÉDITO</option>
+                        <option value="DEBITO">DÉBITO</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold uppercase mb-1">MARCA (OPCIONAL)</label>
+                    <input type="text" id="marca-tarjeta" maxlength="20" oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9 ]/g,'').slice(0,20)" class="w-full bg-black text-white text-sm font-bold p-3 rounded-xl border border-gray-600 focus:border-purple-500 outline-none uppercase" placeholder="VISA / MC">
+                </div>
+            </div>
+            <label class="block text-gray-400 text-xs font-bold uppercase mt-3">REF. LOTE / APROBACIÓN (OBLIGATORIO)</label>
+            <input type="text" id="ref-tarjeta" maxlength="40" oninput="this.value = this.value.toUpperCase().replace(/\s+/g,'').replace(/[^A-Z0-9\-_/]/g,'').slice(0,40)" class="w-full bg-black text-white text-xl font-bold p-3 rounded-xl border border-gray-600 focus:border-purple-500 outline-none text-center uppercase" placeholder="EJ: LOTE123456">
+            <p class="text-[11px] text-gray-500">La referencia evita registros duplicados en cierre de caja.</p>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
@@ -884,6 +899,8 @@
         document.getElementById('cambio-display').innerText = '$0.00';
         if(document.getElementById('ref-transferencia')) document.getElementById('ref-transferencia').value = '';
         if(document.getElementById('ref-tarjeta')) document.getElementById('ref-tarjeta').value = '';
+        if(document.getElementById('tipo-tarjeta')) document.getElementById('tipo-tarjeta').value = '';
+        if(document.getElementById('marca-tarjeta')) document.getElementById('marca-tarjeta').value = '';
         ocultarErrorFactura();
         
         // Reset all method buttons
@@ -970,6 +987,9 @@
 
         const totalTexto = document.getElementById('total-carrito').innerText.replace('$', '');
         const totalFloat = Math.round(parseFloat(totalTexto) * 100) / 100;
+        let referenciaPago = '';
+        let tarjetaTipo = '';
+        let tarjetaMarca = '';
 
         if(metodoSeleccionado === 'EFECTIVO') {
             const recibido = parseFloat(document.getElementById('monto-recibido').value) || 0;
@@ -979,12 +999,43 @@
             }
         }
 
+        if (metodoSeleccionado === 'TARJETA') {
+            referenciaPago = (document.getElementById('ref-tarjeta').value || '')
+                .toUpperCase()
+                .replace(/\s+/g, '')
+                .replace(/[^A-Z0-9\-_/]/g, '')
+                .slice(0, 40);
+            tarjetaTipo = (document.getElementById('tipo-tarjeta').value || '').toUpperCase().trim();
+            tarjetaMarca = (document.getElementById('marca-tarjeta').value || '')
+                .toUpperCase()
+                .replace(/[^A-Z0-9 ]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 20);
+
+            if (referenciaPago.length < 6) {
+                alert('Referencia de tarjeta obligatoria (mínimo 6 caracteres)');
+                return false;
+            }
+            if (!tarjetaTipo) {
+                alert('Selecciona tipo de tarjeta (crédito o débito)');
+                return false;
+            }
+            document.getElementById('ref-tarjeta').value = referenciaPago;
+            if (document.getElementById('marca-tarjeta')) {
+                document.getElementById('marca-tarjeta').value = tarjetaMarca;
+            }
+        }
+
         pagoData = {
             total: totalFloat,
             metodo_pago: metodoSeleccionado,
             monto_recibido: metodoSeleccionado === 'EFECTIVO'
                 ? parseFloat(document.getElementById('monto-recibido').value)
-                : totalFloat
+                : totalFloat,
+            referencia_pago: referenciaPago,
+            tarjeta_tipo: tarjetaTipo,
+            tarjeta_marca: tarjetaMarca
         };
         return true;
     }
@@ -1079,6 +1130,9 @@
         const data = {
             total: pagoData.total,
             metodo_pago: pagoData.metodo_pago,
+            referencia_pago: pagoData.referencia_pago || '',
+            tarjeta_tipo: pagoData.tarjeta_tipo || '',
+            tarjeta_marca: pagoData.tarjeta_marca || '',
             carrito: carrito,
             cliente_nombre: clienteNombreActual || 'CONSUMIDOR FINAL',
             cliente_id: consumidorFinal ? null : clienteId,

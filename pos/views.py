@@ -1,10 +1,12 @@
 import json
 import threading
+import re
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils import timezone
 from .models import Categoria, Producto, Venta, DetalleVenta, Cliente, CajaTurno
 from decimal import Decimal
 
@@ -42,11 +44,58 @@ def registrar_venta(request):
             def _cedula_valida(valor):
                 return bool(valor) and valor.isdigit() and len(valor) in (10, 13)
 
+            def _normalizar_referencia(valor):
+                ref = (valor or '').upper().strip()
+                ref = re.sub(r'\s+', '', ref)
+                ref = re.sub(r'[^A-Z0-9\-_/]', '', ref)
+                return ref[:40]
+
+            def _normalizar_texto_simple(valor, max_len):
+                txt = (valor or '').upper().strip()
+                txt = re.sub(r'[^A-Z0-9 ]', '', txt)
+                txt = re.sub(r'\s+', ' ', txt)
+                return txt[:max_len]
+
             cedula_input = (data.get('cliente_cedula') or '').strip()
             consumidor_final = bool(data.get('consumidor_final'))
+            metodo_pago = (data.get('metodo_pago') or '').upper().strip()
+            total_venta = Decimal(str(data.get('total') or 0)).quantize(Decimal('0.01'))
+            referencia_pago = _normalizar_referencia(data.get('referencia_pago'))
+            tarjeta_tipo = _normalizar_texto_simple(data.get('tarjeta_tipo'), 12)
+            tarjeta_marca = _normalizar_texto_simple(data.get('tarjeta_marca'), 20)
             
             # Buscar turno activo para asociar la venta
             turno_activo = CajaTurno.objects.filter(usuario=request.user, fecha_cierre__isnull=True).first()
+            if not turno_activo:
+                return JsonResponse({'status': 'error', 'mensaje': 'No hay caja activa para registrar ventas'}, status=400)
+
+            if metodo_pago not in {'EFECTIVO', 'TRANSFERENCIA', 'TARJETA'}:
+                return JsonResponse({'status': 'error', 'mensaje': 'Método de pago inválido'}, status=400)
+
+            if total_venta <= 0:
+                return JsonResponse({'status': 'error', 'mensaje': 'El total de la venta debe ser mayor a 0'}, status=400)
+
+            if metodo_pago == 'TARJETA':
+                if len(referencia_pago) < 6:
+                    return JsonResponse({'status': 'error', 'mensaje': 'Referencia de tarjeta obligatoria (mínimo 6 caracteres)'}, status=400)
+                if not tarjeta_tipo:
+                    return JsonResponse({'status': 'error', 'mensaje': 'Tipo de tarjeta obligatorio (crédito o débito)'}, status=400)
+                if tarjeta_tipo not in {'CREDITO', 'DEBITO'}:
+                    return JsonResponse({'status': 'error', 'mensaje': 'Tipo de tarjeta inválido'}, status=400)
+
+                hoy = timezone.localtime().date()
+                existe_tarjeta = Venta.objects.filter(
+                    origen='POS',
+                    metodo_pago='TARJETA',
+                    referencia_pago=referencia_pago,
+                    total=total_venta,
+                    fecha__date=hoy
+                ).exclude(estado='CANCELADO').exclude(estado_pago='ANULADO').first()
+                if existe_tarjeta:
+                    return JsonResponse({
+                        'status': 'error',
+                        'mensaje': f'Pago con tarjeta duplicado detectado (venta #{existe_tarjeta.id})'
+                    }, status=400)
 
             # --- Buscar Cliente si enviaron ID ---
             cliente = None
@@ -65,8 +114,12 @@ def registrar_venta(request):
             venta = Venta.objects.create(
                 cliente_nombre=data.get('cliente_nombre', 'CONSUMIDOR FINAL'),
                 cliente=cliente,
-                metodo_pago=data.get('metodo_pago'),
-                total=data.get('total'),
+                metodo_pago=metodo_pago,
+                referencia_pago=referencia_pago,
+                tarjeta_tipo=tarjeta_tipo,
+                tarjeta_marca=tarjeta_marca,
+                estado_pago='APROBADO',
+                total=total_venta,
                 origen='POS',
                 estado='COCINA',
                 tipo_pedido=data.get('tipo_pedido', 'SERVIR'),
@@ -187,6 +240,7 @@ def api_pedidos_web_json(request):
             'id': p.id,
             'estado': p.estado,
             'estado_display': p.get_estado_display(),
+            'estado_pago': p.estado_pago,
             'cliente_nombre': p.cliente_nombre,
             'telefono': p.telefono_cliente,
             'direccion': p.direccion_envio,
@@ -194,6 +248,9 @@ def api_pedidos_web_json(request):
             'tipo_pedido_display': p.get_tipo_pedido_display(),
             'metodo_pago': p.metodo_pago,
             'metodo_pago_display': p.get_metodo_pago_display(),
+            'referencia_pago': p.referencia_pago,
+            'tarjeta_tipo': p.tarjeta_tipo,
+            'tarjeta_marca': p.tarjeta_marca,
             'total': str(p.total),
             'costo_envio': str(p.costo_envio),
             'comprobante': p.comprobante_foto.url if p.comprobante_foto else None,
@@ -243,6 +300,15 @@ def imprimir_cierre(request, caja_id):
     num_ventas = ventas.count()
     
     total_ventas = total_efectivo + total_transferencia + total_tarjeta
+
+    # Reconciliación de tarjeta por referencia/lote
+    tarjetas_por_referencia = list(
+        ventas.filter(metodo_pago='TARJETA')
+        .exclude(referencia_pago='')
+        .values('referencia_pago', 'tarjeta_tipo', 'tarjeta_marca')
+        .annotate(cantidad=Count('id'), total=Sum('total'))
+        .order_by('-cantidad', 'referencia_pago')
+    )
     
     # Movimientos de caja (ingresos/egresos)
     movimientos = MovimientoCaja.objects.filter(turno=caja)
@@ -276,6 +342,7 @@ def imprimir_cierre(request, caja_id):
         'total_ingresos_caja': total_ingresos_caja,
         'total_egresos_caja': total_egresos_caja,
         'conteo_detalle': conteo_detalle,
+        'tarjetas_por_referencia': tarjetas_por_referencia,
         'ahora': timezone.now(),
     }
     

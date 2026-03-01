@@ -39,7 +39,11 @@ def verificar_pin(request):
                         Asistencia.objects.create(empleado=empleado)
 
                     login(request, empleado.usuario)
-                    return JsonResponse({'status': 'ok', 'rol': empleado.rol})
+                    return JsonResponse({
+                        'status': 'ok',
+                        'rol': empleado.rol,
+                        'empleado_nombre': (empleado.nombre or '').strip(),
+                    })
                 else:
                     return JsonResponse({'status': 'error', 'mensaje': 'Empleado sin usuario de sistema asignado'})
             else:

@@ -177,6 +177,18 @@
     <!-- ═══════ FORMA DE PAGO ═══════ -->
     <div class="info-block">
         <p>Forma de Pago: {{ venta.get_metodo_pago_display }} ${{ venta.total|floatformat:2 }}</p>
+        {% if venta.estado_pago %}
+        <p>Estado pago: {{ venta.get_estado_pago_display|upper }}</p>
+        {% endif %}
+        {% if venta.referencia_pago %}
+        <p>Ref. pago: {{ venta.referencia_pago }}</p>
+        {% endif %}
+        {% if venta.metodo_pago == 'TARJETA' and venta.tarjeta_tipo %}
+        <p>Tipo tarjeta: {{ venta.tarjeta_tipo }}</p>
+        {% endif %}
+        {% if venta.metodo_pago == 'TARJETA' and venta.tarjeta_marca %}
+        <p>Marca tarjeta: {{ venta.tarjeta_marca }}</p>
+        {% endif %}
         {% if venta.metodo_pago == 'EFECTIVO' and venta.monto_recibido > 0 %}
         <p>Recibido: ${{ venta.monto_recibido|floatformat:2 }}</p>
         <p class="bold">Cambio: ${{ venta.cambio|floatformat:2 }}</p>

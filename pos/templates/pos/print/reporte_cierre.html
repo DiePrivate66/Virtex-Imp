@@ -65,6 +65,17 @@
             <div class="row highlight"><span class="font-black">TOTAL VENDIDO:</span><span class="font-black big">${{ total_ventas|floatformat:2 }}</span></div>
         </div>
 
+        {% if tarjetas_por_referencia %}
+        <div class="divider-light"></div>
+        <div class="text-center font-bold small" style="margin-bottom:4px;">TARJETAS POR REFERENCIA</div>
+        {% for t in tarjetas_por_referencia %}
+        <div class="row small">
+            <span>{{ t.referencia_pago }}{% if t.tarjeta_tipo %} / {{ t.tarjeta_tipo }}{% endif %}{% if t.tarjeta_marca %} / {{ t.tarjeta_marca }}{% endif %}</span>
+            <span>${{ t.total|floatformat:2 }} ({{ t.cantidad }})</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+
         <div class="divider"></div>
 
         <div class="text-center font-bold" style="margin-bottom:5px;">CUADRE DE EFECTIVO</div>
@@ -141,6 +152,17 @@
             <div class="divider-light"></div>
             <div class="row highlight"><span class="font-black">TOTAL VENDIDO:</span><span class="font-black big">${{ total_ventas|floatformat:2 }}</span></div>
         </div>
+
+        {% if tarjetas_por_referencia %}
+        <div class="divider-light"></div>
+        <div class="text-center font-bold small" style="margin-bottom:4px;">TARJETAS POR REFERENCIA</div>
+        {% for t in tarjetas_por_referencia %}
+        <div class="row small">
+            <span>{{ t.referencia_pago }}{% if t.tarjeta_tipo %} / {{ t.tarjeta_tipo }}{% endif %}{% if t.tarjeta_marca %} / {{ t.tarjeta_marca }}{% endif %}</span>
+            <span>${{ t.total|floatformat:2 }} ({{ t.cantidad }})</span>
+        </div>
+        {% endfor %}
+        {% endif %}
 
         <div class="divider"></div>
 
