@@ -1,0 +1,120 @@
+﻿<div class="page">
+  <header class="header">
+    <div>
+      <h1>RAMÓN</h1>
+      <p>PIDE DESDE TU CELULAR</p>
+    </div>
+  </header>
+
+  <section class="cat-bar" *ngIf="categorias.length">
+    <button class="cat" [class.active]="categoriaSeleccionada === 'todos'" (click)="selectCategory('todos')">
+      TODO
+    </button>
+    <button
+      class="cat"
+      *ngFor="let cat of categorias"
+      [class.active]="categoriaSeleccionada === cat.id + ''"
+      (click)="selectCategory(cat.id + '')"
+    >
+      {{ cat.nombre }}
+    </button>
+  </section>
+
+  <section class="state" *ngIf="loadingCatalog">Cargando menú...</section>
+  <section class="state error" *ngIf="catalogError">{{ catalogError }}</section>
+
+  <main class="productos" *ngIf="!loadingCatalog && !catalogError">
+    <article class="producto" *ngFor="let p of productosFiltrados; trackBy: trackProducto">
+      <div>
+        <h3>{{ p.nombre }}</h3>
+        <p>{{ formatMoney(p.precio) }}</p>
+      </div>
+      <button (click)="addProducto(p)">+</button>
+    </article>
+  </main>
+
+  <button class="fab" *ngIf="cart.count() > 0 && !checkoutOpen" (click)="abrirCheckout()">
+    <span>{{ cart.count() }} ítems</span>
+    <strong>{{ formatMoney(cart.total()) }}</strong>
+  </button>
+
+  <section class="checkout" *ngIf="checkoutOpen">
+    <div class="checkout-header">
+      <h2>TU PEDIDO</h2>
+      <button class="link" (click)="cerrarCheckout()">Cerrar</button>
+    </div>
+
+    <div class="cart-items">
+      <div class="item" *ngFor="let item of cart.items(); let i = index; trackBy: trackCarrito">
+        <div class="item-top">
+          <div>
+            <strong>{{ item.nombre }}</strong>
+            <small>{{ formatMoney(item.precio) }} c/u</small>
+          </div>
+          <div class="qty">
+            <button (click)="disminuir(i)">-</button>
+            <span>{{ item.cantidad }}</span>
+            <button (click)="aumentar(i)">+</button>
+          </div>
+        </div>
+        <textarea
+          [ngModel]="item.nota"
+          (ngModelChange)="updateNote(i, $event)"
+          placeholder="Nota (opcional)"
+          rows="1"
+        ></textarea>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label>Nombre *</label>
+      <input [(ngModel)]="nombre" type="text" placeholder="Nombre completo" />
+    </div>
+
+    <div class="field-group">
+      <label>Teléfono *</label>
+      <input [(ngModel)]="telefono" type="tel" placeholder="09xxxxxxxx" />
+    </div>
+
+    <div class="field-group">
+      <label>C.I./RUC (opcional)</label>
+      <input [(ngModel)]="cedula" type="text" placeholder="Solo si deseas factura" />
+    </div>
+
+    <div class="field-group two-col">
+      <button [class.active]="tipoPedido === 'DOMICILIO'" (click)="tipoPedido = 'DOMICILIO'">DELIVERY</button>
+      <button [class.active]="tipoPedido === 'LLEVAR'" (click)="tipoPedido = 'LLEVAR'">RETIRO</button>
+    </div>
+
+    <div class="field-group" *ngIf="tipoPedido === 'DOMICILIO'">
+      <label>Dirección *</label>
+      <textarea [(ngModel)]="direccion" placeholder="Dirección completa" rows="2"></textarea>
+      <button class="gps" (click)="obtenerGps()" type="button">Capturar ubicacion GPS</button>
+      <small *ngIf="gpsEstado === 'loading'">Obteniendo ubicación...</small>
+      <small class="ok" *ngIf="gpsEstado === 'ok'">GPS capturado correctamente.</small>
+      <small class="error" *ngIf="gpsEstado === 'error'">{{ gpsError }}</small>
+    </div>
+
+    <div class="field-group two-col">
+      <button [class.active]="metodoPago === 'EFECTIVO'" (click)="metodoPago = 'EFECTIVO'">EFECTIVO</button>
+      <button [class.active]="metodoPago === 'TRANSFERENCIA'" (click)="metodoPago = 'TRANSFERENCIA'">TRANSFERENCIA</button>
+    </div>
+
+    <div class="field-group" *ngIf="metodoPago === 'TRANSFERENCIA'">
+      <label>Comprobante *</label>
+      <input type="file" accept="image/*" (change)="onComprobanteChange($event)" />
+    </div>
+
+    <div class="totals">
+      <span>Total</span>
+      <strong>{{ formatMoney(cart.total()) }}</strong>
+    </div>
+
+    <p class="error" *ngIf="formError">{{ formError }}</p>
+
+    <button class="send" [disabled]="sending" (click)="enviarPedido()">
+      {{ sending ? 'ENVIANDO...' : 'CONFIRMAR PEDIDO' }}
+    </button>
+  </section>
+</div>
+

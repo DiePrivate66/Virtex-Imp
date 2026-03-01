@@ -1,0 +1,52 @@
+.confirm-wrap {
+  min-height: 100vh;
+  background: #101010;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: #1b1b1b;
+  border: 1px solid #2f2f2f;
+  border-radius: 22px;
+  padding: 28px;
+  text-align: center;
+}
+
+.emoji {
+  font-size: 44px;
+  margin-bottom: 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.sub {
+  color: #9ca3af;
+  margin: 10px 0 18px;
+}
+
+.id {
+  font-size: 42px;
+  color: #ff6600;
+  font-weight: 900;
+  margin: 0 0 24px;
+}
+
+.btn {
+  display: inline-block;
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  background: #ff6600;
+  color: #000;
+  font-weight: 900;
+  text-decoration: none;
+}

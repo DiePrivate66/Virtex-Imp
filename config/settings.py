@@ -27,18 +27,35 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-2jt$!%j9*hebv+mb_ec=l
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*', '.railway.app']
+def split_env_list(value: str):
+    return [item.strip() for item in value.split(',') if item.strip()]
 
-CSRF_TRUSTED_ORIGINS = ['https://*.railway.app']
+
+DEFAULT_ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.railway.app']
+DEFAULT_CSRF_TRUSTED_ORIGINS = [
+    'https://*.railway.app',
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+]
+DEFAULT_CORS_ALLOWED_ORIGINS = [
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+]
+
+ALLOWED_HOSTS = split_env_list(os.environ.get('ALLOWED_HOSTS', '')) or (['*'] if DEBUG else DEFAULT_ALLOWED_HOSTS)
+CSRF_TRUSTED_ORIGINS = split_env_list(os.environ.get('CSRF_TRUSTED_ORIGINS', '')) or DEFAULT_CSRF_TRUSTED_ORIGINS
+
+CORS_ALLOWED_ORIGINS = split_env_list(os.environ.get('CORS_ALLOWED_ORIGINS', '')) or DEFAULT_CORS_ALLOWED_ORIGINS
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False') == 'True'
 
 if not DEBUG:
-    # Seguridad HTTPS en Producción
+    # Seguridad HTTPS en Produccion
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_HSTS_SECONDS = 31536000  # 1 año
+    SECURE_HSTS_SECONDS = 31536000  # 1 anio
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
@@ -51,6 +68,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
 
     # --- TUS APPS (ESTO FALTABA) ---
     'core',
@@ -60,7 +78,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # WhiteNoise para archivos estáticos
+    'whitenoise.middleware.WhiteNoiseMiddleware', # WhiteNoise para archivos estaticos
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -125,7 +144,7 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'es-ec'
 TIME_ZONE = 'America/Guayaquil'
 USE_I18N = True
-USE_L10N = False  # Forzar punto decimal (USD) en vez de coma española
+USE_L10N = False  # Forzar punto decimal (USD) en vez de coma espaniola
 USE_TZ = True
 
 
@@ -143,15 +162,15 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# --- EMAIL (FACTURA ELECTRÓNICA) ---
+# --- EMAIL (FACTURA ELECTRONICA) ---
 # Para desarrollo: imprime emails en consola
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# Para producción: descomenta y configura con tus credenciales SMTP
+# Para produccion: descomenta y configura con tus credenciales SMTP
 # EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 # EMAIL_HOST = 'smtp.gmail.com'
 # EMAIL_PORT = 587
 # EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'tu-correo@gmail.com'       # ← Cambiar
-# EMAIL_HOST_PASSWORD = 'tu-app-password'        # ← Usar App Password de Google
-# DEFAULT_FROM_EMAIL = 'RAMÓN by Bosco <tu-correo@gmail.com>'
+# EMAIL_HOST_USER = 'tu-correo@gmail.com'       # <- Cambiar
+# EMAIL_HOST_PASSWORD = 'tu-app-password'        # <- Usar App Password de Google
+# DEFAULT_FROM_EMAIL = 'RAMON by Bosco <tu-correo@gmail.com>'

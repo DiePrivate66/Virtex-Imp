@@ -1,0 +1,294 @@
+.page {
+  min-height: 100vh;
+  background: #111;
+  color: #fff;
+  padding-bottom: 90px;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #111;
+  border-bottom: 1px solid #282828;
+  padding: 16px;
+}
+
+.header h1 {
+  margin: 0;
+  color: #ff6600;
+  letter-spacing: 0.15em;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.header p {
+  margin: 4px 0 0;
+  color: #8a8a8a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cat-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px 16px;
+  border-bottom: 1px solid #252525;
+}
+
+.cat {
+  border: 1px solid #3a3a3a;
+  background: #242424;
+  color: #b0b0b0;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 8px 16px;
+  white-space: nowrap;
+}
+
+.cat.active {
+  background: #ff6600;
+  color: #000;
+  border-color: #ff6600;
+}
+
+.state {
+  padding: 18px;
+  color: #bbb;
+}
+
+.state.error,
+.error {
+  color: #ff6b6b;
+}
+
+.ok {
+  color: #6ee7b7;
+}
+
+.productos {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.producto {
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.producto h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.producto p {
+  margin: 6px 0 0;
+  color: #ff6600;
+  font-weight: 900;
+}
+
+.producto button {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: #ff6600;
+  color: #000;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.fab {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 40;
+  border: 0;
+  border-radius: 14px;
+  background: #ff6600;
+  color: #000;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 900;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.checkout {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: #151515;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.checkout-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.checkout-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.link {
+  background: transparent;
+  border: 0;
+  color: #9ca3af;
+  font-weight: 700;
+}
+
+.cart-items {
+  display: grid;
+  gap: 8px;
+}
+
+.item {
+  background: #222;
+  border: 1px solid #353535;
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.item strong {
+  display: block;
+  text-transform: uppercase;
+}
+
+.item small {
+  color: #9ca3af;
+}
+
+.qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qty button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: #374151;
+  color: #fff;
+  font-weight: 900;
+}
+
+.item textarea,
+input,
+select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #3d3d3d;
+  background: #1b1b1b;
+  color: #fff;
+  padding: 10px;
+}
+
+.item textarea {
+  margin-top: 8px;
+  resize: vertical;
+}
+
+.field-group {
+  margin-top: 12px;
+}
+
+.field-group label {
+  display: block;
+  margin-bottom: 6px;
+  color: #a3a3a3;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.field-group.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.field-group.two-col button {
+  border-radius: 10px;
+  border: 1px solid #3a3a3a;
+  background: #1e1e1e;
+  color: #e5e7eb;
+  padding: 12px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.field-group.two-col button.active {
+  border-color: #ff6600;
+  background: #ff6600;
+  color: #000;
+}
+
+.gps {
+  margin-top: 8px;
+  border: 1px dashed #4b5563;
+  background: #1f2937;
+  color: #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  width: 100%;
+  font-weight: 700;
+}
+
+.totals {
+  margin-top: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.totals span {
+  color: #9ca3af;
+  font-weight: 700;
+}
+
+.totals strong {
+  font-size: 34px;
+  color: #ff6600;
+  font-weight: 900;
+}
+
+.send {
+  width: 100%;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #ff6600;
+  color: #000;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.send[disabled] {
+  opacity: 0.55;
+}
