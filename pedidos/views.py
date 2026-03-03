@@ -1,64 +1,75 @@
 import json
+from datetime import timedelta
 from decimal import Decimal
-from datetime import datetime
-from django.shortcuts import render, get_object_or_404
+
+from django.conf import settings
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from pos.models import Categoria, Producto, Venta, DetalleVenta, Cliente, CajaTurno
+from django.views.decorators.csrf import csrf_exempt
+
+from pos.models import CajaTurno, Categoria, Cliente, DetalleVenta, Producto, Venta, WhatsAppConversation
+from pos.tasks import process_delivery_quote_timeout, send_delivery_quote_requests
+from pos.whatsapp_utils import normalize_phone_to_e164
 
 
 def esta_abierto():
-    """Verifica si el local está dentro del horario de atención.
+    """Verifica si el local esta dentro del horario de atencion.
     L-S: 16:00-22:00 | Dom: 16:00-21:00"""
+    if not getattr(settings, 'ENABLE_BUSINESS_HOURS', True):
+        return True
+
     ahora = timezone.localtime()
     dia = ahora.weekday()  # 0=Lunes, 6=Domingo
-    hora = ahora.hour
-    minuto = ahora.minute
-    hora_decimal = hora + minuto / 60
-    
+    hora_decimal = ahora.hour + (ahora.minute / 60)
+
     if dia == 6:  # Domingo
         return 16.0 <= hora_decimal < 21.0
-    else:  # Lunes a Sábado
-        return 16.0 <= hora_decimal < 22.0
+    return 16.0 <= hora_decimal < 22.0
 
 
 def menu_cliente(request):
-    """Vista principal de la PWA — renderiza el menú completo."""
+    """Vista principal de la PWA - renderiza el menu completo."""
     categorias = Categoria.objects.all()
     productos = Producto.objects.filter(activo=True).select_related('categoria')
-    
+
     abierto = esta_abierto()
     ahora = timezone.localtime()
     dia = ahora.weekday()
-    
-    return render(request, 'pedidos/menu.html', {
-        'categorias': categorias,
-        'productos': productos,
-        'local_abierto': abierto,
-        'horario_hoy': '4:00 PM — 9:00 PM' if dia == 6 else '4:00 PM — 10:00 PM',
-        'dia_hoy': ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'][dia],
-    })
+
+    return render(
+        request,
+        'pedidos/menu.html',
+        {
+            'categorias': categorias,
+            'productos': productos,
+            'local_abierto': abierto,
+            'horario_hoy': '4:00 PM - 9:00 PM' if dia == 6 else '4:00 PM - 10:00 PM',
+            'dia_hoy': ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'][dia],
+        },
+    )
 
 
 def api_productos(request):
-    """API JSON: productos agrupados por categoría."""
+    """API JSON: productos agrupados por categoria."""
     categorias = Categoria.objects.all()
     data = []
     for cat in categorias:
         productos = Producto.objects.filter(categoria=cat, activo=True)
-        data.append({
-            'id': cat.id,
-            'nombre': cat.nombre,
-            'productos': [
-                {
-                    'id': p.id,
-                    'nombre': p.nombre,
-                    'precio': str(p.precio),
-                }
-                for p in productos
-            ]
-        })
+        data.append(
+            {
+                'id': cat.id,
+                'nombre': cat.nombre,
+                'productos': [
+                    {
+                        'id': p.id,
+                        'nombre': p.nombre,
+                        'precio': str(p.precio),
+                    }
+                    for p in productos
+                ],
+            }
+        )
     return JsonResponse({'categorias': data})
 
 
@@ -66,22 +77,22 @@ def api_productos(request):
 def api_crear_pedido(request):
     """API POST: crea un pedido desde la PWA del cliente."""
     if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'mensaje': 'Método no permitido'}, status=405)
-    
-    # Verificar horario de atención
+        return JsonResponse({'status': 'error', 'mensaje': 'Metodo no permitido'}, status=405)
+
     if not esta_abierto():
         ahora = timezone.localtime()
         dia = ahora.weekday()
-        horario = '4:00 PM — 9:00 PM' if dia == 6 else '4:00 PM — 10:00 PM'
-        return JsonResponse({
-            'status': 'error',
-            'mensaje': f'🕐 Lo sentimos, estamos cerrados. Nuestro horario es: {horario}'
-        }, status=400)
+        horario = '4:00 PM - 9:00 PM' if dia == 6 else '4:00 PM - 10:00 PM'
+        return JsonResponse(
+            {
+                'status': 'error',
+                'mensaje': f'Lo sentimos, estamos cerrados. Nuestro horario es: {horario}',
+            },
+            status=400,
+        )
 
     try:
-        # Soportar FormData (con archivo) o JSON
         if request.content_type and 'multipart/form-data' in request.content_type:
-            # FormData — viene del checkout con comprobante
             data = {
                 'nombre': request.POST.get('nombre', 'CONSUMIDOR FINAL'),
                 'cedula': request.POST.get('cedula', ''),
@@ -100,9 +111,8 @@ def api_crear_pedido(request):
 
         carrito = data.get('carrito', [])
         if not carrito:
-            return JsonResponse({'status': 'error', 'mensaje': 'El carrito está vacío'}, status=400)
+            return JsonResponse({'status': 'error', 'mensaje': 'El carrito esta vacio'}, status=400)
 
-        # Calcular total SERVER-SIDE (nunca confiar en el cliente)
         total = Decimal('0.00')
         items_validados = []
         for item in carrito:
@@ -110,15 +120,16 @@ def api_crear_pedido(request):
             cantidad = int(item.get('cantidad', 1))
             subtotal = prod.precio * cantidad
             total += subtotal
-            items_validados.append({
-                'producto': prod,
-                'cantidad': cantidad,
-                'precio_unitario': prod.precio,
-                'nombre_display': item.get('nombre', prod.nombre),
-                'nota': item.get('nota', ''),
-            })
+            items_validados.append(
+                {
+                    'producto': prod,
+                    'cantidad': cantidad,
+                    'precio_unitario': prod.precio,
+                    'nombre_display': item.get('nombre', prod.nombre),
+                    'nota': item.get('nota', ''),
+                }
+            )
 
-        # Buscar o crear cliente si tiene cédula
         cliente = None
         cedula = data.get('cedula', '').strip()
         if cedula:
@@ -128,28 +139,23 @@ def api_crear_pedido(request):
                     'nombre': data.get('nombre', 'CONSUMIDOR FINAL'),
                     'telefono': data.get('telefono', ''),
                     'direccion': data.get('direccion', ''),
-                }
+                },
             )
 
-        # Buscar turno activo (para vincular al cierre de caja)
         turno_activo = CajaTurno.objects.filter(fecha_cierre__isnull=True).first()
 
-        # Determinar estado inicial
         tipo_pedido = data.get('tipo_pedido', 'DOMICILIO')
-        if tipo_pedido == 'DOMICILIO':
-            estado_inicial = 'PENDIENTE_COTIZACION'  # Cajero debe cotizar envío
-        else:
-            estado_inicial = 'PENDIENTE'
+        estado_inicial = 'PENDIENTE_COTIZACION' if tipo_pedido == 'DOMICILIO' else 'PENDIENTE'
 
-        # Extraer coordenadas GPS si el cliente compartió ubicación
         lat = data.get('ubicacion_lat')
         lng = data.get('ubicacion_lng')
+        telefono_raw = data.get('telefono', '')
 
-        # Crear la venta
         venta = Venta.objects.create(
             cliente=cliente,
             cliente_nombre=data.get('nombre', 'CONSUMIDOR FINAL'),
-            telefono_cliente=data.get('telefono', ''),
+            telefono_cliente=telefono_raw,
+            telefono_cliente_e164=normalize_phone_to_e164(telefono_raw),
             direccion_envio=data.get('direccion', ''),
             ubicacion_lat=float(lat) if lat else None,
             ubicacion_lng=float(lng) if lng else None,
@@ -161,20 +167,24 @@ def api_crear_pedido(request):
             estado=estado_inicial,
             turno=turno_activo,
             comprobante_foto=comprobante,
+            confirmacion_cliente='PENDIENTE',
+            delivery_quote_deadline_at=(
+                timezone.now() + timedelta(seconds=settings.DELIVERY_QUOTE_TIMEOUT_SECONDS)
+                if tipo_pedido == 'DOMICILIO'
+                else None
+            ),
         )
 
-        # Crear detalles
         for item_data in items_validados:
             prod = item_data['producto']
             nombre_display = item_data['nombre_display']
             nota_usuario = item_data['nota']
 
-            # Extraer personalización del nombre (salsa)
             nota_final = ''
             if nombre_display != prod.nombre:
                 nota_final = nombre_display.replace(prod.nombre, '').strip()
             if nota_usuario:
-                nota_final = f"{nota_final} | {nota_usuario}" if nota_final else nota_usuario
+                nota_final = f'{nota_final} | {nota_usuario}' if nota_final else nota_usuario
 
             DetalleVenta.objects.create(
                 venta=venta,
@@ -184,11 +194,24 @@ def api_crear_pedido(request):
                 nota=nota_final.strip(),
             )
 
-        return JsonResponse({
-            'status': 'ok',
-            'pedido_id': venta.id,
-            'mensaje': f'Pedido #{venta.id} recibido',
-        })
+        if venta.telefono_cliente_e164:
+            conv, _ = WhatsAppConversation.objects.get_or_create(telefono_e164=venta.telefono_cliente_e164)
+            conv.venta = venta
+            conv.save(update_fields=['venta'])
+
+        if tipo_pedido == 'DOMICILIO':
+            send_delivery_quote_requests.delay(venta.id)
+            process_delivery_quote_timeout.apply_async(
+                args=[venta.id], countdown=settings.DELIVERY_QUOTE_TIMEOUT_SECONDS
+            )
+
+        return JsonResponse(
+            {
+                'status': 'ok',
+                'pedido_id': venta.id,
+                'mensaje': f'Pedido #{venta.id} recibido',
+            }
+        )
 
     except Producto.DoesNotExist:
         return JsonResponse({'status': 'error', 'mensaje': 'Producto no encontrado o no disponible'}, status=400)
@@ -197,6 +220,8 @@ def api_crear_pedido(request):
 
 
 def confirmacion_pedido(request, pedido_id):
-    """Página de confirmación post-pedido."""
+    """Pagina de confirmacion post-pedido."""
     venta = get_object_or_404(Venta, id=pedido_id, origen='WEB')
     return render(request, 'pedidos/confirmacion.html', {'venta': venta})
+
+

@@ -176,12 +176,28 @@ def registrar_venta(request):
 
 
 # --- PANEL DE PEDIDOS WEB ---
+def _timed_out_quote_count():
+    return Venta.objects.filter(
+        origen='WEB',
+        estado='PENDIENTE_COTIZACION',
+        delivery_quote_deadline_at__isnull=False,
+        delivery_quote_deadline_at__lt=timezone.now(),
+    ).count()
+
+
 def panel_pedidos_web(request):
     if not request.user.is_authenticated:
         return redirect('pos_login')
-    
+
     pedidos = Venta.objects.filter(origen='WEB').exclude(estado='CANCELADO').order_by('-fecha')[:50]
-    return render(request, 'pos/pedidos_web.html', {'pedidos': pedidos})
+    return render(
+        request,
+        'pos/pedidos_web.html',
+        {
+            'pedidos': pedidos,
+            'timed_out_quote_count': _timed_out_quote_count(),
+        },
+    )
 
 
 def api_actualizar_pedido(request):
@@ -225,7 +241,8 @@ def api_pedidos_web_json(request):
     pedidos = Venta.objects.filter(origen='WEB').exclude(
         estado__in=['CANCELADO', 'LISTO']
     ).order_by('-fecha')[:50]
-    
+
+    timed_out_quote_count = _timed_out_quote_count()
     data = []
     for p in pedidos:
         items = []
@@ -258,7 +275,7 @@ def api_pedidos_web_json(request):
             'items': items,
         })
     
-    return JsonResponse({'pedidos': data, 'count': len(data)})
+    return JsonResponse({'pedidos': data, 'count': len(data), 'timed_out_quote_count': timed_out_quote_count})
 
 # --- VISTAS DE IMPRESIÓN ---
 def imprimir_ticket(request, venta_id):

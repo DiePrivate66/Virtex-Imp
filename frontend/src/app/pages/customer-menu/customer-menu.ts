@@ -33,7 +33,6 @@ export class CustomerMenuComponent implements OnInit {
   nombre = '';
   telefono = '';
   cedula = '';
-  direccion = '';
 
   gpsLat: number | null = null;
   gpsLng: number | null = null;
@@ -89,6 +88,9 @@ export class CustomerMenuComponent implements OnInit {
   abrirCheckout(): void {
     this.checkoutOpen = true;
     this.formError = '';
+    if (this.tipoPedido === 'DOMICILIO' && (this.gpsLat == null || this.gpsLng == null)) {
+      this.obtenerGps();
+    }
   }
 
   cerrarCheckout(): void {
@@ -102,17 +104,30 @@ export class CustomerMenuComponent implements OnInit {
     this.comprobanteFile = file;
   }
 
+  setTipoPedido(tipo: TipoPedido): void {
+    this.tipoPedido = tipo;
+    if (tipo === 'DOMICILIO' && (this.gpsLat == null || this.gpsLng == null)) {
+      this.obtenerGps();
+    }
+  }
+
   obtenerGps(): void {
+    this.gpsEstado = 'loading';
+    this.gpsError = '';
+    this.cdr.detectChanges();
+
+    if (!window.isSecureContext) {
+      this.gpsEstado = 'error';
+      this.gpsError = 'Activa HTTPS (o localhost) para que el navegador pida GPS real.';
+      return;
+    }
+
     if (!('geolocation' in navigator)) {
       this.gpsEstado = 'error';
       this.gpsError = 'Tu dispositivo no soporta geolocalizacion.';
       this.cdr.detectChanges();
       return;
     }
-
-    this.gpsEstado = 'loading';
-    this.gpsError = '';
-    this.cdr.detectChanges();
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -122,11 +137,21 @@ export class CustomerMenuComponent implements OnInit {
         this.cdr.detectChanges();
       },
       (error) => {
+        this.gpsLat = null;
+        this.gpsLng = null;
         this.gpsEstado = 'error';
-        this.gpsError = error.message || 'No se pudo obtener la ubicacion';
+        if (error.code === error.PERMISSION_DENIED) {
+          this.gpsError = 'Debes permitir ubicacion y encender el GPS del telefono.';
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          this.gpsError = 'Ubicacion no disponible. Verifica que el GPS este encendido.';
+        } else if (error.code === error.TIMEOUT) {
+          this.gpsError = 'Tiempo agotado al pedir ubicacion. Intenta nuevamente.';
+        } else {
+          this.gpsError = error.message || 'No se pudo obtener la ubicacion';
+        }
         this.cdr.detectChanges();
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
   }
 
@@ -153,8 +178,9 @@ export class CustomerMenuComponent implements OnInit {
       return;
     }
 
-    if (this.tipoPedido === 'DOMICILIO' && !this.direccion.trim()) {
-      this.formError = 'La direccion es obligatoria para delivery.';
+    if (this.tipoPedido === 'DOMICILIO' && (this.gpsLat == null || this.gpsLng == null)) {
+      this.formError = 'Para delivery debes activar GPS y permitir ubicacion.';
+      this.obtenerGps();
       return;
     }
 
@@ -167,7 +193,7 @@ export class CustomerMenuComponent implements OnInit {
       nombre: this.nombre.trim().toUpperCase(),
       telefono: this.telefono.trim(),
       cedula: this.cedula.trim(),
-      direccion: this.tipoPedido === 'DOMICILIO' ? this.direccion.trim() : '',
+      direccion: '',
       tipo_pedido: this.tipoPedido,
       metodo_pago: this.metodoPago,
       carrito: items,
@@ -190,6 +216,10 @@ export class CustomerMenuComponent implements OnInit {
         this.cart.clear();
         this.checkoutOpen = false;
         this.comprobanteFile = null;
+        this.gpsLat = null;
+        this.gpsLng = null;
+        this.gpsEstado = 'none';
+        this.gpsError = '';
         this.cdr.detectChanges();
         this.router.navigate(['/confirmacion', resp.pedido_id]);
       },
@@ -224,4 +254,5 @@ export class CustomerMenuComponent implements OnInit {
       }
     });
   }
+
 }

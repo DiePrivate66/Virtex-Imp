@@ -82,16 +82,15 @@
     </div>
 
     <div class="field-group two-col">
-      <button [class.active]="tipoPedido === 'DOMICILIO'" (click)="tipoPedido = 'DOMICILIO'">DELIVERY</button>
-      <button [class.active]="tipoPedido === 'LLEVAR'" (click)="tipoPedido = 'LLEVAR'">RETIRO</button>
+      <button [class.active]="tipoPedido === 'DOMICILIO'" (click)="setTipoPedido('DOMICILIO')">DELIVERY</button>
+      <button [class.active]="tipoPedido === 'LLEVAR'" (click)="setTipoPedido('LLEVAR')">RETIRO</button>
     </div>
 
     <div class="field-group" *ngIf="tipoPedido === 'DOMICILIO'">
-      <label>Dirección *</label>
-      <textarea [(ngModel)]="direccion" placeholder="Dirección completa" rows="2"></textarea>
+      <label>Ubicacion GPS *</label>
       <button class="gps" (click)="obtenerGps()" type="button">Capturar ubicacion GPS</button>
-      <small *ngIf="gpsEstado === 'loading'">Obteniendo ubicación...</small>
-      <small class="ok" *ngIf="gpsEstado === 'ok'">GPS capturado correctamente.</small>
+      <small *ngIf="gpsEstado === 'loading'">Obteniendo ubicacion...</small>
+      <small class="ok" *ngIf="gpsEstado === 'ok'">Ubicacion capturada correctamente.</small>
       <small class="error" *ngIf="gpsEstado === 'error'">{{ gpsError }}</small>
     </div>
 
@@ -112,9 +111,10 @@
 
     <p class="error" *ngIf="formError">{{ formError }}</p>
 
-    <button class="send" [disabled]="sending" (click)="enviarPedido()">
+    <button class="send" [disabled]="sending || (tipoPedido === 'DOMICILIO' && gpsEstado !== 'ok')" (click)="enviarPedido()">
       {{ sending ? 'ENVIANDO...' : 'CONFIRMAR PEDIDO' }}
     </button>
   </section>
 </div>
+
 

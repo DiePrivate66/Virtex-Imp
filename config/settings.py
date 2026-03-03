@@ -174,3 +174,37 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 # EMAIL_HOST_USER = 'tu-correo@gmail.com'       # <- Cambiar
 # EMAIL_HOST_PASSWORD = 'tu-app-password'        # <- Usar App Password de Google
 # DEFAULT_FROM_EMAIL = 'RAMON by Bosco <tu-correo@gmail.com>'
+
+# --- INTEGRACIONES WHATSAPP / ASYNC ---
+PUBLIC_PWA_URL = os.environ.get('PUBLIC_PWA_URL', 'http://127.0.0.1:4200')
+PUBLIC_BACKEND_URL = os.environ.get('PUBLIC_BACKEND_URL', 'http://127.0.0.1:8000')
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_WHATSAPP_NUMBER = os.environ.get('TWILIO_WHATSAPP_NUMBER', '')
+TWILIO_CONFIRM_TEMPLATE_SID = os.environ.get('TWILIO_CONFIRM_TEMPLATE_SID', '')
+TWILIO_SIGNATURE_VALIDATION = os.environ.get('TWILIO_SIGNATURE_VALIDATION', 'False' if DEBUG else 'True') == 'True'
+DELIVERY_QUOTE_TIMEOUT_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TIMEOUT_SECONDS', '180'))
+DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS', '900'))
+
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', REDIS_URL)
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', REDIS_URL)
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TASK_SOFT_TIME_LIMIT = 20 * 60
+CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_TASK_ALWAYS_EAGER', 'True' if DEBUG else 'False') == 'True'
+
+
+WHATSAPP_WEBHOOK_VERIFY = os.environ.get('WHATSAPP_WEBHOOK_VERIFY', '')
+WHATSAPP_INBOUND_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.environ.get('WHATSAPP_INBOUND_RATE_LIMIT_WINDOW_SECONDS', '60')
+)
+WHATSAPP_INBOUND_RATE_LIMIT_MAX = int(os.environ.get('WHATSAPP_INBOUND_RATE_LIMIT_MAX', '20'))
+PRINT_JOB_STUCK_SECONDS = int(os.environ.get('PRINT_JOB_STUCK_SECONDS', '120'))
+
+# --- OPERACION / HORARIO ---
+# En desarrollo se desactiva por defecto para facilitar pruebas.
+# En produccion se activa por defecto.
+ENABLE_BUSINESS_HOURS = os.environ.get('ENABLE_BUSINESS_HOURS', 'False' if DEBUG else 'True') == 'True'
+

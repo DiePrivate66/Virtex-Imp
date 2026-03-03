@@ -1,41 +1,71 @@
-# Frontend Cliente (Angular PWA)
+# RAMON Frontend Cliente (Angular PWA)
 
-Este frontend es **solo para cliente final** (canal web de pedidos), no para caja POS.
+Este frontend es solo para cliente final (canal de pedidos web/PWA).  
+No reemplaza el sistema POS interno del cajero.
 
-## Stack
+## Estado actual
 
 - Angular 21 + Service Worker (PWA)
-- Django actual como API temporal (`/pedido/api/*`)
+- Django como API temporal
+- Integracion activa por proxy en desarrollo
+- Flujo de pedido cliente funcionando
+- GPS disponible solo en origen seguro (HTTPS o localhost)
 
-## Endpoints usados
+## API usada por el frontend
 
 - `GET /pedido/api/productos/`
 - `POST /pedido/api/crear/`
 
-## Desarrollo local
+En desarrollo, `apiBaseUrl` usa ruta relativa:
 
-1. Levanta Django en el proyecto raiz:
+```ts
+apiBaseUrl: '/pedido/api'
+```
 
-```bash
+Esto permite usar `proxy.conf.json` y evita errores al abrir por tunel.
+
+## Desarrollo local (3 terminales)
+
+### Terminal 1: Django API
+
+```powershell
+cd D:\USER\Documents\GitHub\PROYECTO-BOSCO
+& .\venv\Scripts\Activate.ps1
 python manage.py runserver 127.0.0.1:8000
 ```
 
-2. En esta carpeta (`frontend`), ejecuta Angular con proxy hacia Django:
+### Terminal 2: Angular
 
-```bash
+```powershell
+cd D:\USER\Documents\GitHub\PROYECTO-BOSCO\frontend
 npm install
 npm start
 ```
 
-3. Abre:
+`npm start` ya levanta:
 
 ```text
-http://localhost:4200
+ng serve --host 0.0.0.0 --port 4200 --proxy-config proxy.conf.json
+```
+
+### Terminal 3: Tunel HTTPS (opcional para pruebas en movil)
+
+```powershell
+cd D:\USER\Documents\GitHub\PROYECTO-BOSCO\frontend
+npx localtunnel --port 4200
+```
+
+Abre la URL `https://xxxx.loca.lt` en el telefono.
+
+Si pide `Tunnel Password`, usa la IP publica:
+
+```powershell
+(Invoke-RestMethod https://api.ipify.org)
 ```
 
 ## Build de produccion
 
-```bash
+```powershell
 npm run build
 ```
 
@@ -45,31 +75,43 @@ Salida:
 dist/frontend
 ```
 
-## Despliegue Angular primero
+## Despliegue (frontend primero)
 
-- Publica `dist/frontend/browser` (o `dist/frontend` segun tu host) en Netlify/Vercel/Cloudflare Pages.
-- Configura `src/environments/environment.prod.ts` con el backend Django publico:
+1. Publicar `dist/frontend/browser` (o `dist/frontend` segun el host) en Netlify/Vercel/Cloudflare.
+2. Configurar `src/environments/environment.prod.ts`:
 
 ```ts
 apiBaseUrl: 'https://TU_BACKEND_DJANGO/pedido/api'
 ```
 
-- En Django, define CORS para el dominio del frontend (variables de entorno):
+3. Configurar en Django:
 
 ```text
 CORS_ALLOWED_ORIGINS=https://tu-frontend.app
 CSRF_TRUSTED_ORIGINS=https://tu-frontend.app
 ```
 
-- Si usas Netlify, este repo incluye `public/_redirects` para SPA routing.
+## Problemas comunes
 
-## Funcionalidad incluida (v0)
+### "No se pudo cargar el menu. Verifica que Django este encendido."
 
-- Menu por categorias
-- Carrito persistente en `localStorage`
-- Checkout cliente (nombre, telefono, cedula opcional)
-- Tipo de pedido (`DOMICILIO` / `LLEVAR`)
-- Metodo de pago (`EFECTIVO` / `TRANSFERENCIA`)
-- Subida de comprobante para transferencia
-- Captura GPS opcional
-- Pantalla de confirmacion de pedido
+Revisar:
+
+1. Django corriendo en `127.0.0.1:8000`.
+2. Angular corriendo con `npm start` (incluye proxy).
+3. No usar `ng serve` sin `--proxy-config`.
+
+### GPS no funciona en movil
+
+El navegador solo permite geolocalizacion en:
+
+- `https://...`
+- `http://localhost`
+
+Con IP local (`http://192.168.x.x`) puede bloquearse.
+
+### localtunnel da 503
+
+- El tunel se cayo o la terminal se cerro.
+- Relanzar `npx localtunnel --port 4200`.
+- Mantener las 3 terminales abiertas.
