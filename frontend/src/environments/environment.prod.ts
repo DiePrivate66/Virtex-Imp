@@ -1,4 +1,6 @@
 export const environment = {
   production: true,
-  apiBaseUrl: 'https://TU_BACKEND_DJANGO/pedido/api'
+  // ⚠️  Reemplazar con tu dominio de Railway una vez creado el proyecto.
+  // Ejemplo: 'https://bosco-backend-production.railway.app/pedido/api'
+  apiBaseUrl: 'https://TU_PROYECTO.railway.app/pedido/api'
 };

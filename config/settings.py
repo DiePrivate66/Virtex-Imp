@@ -155,27 +155,30 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Esto es necesario para subir los comprobantes de pago
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# --- EMAIL (FACTURA ELECTRONICA) ---
-# Para desarrollo: imprime emails en consola
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# Para produccion: descomenta y configura con tus credenciales SMTP
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'tu-correo@gmail.com'       # <- Cambiar
-# EMAIL_HOST_PASSWORD = 'tu-app-password'        # <- Usar App Password de Google
-# DEFAULT_FROM_EMAIL = 'RAMON by Bosco <tu-correo@gmail.com>'
+# --- EMAIL (FACTURA ELECTRONICA) ---
+# En desarrollo (DEBUG=True): imprime en consola si no hay credenciales SMTP.
+# En producción (DEBUG=False): usa SMTP automáticamente.
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend' if DEBUG
+    else 'django.core.mail.backends.smtp.EmailBackend',
+)
+EMAIL_HOST          = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT          = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS       = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', f'RAMON by Bosco <{EMAIL_HOST_USER}>')
 
 # --- INTEGRACIONES WHATSAPP / ASYNC ---
+WHATSAPP_PROVIDER = os.environ.get('WHATSAPP_PROVIDER', 'TWILIO').upper()
 PUBLIC_PWA_URL = os.environ.get('PUBLIC_PWA_URL', 'http://127.0.0.1:4200')
 PUBLIC_BACKEND_URL = os.environ.get('PUBLIC_BACKEND_URL', 'http://127.0.0.1:8000')
 TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
@@ -183,6 +186,12 @@ TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
 TWILIO_WHATSAPP_NUMBER = os.environ.get('TWILIO_WHATSAPP_NUMBER', '')
 TWILIO_CONFIRM_TEMPLATE_SID = os.environ.get('TWILIO_CONFIRM_TEMPLATE_SID', '')
 TWILIO_SIGNATURE_VALIDATION = os.environ.get('TWILIO_SIGNATURE_VALIDATION', 'False' if DEBUG else 'True') == 'True'
+META_WHATSAPP_TOKEN = os.environ.get('META_WHATSAPP_TOKEN', '')
+META_WHATSAPP_PHONE_NUMBER_ID = os.environ.get('META_WHATSAPP_PHONE_NUMBER_ID', '')
+META_WHATSAPP_API_VERSION = os.environ.get('META_WHATSAPP_API_VERSION', 'v22.0')
+META_WHATSAPP_VERIFY_TOKEN = os.environ.get('META_WHATSAPP_VERIFY_TOKEN', '')
+META_WHATSAPP_APP_SECRET = os.environ.get('META_WHATSAPP_APP_SECRET', '')
+META_SIGNATURE_VALIDATION = os.environ.get('META_SIGNATURE_VALIDATION', 'False' if DEBUG else 'True') == 'True'
 DELIVERY_QUOTE_TIMEOUT_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TIMEOUT_SECONDS', '180'))
 DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS', '900'))
 
