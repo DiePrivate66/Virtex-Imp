@@ -6,7 +6,7 @@ declare global {
 
 function resolveApiBaseUrl(): string {
   if (typeof window === 'undefined') {
-    return 'https://REEMPLAZAR-CON-URL-REAL-DE-RAILWAY.up.railway.app/pedido/api';
+    return 'https://web-production-0bfcb.up.railway.app/pedido/api';
   }
 
   const runtimeOverride = window.__BOSCO_API_BASE_URL__?.trim();
@@ -18,7 +18,7 @@ function resolveApiBaseUrl(): string {
     return `${window.location.origin}/pedido/api`;
   }
 
-  return 'https://REEMPLAZAR-CON-URL-REAL-DE-RAILWAY.up.railway.app/pedido/api';
+  return 'https://web-production-0bfcb.up.railway.app/pedido/api';
 }
 
 export const environment = {
