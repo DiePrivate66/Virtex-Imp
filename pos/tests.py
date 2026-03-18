@@ -1,7 +1,9 @@
+import json
 from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
+from django.contrib.auth.models import Group
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.management import call_command
@@ -275,12 +277,65 @@ class IntegrationsHealthApiTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(payload.get('status'), 'ok')
-        self.assertIn('twilio', payload)
+        self.assertIn('whatsapp', payload)
         self.assertIn('delivery_quotes', payload)
         self.assertIn('print_jobs', payload)
         self.assertIn('async', payload)
         self.assertGreaterEqual(payload['delivery_quotes']['timed_out'], 1)
         self.assertGreaterEqual(payload['print_jobs']['failed'], 1)
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True, SECURE_SSL_REDIRECT=False)
+class PosPermissionsTests(TestCase):
+    def setUp(self):
+        self.admin_group = Group.objects.create(name='Admin')
+        self.user = User.objects.create_user(username='sin-grupo', password='1234')
+        self.allowed_user = User.objects.create_user(username='con-grupo', password='1234')
+        self.allowed_user.groups.add(self.admin_group)
+
+    def test_print_endpoint_requires_allowed_group(self):
+        venta = Venta.objects.create(
+            origen='POS',
+            tipo_pedido='SERVIR',
+            estado='COCINA',
+            metodo_pago='EFECTIVO',
+            total='10.00',
+        )
+
+        self.client.force_login(self.user)
+        forbidden = self.client.get(reverse('imprimir_ticket', args=[venta.id]))
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.force_login(self.allowed_user)
+        allowed = self.client.get(reverse('imprimir_ticket', args=[venta.id]))
+        self.assertEqual(allowed.status_code, 200)
+
+    def test_update_web_order_requires_allowed_group(self):
+        venta = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            total='12.00',
+        )
+
+        self.client.force_login(self.user)
+        forbidden = self.client.post(
+            reverse('api_actualizar_pedido'),
+            data=json.dumps({'pedido_id': venta.id, 'estado': 'COCINA'}),
+            content_type='application/json',
+        )
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.force_login(self.allowed_user)
+        allowed = self.client.post(
+            reverse('api_actualizar_pedido'),
+            data=json.dumps({'pedido_id': venta.id, 'estado': 'COCINA'}),
+            content_type='application/json',
+        )
+        self.assertEqual(allowed.status_code, 200)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'COCINA')
 
 
 @override_settings(
@@ -305,3 +360,58 @@ class OpsPreflightCommandTests(TestCase):
         self.assertIn('"summary"', output)
         self.assertIn('"checks"', output)
         self.assertIn('"database"', output)
+
+
+@override_settings(
+    WHATSAPP_PROVIDER='META',
+    META_WHATSAPP_VERIFY_TOKEN='verify-token-demo',
+    META_SIGNATURE_VALIDATION=False,
+    CELERY_TASK_ALWAYS_EAGER=True,
+    SECURE_SSL_REDIRECT=False,
+)
+class MetaWebhookTests(TestCase):
+    def test_meta_webhook_verification_get(self):
+        url = reverse('whatsapp_webhook')
+        resp = self.client.get(
+            url,
+            {
+                'hub.mode': 'subscribe',
+                'hub.verify_token': 'verify-token-demo',
+                'hub.challenge': '12345',
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content.decode(), '12345')
+
+    def test_meta_webhook_inbound_text(self):
+        url = reverse('whatsapp_webhook')
+        payload = {
+            'entry': [
+                {
+                    'changes': [
+                        {
+                            'value': {
+                                'messages': [
+                                    {
+                                        'from': '593991112233',
+                                        'id': 'wamid.TEST.001',
+                                        'type': 'text',
+                                        'text': {'body': 'hola'},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        resp = self.client.post(url, data=json.dumps(payload), content_type='application/json')
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(
+            WhatsAppMessageLog.objects.filter(
+                direction='IN',
+                telefono_e164='+593991112233',
+                message_sid='wamid.TEST.001',
+            ).exists()
+        )

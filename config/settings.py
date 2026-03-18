@@ -25,7 +25,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-2jt$!%j9*hebv+mb_ec=l^fx=&l$2u#n^%@z!rxkeu#38j=o*j')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+ON_RAILWAY = bool(os.environ.get('RAILWAY_ENVIRONMENT'))
+DEBUG = False if ON_RAILWAY else os.environ.get('DEBUG', 'True') == 'True'
 
 def split_env_list(value: str):
     return [item.strip() for item in value.split(',') if item.strip()]
@@ -50,6 +51,7 @@ CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBU
 
 if not DEBUG:
     # Seguridad HTTPS en Produccion
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

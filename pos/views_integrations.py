@@ -12,12 +12,19 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from .delivery_tokens import read_delivery_quote_token
 from .models import DeliveryQuote, PrintJob, Venta, WhatsAppConversation, WhatsAppMessageLog
 from .tasks import process_customer_confirmation, set_quote_and_notify
-from .whatsapp_service import build_twiml_response, touch_conversation_inbound, validate_twilio_signature
+from .whatsapp_service import (
+    build_twiml_response,
+    extract_inbound_whatsapp,
+    get_whatsapp_provider,
+    send_whatsapp_message,
+    touch_conversation_inbound,
+    validate_whatsapp_signature,
+)
 from .whatsapp_utils import normalize_phone_to_e164, parse_customer_confirmation
 
 
@@ -40,40 +47,60 @@ def _is_whatsapp_rate_limited(phone_e164: str) -> bool:
         return recent_count > max_events
 
 
+def _webhook_ack_message(phone_e164: str, body: str):
+    if get_whatsapp_provider() == 'META':
+        send_whatsapp_message(phone_e164, body)
+        return JsonResponse({'status': 'ok'})
+    return HttpResponse(build_twiml_response(body), content_type='application/xml')
+
+
 @csrf_exempt
-@require_POST
+@require_http_methods(['GET', 'POST'])
 def whatsapp_webhook(request):
-    if not validate_twilio_signature(request):
+    provider = get_whatsapp_provider()
+    if request.method == 'GET' and provider == 'META':
+        mode = request.GET.get('hub.mode', '')
+        verify_token = request.GET.get('hub.verify_token', '')
+        challenge = request.GET.get('hub.challenge', '')
+        if mode == 'subscribe' and verify_token and verify_token == settings.META_WHATSAPP_VERIFY_TOKEN:
+            return HttpResponse(challenge, status=200)
+        return JsonResponse({'status': 'error', 'mensaje': 'invalid verify token'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'mensaje': 'method not allowed'}, status=405)
+
+    if not validate_whatsapp_signature(request):
         return JsonResponse({'status': 'error', 'mensaje': 'invalid signature'}, status=403)
 
-    from_raw = request.POST.get('From', '')
-    body = (request.POST.get('Body', '') or '').strip()
-    button_text = (request.POST.get('ButtonText', '') or '').strip()
-    button_payload = (request.POST.get('ButtonPayload', '') or '').strip()
-    message_sid = request.POST.get('MessageSid')
+    inbound = extract_inbound_whatsapp(request)
+    if not inbound:
+        return JsonResponse({'status': 'ok', 'mensaje': 'no inbound message'})
+
+    from_raw = inbound.get('from_raw', '')
+    body = (inbound.get('body') or '').strip()
+    button_text = (inbound.get('button_text') or '').strip()
+    button_payload = (inbound.get('button_payload') or '').strip()
+    message_sid = inbound.get('message_sid')
 
     phone_e164 = normalize_phone_to_e164(from_raw)
 
     if message_sid and WhatsAppMessageLog.objects.filter(message_sid=message_sid).exists():
-        return HttpResponse(build_twiml_response('Mensaje ya recibido.'), content_type='application/xml')
+        return _webhook_ack_message(phone_e164, 'Mensaje ya recibido.')
 
     if _is_whatsapp_rate_limited(phone_e164):
         WhatsAppMessageLog.objects.create(
             direction='IN',
             telefono_e164=phone_e164,
-            payload_json={'reason': 'rate_limited', 'raw': request.POST.dict()},
+            payload_json={'reason': 'rate_limited', 'raw': inbound.get('raw_payload') or {}},
             status='rate_limited',
         )
-        return HttpResponse(
-            build_twiml_response('Demasiados mensajes en poco tiempo. Intenta en 1 minuto.'),
-            content_type='application/xml',
-        )
+        return _webhook_ack_message(phone_e164, 'Demasiados mensajes en poco tiempo. Intenta en 1 minuto.')
 
     WhatsAppMessageLog.objects.create(
         direction='IN',
         telefono_e164=phone_e164,
         message_sid=message_sid,
-        payload_json=request.POST.dict(),
+        payload_json=inbound.get('raw_payload') or {},
         status='received',
     )
 
@@ -87,15 +114,9 @@ def whatsapp_webhook(request):
             process_customer_confirmation.delay(conv.venta_id, decision)
             conv.estado_flujo = 'FINALIZADO'
             conv.save(update_fields=['estado_flujo'])
-            return HttpResponse(
-                build_twiml_response('Perfecto. Tu respuesta fue registrada.'),
-                content_type='application/xml',
-            )
+            return _webhook_ack_message(phone_e164, 'Perfecto. Tu respuesta fue registrada.')
 
-        return HttpResponse(
-            build_twiml_response('Por favor responde SI para confirmar o NO para cancelar.'),
-            content_type='application/xml',
-        )
+        return _webhook_ack_message(phone_e164, 'Por favor responde SI para confirmar o NO para cancelar.')
 
     conv.estado_flujo = 'LINK_ENVIADO'
     conv.save(update_fields=['estado_flujo'])
@@ -105,7 +126,7 @@ def whatsapp_webhook(request):
         f'Haz tu pedido aqui: {settings.PUBLIC_PWA_URL}\n\n'
         'Cuando termines te contactaremos por este chat para confirmar envio si aplica.'
     )
-    return HttpResponse(build_twiml_response(msg), content_type='application/xml')
+    return _webhook_ack_message(phone_e164, msg)
 
 
 @require_GET
@@ -323,6 +344,7 @@ def api_integrations_health(request):
         seconds=max(30, int(getattr(settings, 'PRINT_JOB_STUCK_SECONDS', 120)))
     )
 
+    provider = get_whatsapp_provider()
     last_inbound = (
         WhatsAppMessageLog.objects.filter(direction='IN').aggregate(last=Max('created_at')).get('last')
     )
@@ -349,11 +371,18 @@ def api_integrations_health(request):
 
     data = {
         'status': 'ok',
-        'twilio': {
+        'whatsapp': {
+            'provider': provider,
             'configured': bool(
-                settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_WHATSAPP_NUMBER
-            ),
-            'signature_validation': bool(settings.TWILIO_SIGNATURE_VALIDATION),
+                settings.META_WHATSAPP_TOKEN
+                and settings.META_WHATSAPP_PHONE_NUMBER_ID
+                and settings.META_WHATSAPP_VERIFY_TOKEN
+            )
+            if provider == 'META'
+            else bool(settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_WHATSAPP_NUMBER),
+            'signature_validation': bool(settings.META_SIGNATURE_VALIDATION)
+            if provider == 'META'
+            else bool(settings.TWILIO_SIGNATURE_VALIDATION),
             'last_inbound_at': last_inbound.isoformat() if last_inbound else None,
             'last_outbound_at': last_outbound.isoformat() if last_outbound else None,
             'rate_limited_last_hour': rate_limited_last_hour,

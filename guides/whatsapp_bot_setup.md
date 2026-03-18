@@ -2,6 +2,7 @@
 
 ## Variables de entorno
 
+- `WHATSAPP_PROVIDER` (`TWILIO` o `META`)
 - `PUBLIC_PWA_URL` (ej. `https://pwa.ramon.com`)
 - `PUBLIC_BACKEND_URL` (ej. `https://api.ramon.com`)
 - `TWILIO_ACCOUNT_SID`
@@ -9,6 +10,15 @@
 - `TWILIO_WHATSAPP_NUMBER` (ej. `whatsapp:+14155238886`)
 - `TWILIO_SIGNATURE_VALIDATION` (`True` en prod)
 - `WHATSAPP_WEBHOOK_VERIFY` (token interno opcional)
+
+Meta Cloud API (si `WHATSAPP_PROVIDER=META`):
+
+- `META_WHATSAPP_TOKEN`
+- `META_WHATSAPP_PHONE_NUMBER_ID`
+- `META_WHATSAPP_API_VERSION` (default `v22.0`)
+- `META_WHATSAPP_VERIFY_TOKEN`
+- `META_WHATSAPP_APP_SECRET` (opcional para firma)
+- `META_SIGNATURE_VALIDATION` (`True` en prod)
 - `REDIS_URL`
 - `CELERY_BROKER_URL` (opcional)
 - `CELERY_RESULT_BACKEND` (opcional)
@@ -21,6 +31,11 @@
 ## Endpoint webhook Twilio
 
 `POST /integrations/whatsapp/webhook/`
+
+## Endpoint webhook Meta
+
+- Verificacion: `GET /integrations/whatsapp/webhook/?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...`
+- Inbound: `POST /integrations/whatsapp/webhook/`
 
 ## Endpoint de salud operativa (cajero/admin autenticado)
 

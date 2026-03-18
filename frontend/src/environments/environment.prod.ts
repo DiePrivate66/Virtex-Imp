@@ -1,6 +1,27 @@
+declare global {
+  interface Window {
+    __BOSCO_API_BASE_URL__?: string;
+  }
+}
+
+function resolveApiBaseUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'https://REEMPLAZAR-CON-URL-REAL-DE-RAILWAY.up.railway.app/pedido/api';
+  }
+
+  const runtimeOverride = window.__BOSCO_API_BASE_URL__?.trim();
+  if (runtimeOverride) {
+    return runtimeOverride;
+  }
+
+  if (window.location.hostname.endsWith('.railway.app')) {
+    return `${window.location.origin}/pedido/api`;
+  }
+
+  return 'https://REEMPLAZAR-CON-URL-REAL-DE-RAILWAY.up.railway.app/pedido/api';
+}
+
 export const environment = {
   production: true,
-  // ⚠️  Reemplazar con tu dominio de Railway una vez creado el proyecto.
-  // Ejemplo: 'https://bosco-backend-production.railway.app/pedido/api'
-  apiBaseUrl: 'https://TU_PROYECTO.railway.app/pedido/api'
+  apiBaseUrl: resolveApiBaseUrl()
 };

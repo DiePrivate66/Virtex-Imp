@@ -38,6 +38,9 @@ def parse_customer_confirmation(text: str) -> Optional[str]:
         'acepto',
         'aceptar',
         '1',
+        'confirmar_si',
+        'confirmar_pedido',
+        'confirmar pedido',
     }
     no_tokens = {
         'no',
@@ -46,6 +49,9 @@ def parse_customer_confirmation(text: str) -> Optional[str]:
         'rechazo',
         'rechazar',
         '2',
+        'confirmar_no',
+        'cancelar_pedido',
+        'cancelar pedido',
     }
 
     if t in yes_tokens:

@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import timedelta
 from decimal import Decimal
 
@@ -11,6 +12,8 @@ from django.views.decorators.csrf import csrf_exempt
 from pos.models import CajaTurno, Categoria, Cliente, DetalleVenta, Producto, Venta, WhatsAppConversation
 from pos.tasks import process_delivery_quote_timeout, send_delivery_quote_requests
 from pos.whatsapp_utils import normalize_phone_to_e164
+
+logger = logging.getLogger(__name__)
 
 
 def esta_abierto():
@@ -215,8 +218,12 @@ def api_crear_pedido(request):
 
     except Producto.DoesNotExist:
         return JsonResponse({'status': 'error', 'mensaje': 'Producto no encontrado o no disponible'}, status=400)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'mensaje': str(e)}, status=500)
+    except Exception:
+        logger.exception('Error inesperado creando pedido web')
+        return JsonResponse(
+            {'status': 'error', 'mensaje': 'No se pudo crear el pedido. Intenta nuevamente.'},
+            status=500,
+        )
 
 
 def confirmacion_pedido(request, pedido_id):

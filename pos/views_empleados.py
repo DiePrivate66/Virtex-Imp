@@ -1,11 +1,15 @@
+import logging
+import json
+import re
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.utils import timezone
-import re
-import json
 from .models import Empleado, Asistencia
+
+logger = logging.getLogger(__name__)
 
 # --- VISTAS DE GESTIÓN (CRUD EMPLEADOS) ---
 def lista_empleados(request):
@@ -79,15 +83,30 @@ def guardar_empleado(request):
                     user.username = f"emp_{emp.pin}"
                     user.set_password(emp.pin)
                     user.save()
+
+                admin_group, _ = Group.objects.get_or_create(name='Admin')
+                cajero_group, _ = Group.objects.get_or_create(name='Cajero')
+                user.groups.remove(admin_group, cajero_group)
+                if emp.rol == 'ADMIN':
+                    user.groups.add(admin_group)
+                else:
+                    user.groups.add(cajero_group)
             else:
                 # Si cambiaron a un rol que no necesita usuario, desvinculamos
                 if emp.usuario:
+                    admin_group, _ = Group.objects.get_or_create(name='Admin')
+                    cajero_group, _ = Group.objects.get_or_create(name='Cajero')
+                    emp.usuario.groups.remove(admin_group, cajero_group)
                     emp.usuario = None
                     emp.save()
             
             return JsonResponse({'status': 'ok'})
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'mensaje': str(e)})
+        except Exception:
+            logger.exception('Error inesperado guardando empleado')
+            return JsonResponse(
+                {'status': 'error', 'mensaje': 'No se pudo guardar el empleado. Intenta nuevamente.'},
+                status=500,
+            )
 
     return JsonResponse({'status': 'error'}, status=400)
 

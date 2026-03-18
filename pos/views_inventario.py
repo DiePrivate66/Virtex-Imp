@@ -2,6 +2,7 @@
 Vistas para control de inventario y reporte PDF.
 """
 import json
+import logging
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
@@ -9,6 +10,8 @@ from django.http import JsonResponse, HttpResponse
 from django.db.models import Sum, F, Q
 from django.utils import timezone
 from .models import Producto, Inventario, MovimientoInventario
+
+logger = logging.getLogger(__name__)
 
 
 def panel_inventario(request):
@@ -88,8 +91,12 @@ def api_movimiento_inventario(request):
         })
     except Producto.DoesNotExist:
         return JsonResponse({'status': 'error', 'mensaje': 'Producto no encontrado'}, status=404)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'mensaje': str(e)}, status=500)
+    except Exception:
+        logger.exception('Error inesperado registrando movimiento de inventario')
+        return JsonResponse(
+            {'status': 'error', 'mensaje': 'No se pudo registrar el movimiento. Intenta nuevamente.'},
+            status=500,
+        )
 
 
 def api_actualizar_minimo(request):

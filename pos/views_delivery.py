@@ -1,4 +1,5 @@
 import json
+import logging
 from decimal import Decimal, InvalidOperation
 
 from django.http import JsonResponse
@@ -7,6 +8,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import Empleado, Venta
 from .tasks import set_quote_and_notify
+
+logger = logging.getLogger(__name__)
 
 
 def delivery_portal(request):
@@ -49,7 +52,11 @@ def api_fijar_precio(request):
         return JsonResponse({'status': 'ok'})
     except Venta.DoesNotExist:
         return JsonResponse({'status': 'error', 'mensaje': 'Pedido no encontrado'})
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'mensaje': str(e)})
+    except Exception:
+        logger.exception('Error inesperado fijando precio de delivery')
+        return JsonResponse(
+            {'status': 'error', 'mensaje': 'No se pudo fijar el precio del delivery. Intenta nuevamente.'},
+            status=500,
+        )
 
 

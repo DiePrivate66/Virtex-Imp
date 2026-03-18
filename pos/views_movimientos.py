@@ -2,6 +2,7 @@
 Vistas para movimientos de caja (ingresos/gastos) y reporte para contadora.
 """
 import json
+import logging
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
@@ -9,6 +10,8 @@ from django.http import JsonResponse
 from django.db.models import Sum, Q
 from django.utils import timezone
 from .models import CajaTurno, MovimientoCaja
+
+logger = logging.getLogger(__name__)
 
 
 def panel_movimientos(request):
@@ -74,8 +77,12 @@ def api_registrar_movimiento(request):
             'mensaje': f'{"Ingreso" if tipo == "INGRESO" else "Egreso"} de ${monto} registrado',
             'id': mov.id,
         })
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'mensaje': str(e)}, status=500)
+    except Exception:
+        logger.exception('Error inesperado registrando movimiento de caja')
+        return JsonResponse(
+            {'status': 'error', 'mensaje': 'No se pudo registrar el movimiento. Intenta nuevamente.'},
+            status=500,
+        )
 
 
 def api_eliminar_movimiento(request):
