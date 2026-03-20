@@ -6,11 +6,11 @@
 
     <!-- HEADER -->
     <header class="sticky top-0 z-40 bg-black border-b border-gray-800 px-4 py-3 relative">
-        <a href="/" class="absolute left-4 top-1/2 -translate-y-1/2 bg-gray-800 text-gray-300 text-xs font-bold px-3 py-2 rounded-lg hover:bg-gray-700">â† POS</a>
+        <a href="/" class="absolute left-4 top-1/2 -translate-y-1/2 bg-gray-800 text-gray-300 text-xs font-bold px-3 py-2 rounded-lg hover:bg-gray-700"> POS</a>
         <span id="pedido-count" class="absolute right-4 top-1/2 -translate-y-1/2 bg-bosco-orange text-black font-black px-3 py-1 rounded-full text-sm">{{ pedidos|length }}</span>
         <div class="text-center">
-            <h1 class="text-xl font-black text-white uppercase">ðŸ“± PEDIDOS WEB</h1>
-            <p class="text-[10px] text-gray-500">GestiÃ³n de pedidos desde la app cliente</p>
+            <h1 class="text-xl font-black text-white uppercase">📱 PEDIDOS WEB</h1>
+            <p class="text-[10px] text-gray-500">Gestión de pedidos desde la app cliente</p>
         </div>
     </header>
 
@@ -23,16 +23,16 @@
             COTIZACION <span id="badge-cotizacion-timeout" class="{% if timed_out_quote_count > 0 %}ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px]{% else %}hidden{% endif %}">{{ timed_out_quote_count|default:0 }}</span>
         </button>
         <button onclick="filtrarEstado(this,'PENDIENTE')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-orange-400 border border-gray-700">
-            â³ PENDIENTE
+             PENDIENTE
         </button>
         <button onclick="filtrarEstado(this,'COCINA')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-red-400 border border-gray-700">
-            ðŸ”¥ COCINA
+            🔥 COCINA
         </button>
         <button onclick="filtrarEstado(this,'EN_CAMINO')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-blue-400 border border-gray-700">
-            ðŸ›µ EN CAMINO
+            🛵 EN CAMINO
         </button>
         <button onclick="filtrarEstado(this,'LISTO')" class="filtro-btn whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-gray text-green-400 border border-gray-700">
-            âœ… LISTO
+            ✅ LISTO
         </button>
     </div>
 
@@ -88,22 +88,22 @@
                 <div class="bg-[#1a1a1a] p-3 rounded-lg space-y-1.5">
                     <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider">DATOS DEL CLIENTE</p>
                     <div class="flex items-center justify-between">
-                        <span class="text-white font-black text-sm uppercase">ðŸ‘¤ {{ p.cliente_nombre }}</span>
+                        <span class="text-white font-black text-sm uppercase">👤 {{ p.cliente_nombre }}</span>
                         {% if p.telefono_cliente %}
                         <a href="https://wa.me/593{{ p.telefono_cliente|slice:'1:' }}" target="_blank" 
                            class="bg-green-600 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
-                            ðŸ“± WhatsApp
+                            📱 WhatsApp
                         </a>
                         {% endif %}
                     </div>
                     {% if p.telefono_cliente %}
-                    <p class="text-gray-400 text-xs">ðŸ“ž {{ p.telefono_cliente }}</p>
+                    <p class="text-gray-400 text-xs">📞 {{ p.telefono_cliente }}</p>
                     {% endif %}
                     {% if p.cliente and p.cliente.cedula_ruc %}
-                    <p class="text-gray-400 text-xs">ðŸªª CI/RUC: {{ p.cliente.cedula_ruc }}</p>
+                    <p class="text-gray-400 text-xs">🪪 CI/RUC: {{ p.cliente.cedula_ruc }}</p>
                     {% endif %}
                     {% if p.cliente and p.cliente.email %}
-                    <p class="text-gray-400 text-xs">ðŸ“§ {{ p.cliente.email }}</p>
+                    <p class="text-gray-400 text-xs">📧 {{ p.cliente.email }}</p>
                     {% endif %}
                 </div>
 
@@ -114,36 +114,36 @@
                         {% elif p.tipo_pedido == 'LLEVAR' %}bg-purple-900/30 text-purple-400 border border-purple-800/50
                         {% else %}bg-gray-700 text-gray-400 border border-gray-600
                         {% endif %}">
-                        {% if p.tipo_pedido == 'DOMICILIO' %}ðŸ›µ DOMICILIO{% elif p.tipo_pedido == 'LLEVAR' %}ðŸ“¦ RETIRO{% else %}ðŸ½ï¸ SERVIR{% endif %}
+                        {% if p.tipo_pedido == 'DOMICILIO' %}🛵 DOMICILIO{% elif p.tipo_pedido == 'LLEVAR' %}📦 RETIRO{% else %} SERVIR{% endif %}
                     </span>
                     <span class="text-[10px] font-black px-2 py-1 rounded
                         {% if p.metodo_pago == 'EFECTIVO' %}bg-green-900/30 text-green-400 border border-green-800/50
                         {% elif p.metodo_pago == 'TRANSFERENCIA' %}bg-blue-900/30 text-blue-400 border border-blue-800/50
                         {% else %}bg-yellow-900/30 text-yellow-400 border border-yellow-800/50
                         {% endif %}">
-                        {% if p.metodo_pago == 'EFECTIVO' %}ðŸ’µ EFECTIVO{% elif p.metodo_pago == 'TRANSFERENCIA' %}ðŸ“± TRANSFERENCIA{% else %}ðŸ’³ TARJETA{% endif %}
+                        {% if p.metodo_pago == 'EFECTIVO' %}💵 EFECTIVO{% elif p.metodo_pago == 'TRANSFERENCIA' %}📱 TRANSFERENCIA{% else %}💳 TARJETA{% endif %}
                     </span>
                 </div>
 
-                <!-- DirecciÃ³n + UbicaciÃ³n GPS -->
+                <!-- Dirección + Ubicación GPS -->
                 {% if p.tipo_pedido == 'DOMICILIO' %}
                 <div class="bg-[#1a1a1a] p-3 rounded-lg space-y-2">
-                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider">ðŸ“ ENTREGA</p>
+                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider"> ENTREGA</p>
                     {% if p.direccion_envio %}
                     <p class="text-gray-300 text-xs leading-relaxed">{{ p.direccion_envio }}</p>
                     {% endif %}
                     {% if p.ubicacion_lat and p.ubicacion_lng %}
                     <a href="https://www.google.com/maps?q={{ p.ubicacion_lat }},{{ p.ubicacion_lng }}" target="_blank"
                        class="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-blue-500 transition-colors">
-                        ðŸ—ºï¸ VER EN GOOGLE MAPS
+                        🗺 VER EN GOOGLE MAPS
                     </a>
-                    <!-- BotÃ³n copiar ubicaciÃ³n para reenviar a delivery -->
+                    <!-- Botón copiar ubicación para reenviar a delivery -->
                     <button onclick="copiarUbicacion('{{ p.ubicacion_lat }}', '{{ p.ubicacion_lng }}', '{{ p.direccion_envio|escapejs }}')"
                         class="inline-flex items-center gap-1 bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-green-500 transition-colors ml-1">
-                        ðŸ“‹ COPIAR PARA DELIVERY
+                        📋 COPIAR PARA DELIVERY
                     </button>
                     {% else %}
-                    <p class="text-yellow-500 text-[10px] font-bold">âš ï¸ Cliente no compartiÃ³ GPS</p>
+                    <p class="text-yellow-500 text-[10px] font-bold">⚠ Cliente no compartió GPS</p>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -151,27 +151,27 @@
                 <!-- Comprobante de transferencia -->
                 {% if p.metodo_pago == 'TRANSFERENCIA' %}
                 <div class="bg-[#1a1a1a] p-3 rounded-lg">
-                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider mb-1">ðŸ’³ COMPROBANTE</p>
+                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider mb-1">💳 COMPROBANTE</p>
                     {% if p.comprobante_foto %}
                     <a href="{{ p.comprobante_foto.url }}" target="_blank" class="bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded inline-flex items-center gap-1 hover:bg-blue-500">
-                        ðŸ“Ž VER COMPROBANTE
+                        📎 VER COMPROBANTE
                     </a>
                     {% else %}
-                    <p class="text-red-400 text-[10px] font-bold">âš ï¸ SIN COMPROBANTE â€” verificar con el cliente</p>
+                    <p class="text-red-400 text-[10px] font-bold">⚠ SIN COMPROBANTE — verificar con el cliente</p>
                     {% endif %}
                 </div>
                 {% endif %}
 
                 <!-- Items del pedido -->
                 <div class="space-y-1 border-t border-gray-700 pt-3 mt-2">
-                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider mb-1">ðŸ§¾ DETALLE DEL PEDIDO</p>
+                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider mb-1">🧾 DETALLE DEL PEDIDO</p>
                     {% for item in p.detalles.all %}
                     <div class="flex justify-between text-xs py-0.5">
                         <div>
-                            <span class="text-white font-bold">{{ item.cantidad }}Ã—</span> 
+                            <span class="text-white font-bold">{{ item.cantidad }}×</span> 
                             <span class="text-gray-300 ml-1">{{ item.producto.nombre }}</span>
                             {% if item.nota %}
-                                <span class="text-yellow-400 text-[10px] font-bold block ml-5">ðŸ“ {{ item.nota }}</span>
+                                <span class="text-yellow-400 text-[10px] font-bold block ml-5"> {{ item.nota }}</span>
                             {% endif %}
                         </div>
                         <span class="text-bosco-orange font-bold">${{ item.subtotal|floatformat:2 }}</span>
@@ -187,7 +187,7 @@
                     </div>
                     {% if p.tipo_pedido == 'DOMICILIO' %}
                     <div class="flex justify-between text-xs items-center">
-                        <span class="text-gray-500">ðŸ›µ EnvÃ­o (cobra delivery)</span>
+                        <span class="text-gray-500">🛵 Envío (cobra delivery)</span>
                         <div class="flex items-center gap-1">
                             <span class="text-gray-400">$</span>
                             <input type="number" step="0.50" min="0" value="{{ p.costo_envio|floatformat:2 }}"
@@ -212,74 +212,74 @@
                     </div>
                 </div>
 
-                <!-- BOTONES DE ACCIÃ“N -->
+                <!-- BOTONES DE ACCIÓN -->
                 <div class="flex gap-2 mt-2">
                     {% if p.estado == 'PENDIENTE_COTIZACION' or p.estado == 'PENDIENTE' %}
                         <button onclick="aceptarPedidoRapido({{ p.id }}, '{{ p.metodo_pago }}')" 
                             class="flex-1 bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl text-sm uppercase active:scale-95 transition-all shadow-lg hover:shadow-green-900/50 flex items-center justify-center gap-2 animate-pulse">
-                            âš¡ ACEPTAR PEDIDO
+                            ⚡ ACEPTAR PEDIDO
                         </button>
                     {% elif p.estado == 'COCINA' %}
                         {% if p.tipo_pedido == 'DOMICILIO' %}
                         <button onclick="cambiarEstado({{ p.id }}, 'EN_CAMINO')" 
                             class="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
-                            ðŸ›µ EN CAMINO
+                            🛵 EN CAMINO
                         </button>
                         {% endif %}
                         <button onclick="cambiarEstado({{ p.id }}, 'LISTO')" 
                             class="flex-1 bg-green-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
-                            âœ… LISTO
+                            ✅ LISTO
                         </button>
                         <button onclick="imprimirComanda({{ p.id }})"
                             class="bg-gray-700 text-white font-bold px-4 py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform">
-                            ðŸ–¨ï¸
+                            🖨
                         </button>
                     {% elif p.estado == 'EN_CAMINO' %}
                         <button onclick="cambiarEstado({{ p.id }}, 'LISTO')" 
                             class="flex-1 bg-green-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
-                            âœ… ENTREGADO
+                            ✅ ENTREGADO
                         </button>
                     {% elif p.estado == 'LISTO' %}
-                        <span class="flex-1 text-center text-green-400 font-bold text-xs py-3">âœ… COMPLETADO</span>
+                        <span class="flex-1 text-center text-green-400 font-bold text-xs py-3">✅ COMPLETADO</span>
                     {% endif %}
                     
                     {% if p.estado != 'LISTO' and p.estado != 'CANCELADO' %}
                     <button onclick="cambiarEstado({{ p.id }}, 'CANCELADO')" 
                         class="bg-gray-800 text-red-500 font-bold px-3 py-3 rounded-lg text-[10px] active:scale-95 transition-transform border border-gray-700"
                         title="Cancelar pedido">
-                        âœ•
+                        ✕
                     </button>
                     {% endif %}
                 </div>
 
-                <!-- BOTÃ“N WHATSAPP SHARE -->
+                <!-- BOTÓN WHATSAPP SHARE -->
                 {% if p.telefono_cliente %}
                 <button onclick="compartirWhatsApp('{{ p.telefono_cliente|escapejs }}', {{ p.id }}, '{{ p.cliente_nombre|escapejs }}', '{{ p.total|floatformat:2 }}', '{{ p.get_estado_display|escapejs }}', '{{ p.tipo_pedido }}', '{{ p.direccion_envio|escapejs }}')"
                     class="w-full mt-2 bg-green-700 hover:bg-green-600 text-white font-bold py-2.5 rounded-lg text-xs uppercase active:scale-95 transition-all flex items-center justify-center gap-2">
-                    ðŸ“² COMPARTIR PEDIDO POR WHATSAPP
+                    📲 COMPARTIR PEDIDO POR WHATSAPP
                 </button>
                 {% endif %}
             </div>
         </div>
         {% empty %}
         <div class="col-span-full text-center py-20">
-            <span class="text-6xl">ðŸ“­</span>
+            <span class="text-6xl">📭</span>
             <p class="text-gray-500 font-bold mt-4 text-lg">NO HAY PEDIDOS WEB</p>
-            <p class="text-gray-600 text-sm mt-2">Cuando un cliente ordene desde la app, aparecerÃ¡ aquÃ­</p>
+            <p class="text-gray-600 text-sm mt-2">Cuando un cliente ordene desde la app, aparecerá aquí</p>
         </div>
         {% endfor %}
     </div>
 
     <!-- Footer -->
     <div class="text-center py-6 text-gray-700 text-[10px] font-bold tracking-widest">
-        Powered by Ãœ Systems
+        Powered by Ü Systems
     </div>
 </div>
 
-<!-- NotificaciÃ³n visual de nuevo pedido (sin sonido) -->
+<!-- Notificación visual de nuevo pedido (sin sonido) -->
 <div id="notif-nuevo" class="hidden fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-red-600 via-orange-500 to-red-600 p-4 text-center animate-pulse shadow-2xl">
-    <p class="text-white text-xl font-black uppercase tracking-wider">ðŸ”” Â¡NUEVO PEDIDO WEB!</p>
-    <p class="text-white/80 text-sm font-bold">La pÃ¡gina se actualizarÃ¡ automÃ¡ticamente...</p>
+    <p class="text-white text-xl font-black uppercase tracking-wider">🔔 ¡NUEVO PEDIDO WEB!</p>
+    <p class="text-white/80 text-sm font-bold">La página se actualizará automáticamente...</p>
 </div>
 
 <style>
@@ -304,7 +304,7 @@
     let lastTimeoutQuoteCount = {{ timed_out_quote_count|default:0 }};
     let originalTitle = document.title;
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• FILTRAR â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  FILTRAR 
     function filtrarEstado(btn, estado) {
         document.querySelectorAll('.filtro-btn').forEach(b => {
             b.classList.remove('bg-bosco-orange', 'text-black');
@@ -318,15 +318,15 @@
         });
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• CAMBIAR ESTADO â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  CAMBIAR ESTADO 
     function cambiarEstado(pedidoId, nuevoEstado) {
         const msgs = {
-            'COCINA': 'ðŸ”¥ Â¿Enviar pedido #' + pedidoId + ' a COCINA?',
-            'EN_CAMINO': 'ðŸ›µ Â¿Marcar pedido #' + pedidoId + ' como EN CAMINO?',
-            'LISTO': 'âœ… Â¿Marcar pedido #' + pedidoId + ' como ENTREGADO?',
-            'CANCELADO': 'âš ï¸ Â¿CANCELAR el pedido #' + pedidoId + '? Esta acciÃ³n no se puede deshacer.',
+            'COCINA': '🔥 ¿Enviar pedido #' + pedidoId + ' a COCINA?',
+            'EN_CAMINO': '🛵 ¿Marcar pedido #' + pedidoId + ' como EN CAMINO?',
+            'LISTO': '✅ ¿Marcar pedido #' + pedidoId + ' como ENTREGADO?',
+            'CANCELADO': '⚠ ¿CANCELAR el pedido #' + pedidoId + '? Esta acción no se puede deshacer.',
         };
-        if (!confirm(msgs[nuevoEstado] || 'Â¿Confirmar cambio?')) return;
+        if (!confirm(msgs[nuevoEstado] || '¿Confirmar cambio?')) return;
 
         fetch('/api/actualizar-pedido/', {
             method: 'POST',
@@ -344,7 +344,7 @@
         });
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• ACTUALIZAR ENVÃO â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  ACTUALIZAR ENVO 
     function actualizarEnvio(pedidoId, valor) {
         fetch('/api/actualizar-pedido/', {
             method: 'POST',
@@ -355,36 +355,36 @@
         .then(data => { if (data.status !== 'ok') alert('Error: ' + data.mensaje); });
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• COPIAR UBICACIÃ“N PARA DELIVERY â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  COPIAR UBICACIÓN PARA DELIVERY 
     function copiarUbicacion(lat, lng, dir) {
-        const texto = `ðŸ“ PEDIDO PARA DELIVERY\nDirecciÃ³n: ${dir}\nUbicaciÃ³n: https://www.google.com/maps?q=${lat},${lng}`;
+        const texto = ` PEDIDO PARA DELIVERY\nDirección: ${dir}\nUbicación: https://www.google.com/maps?q=${lat},${lng}`;
         navigator.clipboard.writeText(texto).then(() => {
-            alert('âœ… UbicaciÃ³n copiada â€” pÃ©gala en el grupo de delivery por WhatsApp');
+            alert('✅ Ubicación copiada — pégala en el grupo de delivery por WhatsApp');
         }).catch(() => {
             // Fallback
             prompt('Copia este texto:', texto);
         });
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• IMPRIMIR COMANDA â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  IMPRIMIR COMANDA 
     function imprimirComanda(pedidoId) {
         const w = window.open('/imprimir/venta/' + pedidoId + '/', '_blank', 'width=350,height=600');
-        // No cerramos automÃ¡ticamente para dar tiempo a imprimir
+        // No cerramos automáticamente para dar tiempo a imprimir
     }
     
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• IMPRIMIR ETIQUETA DELIVERY â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  IMPRIMIR ETIQUETA DELIVERY 
     function imprimirEtiqueta(pedidoId) {
         const w = window.open('/imprimir/etiqueta-delivery/' + pedidoId + '/', '_blank', 'width=350,height=400');
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• âš¡ ONE-CLICK ACCEPT â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  ⚡ ONE-CLICK ACCEPT 
     function aceptarPedidoRapido(pedidoId, metodoPago) {
-        let confirmMsg = 'âš¡ Â¿ACEPTAR PEDIDO RAPIDO?\n\n1. Enviar a Cocina\n2. Imprimir Comanda\n3. Imprimir Etiqueta Delivery';
+        let confirmMsg = '⚡ ¿ACEPTAR PEDIDO RAPIDO?\n\n1. Enviar a Cocina\n2. Imprimir Comanda\n3. Imprimir Etiqueta Delivery';
         
         if (metodoPago === 'TRANSFERENCIA') {
-            confirmMsg = 'âš ï¸ ALERTA DE SEGURIDAD âš ï¸\n\nEste pedido es por TRANSFERENCIA.\n\nÂ¿YA VERIFICASTE QUE EL DINERO ESTÃ‰ EN LA CUENTA BANCARIA?\n\nSi no has verificado, presiona CANCELAR.';
+            confirmMsg = '⚠ ALERTA DE SEGURIDAD ⚠\n\nEste pedido es por TRANSFERENCIA.\n\n¿YA VERIFICASTE QUE EL DINERO ESTÉ EN LA CUENTA BANCARIA?\n\nSi no has verificado, presiona CANCELAR.';
         } else if (metodoPago === 'TARJETA') {
-            confirmMsg = 'ðŸ’³ PAGO ONLINE (PAYPHONE/LINK)\n\nÂ¿Ya confirmaste que el pago llego a la APP?\n\nNO envÃ­es el pedido hasta confirmar el pago.';
+            confirmMsg = '💳 PAGO ONLINE (PAYPHONE/LINK)\n\n¿Ya confirmaste que el pago llego a la APP?\n\nNO envíes el pedido hasta confirmar el pago.';
         }
 
         if (!confirm(confirmMsg)) return;
@@ -416,45 +416,45 @@
         });
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• COMPARTIR COMPROBANTE â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  COMPARTIR COMPROBANTE 
     function enviarComprobanteWA(id, url, total) {
         const fullUrl = window.location.origin + url;
-        const msg = `ðŸ§¾ *COMPROBANTE PEDIDO #${id}*\nðŸ’° Total: $${total}\nðŸ“Ž Ver foto: ${fullUrl}`;
+        const msg = `🧾 *COMPROBANTE PEDIDO #${id}*\n💰 Total: $${total}\n📎 Ver foto: ${fullUrl}`;
         window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• COMPARTIR POR WHATSAPP â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  COMPARTIR POR WHATSAPP 
     function compartirWhatsApp(telefono, pedidoId, cliente, total, estado, tipo, direccion) {
-        // Limpiar telÃ©fono (quitar 0 inicial y agregar cÃ³digo Ecuador)
+        // Limpiar teléfono (quitar 0 inicial y agregar código Ecuador)
         let tel = telefono.replace(/\s/g, '').replace(/^0/, '');
         if (!tel.startsWith('593')) tel = '593' + tel;
         
         // Construir mensaje
-        let msg = `ðŸ— *RAMÃ“N by Bosco*\n`;
-        msg += `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n`;
-        msg += `ðŸ“‹ *Pedido #${pedidoId}*\n`;
-        msg += `ðŸ‘¤ ${cliente}\n`;
-        msg += `ðŸ“Œ Estado: ${estado}\n`;
+        let msg = ` *RAMÓN by Bosco*\n`;
+        msg += `\n`;
+        msg += `📋 *Pedido #${pedidoId}*\n`;
+        msg += `👤 ${cliente}\n`;
+        msg += `📌 Estado: ${estado}\n`;
         
         if (tipo === 'DOMICILIO' && direccion) {
-            msg += `ðŸ“ Enviar a: ${direccion}\n`;
+            msg += ` Enviar a: ${direccion}\n`;
         } else if (tipo === 'LLEVAR') {
-            msg += `ðŸ“¦ Para retirar en local\n`;
+            msg += `📦 Para retirar en local\n`;
         }
         
-        msg += `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n`;
-        msg += `ðŸ’° *Total: $${total}*\n\n`;
-        msg += `Â¡Gracias por tu pedido! ðŸ™Œ`;
+        msg += `\n`;
+        msg += `💰 *Total: $${total}*\n\n`;
+        msg += `¡Gracias por tu pedido! 🙌`;
         
         // Abrir WhatsApp
         const url = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
         window.open(url, '_blank');
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• SONIDO DE ALERTA â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  SONIDO DE ALERTA 
     const audioAlerta = new Audio('https://www.soundjay.com/buttons/beeps/beep-07.mp3');
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â• AUTO-REFRESH CON NOTIFICACIÃ“N VISUAL Y SONORA (10s) â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  AUTO-REFRESH CON NOTIFICACIÓN VISUAL Y SONORA (10s) 
     setInterval(function() {
         fetch('/api/pedidos-web/')
         .then(r => r.json())
@@ -479,22 +479,22 @@
             lastTimeoutQuoteCount = timeoutCount;
             if (data.count > lastCount) {
                 // 1. SONIDO
-                audioAlerta.play().catch(e => console.log('InteracciÃ³n requerida para audio', e));
+                audioAlerta.play().catch(e => console.log('Interacción requerida para audio', e));
                 
                 // 2. VISUAL (Sin sonido)
                 document.getElementById('notif-nuevo').classList.remove('hidden');
                 document.getElementById('pedido-count').classList.add('notif-pulse');
                 document.querySelector('header').classList.add('header-glow');
-                document.title = 'ðŸ”´ Â¡NUEVO PEDIDO! â€” RAMÃ“N';
+                document.title = '🔴 ¡NUEVO PEDIDO! — RAMÓN';
                 
                 // 3. NAVEGADOR
                 if (Notification.permission === 'granted') {
-                    new Notification('ðŸ”” Nuevo pedido web', { body: 'Un cliente ha realizado un pedido', icon: 'ðŸ“±' });
+                    new Notification('🔔 Nuevo pedido web', { body: 'Un cliente ha realizado un pedido', icon: '📱' });
                 } else if (Notification.permission !== 'denied') {
                     Notification.requestPermission();
                 }
                 
-                // Recargar despuÃ©s de 2 segundos para mostrar el badge
+                // Recargar después de 2 segundos para mostrar el badge
                 setTimeout(() => { location.reload(); }, 2000);
             }
             lastCount = data.count;
@@ -502,12 +502,12 @@
         .catch(() => {});
     }, 10000);
 
-    // Pedir permisos de notificaciÃ³n al cargar
+    // Pedir permisos de notificación al cargar
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
     }
 
-    // ══════════════ AUTO-IMPRESION DESDE COLA ══════════════
+    // ============== AUTO-IMPRESION DESDE COLA ==============
     let autoPrintBusy = false;
 
     function imprimirJobEnIframe(job) {
