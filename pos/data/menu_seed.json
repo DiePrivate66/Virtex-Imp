@@ -1,0 +1,43 @@
+[
+  {
+    "categoria": "POLLO",
+    "icono": "",
+    "productos": [
+      {"nombre": "ALITAS X8", "precio": "10.00", "activo": true},
+      {"nombre": "BONELESS 7 UNIDADES", "precio": "7.50", "activo": true},
+      {"nombre": "BONELESS 14 UNIDADES", "precio": "14.00", "activo": true},
+      {"nombre": "TENDERS 4 UNIDADES", "precio": "8.50", "activo": true},
+      {"nombre": "TENDERS 8 UNIDADES", "precio": "16.00", "activo": true},
+      {"nombre": "SANDWICH SIMPLE", "precio": "5.00", "activo": true},
+      {"nombre": "SANDWICH DOBLE", "precio": "8.00", "activo": true},
+      {"nombre": "WRAP-MON", "precio": "7.00", "activo": true}
+    ]
+  },
+  {
+    "categoria": "BEBIDAS",
+    "icono": "",
+    "productos": [
+      {"nombre": "AGUA", "precio": "1.50", "activo": true},
+      {"nombre": "AGUA CON GAS", "precio": "1.50", "activo": true},
+      {"nombre": "GASEOSAS CONVENCIONALES", "precio": "1.75", "activo": true},
+      {"nombre": "FUZE TEA", "precio": "1.75", "activo": true},
+      {"nombre": "DR. PEPPER", "precio": "3.50", "activo": true},
+      {"nombre": "MOUNTAIN DEW", "precio": "3.50", "activo": true},
+      {"nombre": "COCA-COLA DE VAINILLA", "precio": "3.50", "activo": true}
+    ]
+  },
+  {
+    "categoria": "EXTRAS",
+    "icono": "",
+    "productos": [
+      {"nombre": "PAN RAMON", "precio": "2.50", "activo": true},
+      {"nombre": "PAPAS FRITAS", "precio": "3.00", "activo": true},
+      {"nombre": "EXTRA SALSA DE TEMPORADA", "precio": "1.00", "activo": true},
+      {"nombre": "EXTRA SALSA PREMIUM", "precio": "1.25", "activo": true},
+      {"nombre": "MOZARELLA STICK", "precio": "5.00", "activo": true},
+      {"nombre": "PICKLES X5", "precio": "1.00", "activo": true},
+      {"nombre": "JALAPE\u00d1O X5", "precio": "1.00", "activo": true},
+      {"nombre": "CHEESE PAPITAS", "precio": "1.75", "activo": true}
+    ]
+  }
+]
