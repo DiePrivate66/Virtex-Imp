@@ -1,6 +1,6 @@
 ﻿import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { CarritoItem, CategoriaConProductos, CrearPedidoPayload, Producto } from '../../models/pedido.models';
@@ -16,7 +16,7 @@ type MetodoPago = 'EFECTIVO' | 'TRANSFERENCIA';
   templateUrl: './customer-menu.html',
   styleUrl: './customer-menu.css'
 })
-export class CustomerMenuComponent implements OnInit {
+export class CustomerMenuComponent implements OnInit, OnDestroy {
   private readonly preferredGpsAccuracyMeters = 120;
   private readonly maxGpsAccuracyMeters = 350;
   private readonly fabSwipeThreshold = 70;
@@ -58,6 +58,11 @@ export class CustomerMenuComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadCatalog();
+  }
+
+  ngOnDestroy(): void {
+    this.setBodyScrollLock(false);
+    this.clearCancelFabTimer();
   }
 
   get productosFiltrados(): Producto[] {
@@ -102,11 +107,14 @@ export class CustomerMenuComponent implements OnInit {
       this.cart.clear();
       this.cancelFabMode = false;
       this.clearCancelFabTimer();
+      this.resetFormularioPedido();
       return;
     }
 
     this.checkoutOpen = true;
+    this.setBodyScrollLock(true);
     this.formError = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     if (this.tipoPedido === 'DOMICILIO' && (this.gpsLat == null || this.gpsLng == null)) {
       this.obtenerGps();
     }
@@ -114,7 +122,21 @@ export class CustomerMenuComponent implements OnInit {
 
   cerrarCheckout(): void {
     this.checkoutOpen = false;
+    this.setBodyScrollLock(false);
     this.formError = '';
+  }
+
+  cancelarPedidoActual(): void {
+    if (!this.cart.count()) {
+      this.cerrarCheckout();
+      return;
+    }
+
+    const confirmar = window.confirm('¿Cancelar este pedido y vaciar el carrito?');
+    if (!confirmar) return;
+
+    this.cart.clear();
+    this.resetFormularioPedido();
   }
 
   onFabTouchStart(event: TouchEvent): void {
@@ -278,14 +300,7 @@ export class CustomerMenuComponent implements OnInit {
         }
 
         this.cart.clear();
-        this.checkoutOpen = false;
-        this.comprobanteFile = null;
-        this.gpsLat = null;
-        this.gpsLng = null;
-        this.gpsAccuracy = null;
-        this.gpsEstado = 'none';
-        this.gpsError = '';
-        this.gpsWarning = '';
+        this.resetFormularioPedido();
         this.cdr.detectChanges();
         this.router.navigate(['/confirmacion', resp.pedido_id]);
       },
@@ -339,6 +354,31 @@ export class CustomerMenuComponent implements OnInit {
     if (this.resetCancelFabTimer == null) return;
     window.clearTimeout(this.resetCancelFabTimer);
     this.resetCancelFabTimer = null;
+  }
+
+  private resetFormularioPedido(): void {
+    this.checkoutOpen = false;
+    this.formError = '';
+    this.comprobanteFile = null;
+    this.gpsLat = null;
+    this.gpsLng = null;
+    this.gpsAccuracy = null;
+    this.gpsEstado = 'none';
+    this.gpsError = '';
+    this.gpsWarning = '';
+    this.nombre = '';
+    this.telefono = '';
+    this.cedula = '';
+    this.tipoPedido = 'DOMICILIO';
+    this.metodoPago = 'EFECTIVO';
+    this.cancelFabMode = false;
+    this.setBodyScrollLock(false);
+    this.clearCancelFabTimer();
+  }
+
+  private setBodyScrollLock(locked: boolean): void {
+    document.body.style.overflow = locked ? 'hidden' : '';
+    document.documentElement.style.overflow = locked ? 'hidden' : '';
   }
 
 }

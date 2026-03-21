@@ -48,7 +48,10 @@
   <section class="checkout" *ngIf="checkoutOpen">
     <div class="checkout-header">
       <h2>TU PEDIDO</h2>
-      <button class="link" (click)="cerrarCheckout()">Cerrar</button>
+      <div class="checkout-actions">
+        <button class="link danger" (click)="cancelarPedidoActual()">Cancelar pedido</button>
+        <button class="link" (click)="cerrarCheckout()">Cerrar</button>
+      </div>
     </div>
 
     <div class="cart-items">
