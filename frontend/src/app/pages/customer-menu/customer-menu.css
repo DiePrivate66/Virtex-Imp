@@ -68,6 +68,10 @@
   color: #6ee7b7;
 }
 
+.warn {
+  color: #fbbf24;
+}
+
 .productos {
   padding: 14px;
   display: grid;

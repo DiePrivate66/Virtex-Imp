@@ -94,6 +94,7 @@
         Ubicacion capturada correctamente
         <span *ngIf="gpsAccuracy != null">(+/- {{ gpsAccuracy }} m)</span>.
       </small>
+      <small class="warn" *ngIf="gpsWarning">{{ gpsWarning }}</small>
       <small class="error" *ngIf="gpsEstado === 'error'">{{ gpsError }}</small>
     </div>
 

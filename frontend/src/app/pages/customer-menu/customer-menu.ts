@@ -17,7 +17,8 @@ type MetodoPago = 'EFECTIVO' | 'TRANSFERENCIA';
   styleUrl: './customer-menu.css'
 })
 export class CustomerMenuComponent implements OnInit {
-  private readonly minGpsAccuracyMeters = 120;
+  private readonly preferredGpsAccuracyMeters = 120;
+  private readonly maxGpsAccuracyMeters = 350;
 
   categorias: CategoriaConProductos[] = [];
   categoriaSeleccionada = 'todos';
@@ -41,6 +42,7 @@ export class CustomerMenuComponent implements OnInit {
   gpsAccuracy: number | null = null;
   gpsEstado: 'none' | 'loading' | 'ok' | 'error' = 'none';
   gpsError = '';
+  gpsWarning = '';
 
   constructor(
     public readonly cart: CartService,
@@ -117,6 +119,7 @@ export class CustomerMenuComponent implements OnInit {
   obtenerGps(): void {
     this.gpsEstado = 'loading';
     this.gpsError = '';
+    this.gpsWarning = '';
     this.cdr.detectChanges();
 
     if (!window.isSecureContext) {
@@ -137,7 +140,7 @@ export class CustomerMenuComponent implements OnInit {
         const accuracy = Math.round(position.coords.accuracy || 0);
         this.gpsAccuracy = accuracy;
 
-        if (accuracy > this.minGpsAccuracyMeters) {
+        if (accuracy > this.maxGpsAccuracyMeters) {
           this.gpsLat = null;
           this.gpsLng = null;
           this.gpsEstado = 'error';
@@ -150,6 +153,10 @@ export class CustomerMenuComponent implements OnInit {
         this.gpsLng = position.coords.longitude;
         this.gpsEstado = 'ok';
         this.gpsError = '';
+        this.gpsWarning =
+          accuracy > this.preferredGpsAccuracyMeters
+            ? `Ubicacion aproximada (+/- ${accuracy} m). Si puedes, vuelve a capturar cerca de una ventana para mejorarla.`
+            : '';
         this.cdr.detectChanges();
       },
       (error) => {
@@ -157,6 +164,7 @@ export class CustomerMenuComponent implements OnInit {
         this.gpsLng = null;
         this.gpsAccuracy = null;
         this.gpsEstado = 'error';
+        this.gpsWarning = '';
         if (error.code === error.PERMISSION_DENIED) {
           this.gpsError = 'Debes permitir ubicacion y encender el GPS del telefono.';
         } else if (error.code === error.POSITION_UNAVAILABLE) {
@@ -238,6 +246,7 @@ export class CustomerMenuComponent implements OnInit {
         this.gpsAccuracy = null;
         this.gpsEstado = 'none';
         this.gpsError = '';
+        this.gpsWarning = '';
         this.cdr.detectChanges();
         this.router.navigate(['/confirmacion', resp.pedido_id]);
       },
