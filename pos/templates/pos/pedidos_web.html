@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static l10n %}
 
 {% block content %}
 <div class="min-h-screen bg-bosco-dark">
@@ -137,21 +137,21 @@
                         <p class="text-[10px] text-gray-500 font-black uppercase tracking-wider">COORDENADAS GPS</p>
                         <div class="grid grid-cols-[44px,1fr] gap-x-2 text-[11px]">
                             <span class="text-gray-500 font-bold">LAT</span>
-                            <span class="text-green-300 font-mono">{{ p.ubicacion_lat|floatformat:6 }}</span>
+                            <span class="text-green-300 font-mono">{{ p.ubicacion_lat|floatformat:"6u" }}</span>
                             <span class="text-gray-500 font-bold">LNG</span>
-                            <span class="text-green-300 font-mono">{{ p.ubicacion_lng|floatformat:6 }}</span>
+                            <span class="text-green-300 font-mono">{{ p.ubicacion_lng|floatformat:"6u" }}</span>
                         </div>
                     </div>
-                    <a href="https://www.google.com/maps/search/?api=1&query={{ p.ubicacion_lat }},{{ p.ubicacion_lng }}" target="_blank"
+                    <a href="https://www.google.com/maps/search/?api=1&query={{ p.ubicacion_lat|unlocalize }},{{ p.ubicacion_lng|unlocalize }}" target="_blank"
                        class="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-blue-500 transition-colors">
                         🗺 VER EN GOOGLE MAPS
                     </a>
-                    <button onclick="copiarCoordenadas('{{ p.ubicacion_lat }}', '{{ p.ubicacion_lng }}')"
+                    <button onclick="copiarCoordenadas('{{ p.ubicacion_lat|unlocalize }}', '{{ p.ubicacion_lng|unlocalize }}')"
                         class="inline-flex items-center gap-1 bg-gray-700 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-gray-600 transition-colors ml-1">
                         COPIAR COORDENADAS
                     </button>
                     <!-- Botón copiar ubicación para reenviar a delivery -->
-                    <button onclick="copiarUbicacion('{{ p.ubicacion_lat }}', '{{ p.ubicacion_lng }}', '{{ p.direccion_envio|escapejs }}')"
+                    <button onclick="copiarUbicacion('{{ p.ubicacion_lat|unlocalize }}', '{{ p.ubicacion_lng|unlocalize }}', '{{ p.direccion_envio|escapejs }}')"
                         class="inline-flex items-center gap-1 bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-green-500 transition-colors ml-1">
                         📋 COPIAR PARA DELIVERY
                     </button>
