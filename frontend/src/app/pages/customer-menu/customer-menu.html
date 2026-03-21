@@ -90,7 +90,10 @@
       <label>Ubicacion GPS *</label>
       <button class="gps" (click)="obtenerGps()" type="button">Capturar ubicacion GPS</button>
       <small *ngIf="gpsEstado === 'loading'">Obteniendo ubicacion...</small>
-      <small class="ok" *ngIf="gpsEstado === 'ok'">Ubicacion capturada correctamente.</small>
+      <small class="ok" *ngIf="gpsEstado === 'ok'">
+        Ubicacion capturada correctamente
+        <span *ngIf="gpsAccuracy != null">(+/- {{ gpsAccuracy }} m)</span>.
+      </small>
       <small class="error" *ngIf="gpsEstado === 'error'">{{ gpsError }}</small>
     </div>
 

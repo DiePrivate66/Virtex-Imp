@@ -133,7 +133,7 @@
                     <p class="text-gray-300 text-xs leading-relaxed">{{ p.direccion_envio }}</p>
                     {% endif %}
                     {% if p.ubicacion_lat and p.ubicacion_lng %}
-                    <a href="https://www.google.com/maps?q={{ p.ubicacion_lat }},{{ p.ubicacion_lng }}" target="_blank"
+                    <a href="https://www.google.com/maps/search/?api=1&query={{ p.ubicacion_lat }},{{ p.ubicacion_lng }}" target="_blank"
                        class="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-blue-500 transition-colors">
                         🗺 VER EN GOOGLE MAPS
                     </a>
@@ -357,7 +357,7 @@
 
     //  COPIAR UBICACIÓN PARA DELIVERY 
     function copiarUbicacion(lat, lng, dir) {
-        const texto = ` PEDIDO PARA DELIVERY\nDirección: ${dir}\nUbicación: https://www.google.com/maps?q=${lat},${lng}`;
+        const texto = ` PEDIDO PARA DELIVERY\nDirección: ${dir}\nUbicación: https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
         navigator.clipboard.writeText(texto).then(() => {
             alert('✅ Ubicación copiada — pégala en el grupo de delivery por WhatsApp');
         }).catch(() => {
@@ -629,5 +629,4 @@
     setInterval(pollFailedPrintJobs, 5000);
     pollFailedPrintJobs();</script>
 {% endblock %}
-
 

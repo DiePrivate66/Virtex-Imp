@@ -17,6 +17,8 @@ type MetodoPago = 'EFECTIVO' | 'TRANSFERENCIA';
   styleUrl: './customer-menu.css'
 })
 export class CustomerMenuComponent implements OnInit {
+  private readonly minGpsAccuracyMeters = 120;
+
   categorias: CategoriaConProductos[] = [];
   categoriaSeleccionada = 'todos';
 
@@ -36,6 +38,7 @@ export class CustomerMenuComponent implements OnInit {
 
   gpsLat: number | null = null;
   gpsLng: number | null = null;
+  gpsAccuracy: number | null = null;
   gpsEstado: 'none' | 'loading' | 'ok' | 'error' = 'none';
   gpsError = '';
 
@@ -131,14 +134,28 @@ export class CustomerMenuComponent implements OnInit {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const accuracy = Math.round(position.coords.accuracy || 0);
+        this.gpsAccuracy = accuracy;
+
+        if (accuracy > this.minGpsAccuracyMeters) {
+          this.gpsLat = null;
+          this.gpsLng = null;
+          this.gpsEstado = 'error';
+          this.gpsError = `Ubicacion poco precisa (+/- ${accuracy} m). Acercate a una ventana o sal al exterior y vuelve a capturar.`;
+          this.cdr.detectChanges();
+          return;
+        }
+
         this.gpsLat = position.coords.latitude;
         this.gpsLng = position.coords.longitude;
         this.gpsEstado = 'ok';
+        this.gpsError = '';
         this.cdr.detectChanges();
       },
       (error) => {
         this.gpsLat = null;
         this.gpsLng = null;
+        this.gpsAccuracy = null;
         this.gpsEstado = 'error';
         if (error.code === error.PERMISSION_DENIED) {
           this.gpsError = 'Debes permitir ubicacion y encender el GPS del telefono.';
@@ -218,6 +235,7 @@ export class CustomerMenuComponent implements OnInit {
         this.comprobanteFile = null;
         this.gpsLat = null;
         this.gpsLng = null;
+        this.gpsAccuracy = null;
         this.gpsEstado = 'none';
         this.gpsError = '';
         this.cdr.detectChanges();
