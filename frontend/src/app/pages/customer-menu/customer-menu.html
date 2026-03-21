@@ -33,9 +33,16 @@
     </article>
   </main>
 
-  <button class="fab" *ngIf="cart.count() > 0 && !checkoutOpen" (click)="abrirCheckout()">
-    <span>{{ cart.count() }} ítems</span>
-    <strong>{{ formatMoney(cart.total()) }}</strong>
+  <button
+    class="fab"
+    [class.cancel-mode]="cancelFabMode"
+    *ngIf="cart.count() > 0 && !checkoutOpen"
+    (click)="abrirCheckout()"
+    (touchstart)="onFabTouchStart($event)"
+    (touchend)="onFabTouchEnd($event)"
+  >
+    <span>{{ cancelFabMode ? 'CANCELAR' : (cart.count() + ' ítems') }}</span>
+    <strong>{{ cancelFabMode ? 'VACIAR' : formatMoney(cart.total()) }}</strong>
   </button>
 
   <section class="checkout" *ngIf="checkoutOpen">

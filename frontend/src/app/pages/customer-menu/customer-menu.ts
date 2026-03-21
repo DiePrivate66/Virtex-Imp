@@ -19,6 +19,10 @@ type MetodoPago = 'EFECTIVO' | 'TRANSFERENCIA';
 export class CustomerMenuComponent implements OnInit {
   private readonly preferredGpsAccuracyMeters = 120;
   private readonly maxGpsAccuracyMeters = 350;
+  private readonly fabSwipeThreshold = 70;
+  private resetCancelFabTimer: number | null = null;
+  private fabTouchStartX: number | null = null;
+  private fabTouchStartY: number | null = null;
 
   categorias: CategoriaConProductos[] = [];
   categoriaSeleccionada = 'todos';
@@ -43,6 +47,7 @@ export class CustomerMenuComponent implements OnInit {
   gpsEstado: 'none' | 'loading' | 'ok' | 'error' = 'none';
   gpsError = '';
   gpsWarning = '';
+  cancelFabMode = false;
 
   constructor(
     public readonly cart: CartService,
@@ -76,6 +81,8 @@ export class CustomerMenuComponent implements OnInit {
 
   addProducto(producto: Producto): void {
     this.cart.addProduct(producto);
+    this.cancelFabMode = false;
+    this.clearCancelFabTimer();
   }
 
   aumentar(index: number): void {
@@ -91,6 +98,13 @@ export class CustomerMenuComponent implements OnInit {
   }
 
   abrirCheckout(): void {
+    if (this.cancelFabMode) {
+      this.cart.clear();
+      this.cancelFabMode = false;
+      this.clearCancelFabTimer();
+      return;
+    }
+
     this.checkoutOpen = true;
     this.formError = '';
     if (this.tipoPedido === 'DOMICILIO' && (this.gpsLat == null || this.gpsLng == null)) {
@@ -101,6 +115,31 @@ export class CustomerMenuComponent implements OnInit {
   cerrarCheckout(): void {
     this.checkoutOpen = false;
     this.formError = '';
+  }
+
+  onFabTouchStart(event: TouchEvent): void {
+    const touch = event.touches[0];
+    if (!touch) return;
+    this.fabTouchStartX = touch.clientX;
+    this.fabTouchStartY = touch.clientY;
+  }
+
+  onFabTouchEnd(event: TouchEvent): void {
+    const touch = event.changedTouches[0];
+    if (!touch || this.fabTouchStartX == null || this.fabTouchStartY == null) {
+      this.resetFabTouch();
+      return;
+    }
+
+    const deltaX = touch.clientX - this.fabTouchStartX;
+    const deltaY = Math.abs(touch.clientY - this.fabTouchStartY);
+    this.resetFabTouch();
+
+    if (deltaY > 50) return;
+    if (Math.abs(deltaX) < this.fabSwipeThreshold) return;
+
+    this.cancelFabMode = deltaX < 0;
+    this.scheduleCancelFabReset();
   }
 
   onComprobanteChange(event: Event): void {
@@ -280,6 +319,26 @@ export class CustomerMenuComponent implements OnInit {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  private resetFabTouch(): void {
+    this.fabTouchStartX = null;
+    this.fabTouchStartY = null;
+  }
+
+  private scheduleCancelFabReset(): void {
+    this.clearCancelFabTimer();
+    if (!this.cancelFabMode) return;
+    this.resetCancelFabTimer = window.setTimeout(() => {
+      this.cancelFabMode = false;
+      this.cdr.detectChanges();
+    }, 4000);
+  }
+
+  private clearCancelFabTimer(): void {
+    if (this.resetCancelFabTimer == null) return;
+    window.clearTimeout(this.resetCancelFabTimer);
+    this.resetCancelFabTimer = null;
   }
 
 }
