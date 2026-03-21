@@ -13,4 +13,3 @@ whitenoise==6.11.0
 
 celery==5.4.0
 redis==5.0.8
-twilio==9.3.1
