@@ -18,9 +18,7 @@ from .delivery_tokens import read_delivery_quote_token
 from .models import DeliveryQuote, PrintJob, Venta, WhatsAppConversation, WhatsAppMessageLog
 from .tasks import process_customer_confirmation, set_quote_and_notify
 from .whatsapp_service import (
-    build_twiml_response,
     extract_inbound_whatsapp,
-    get_whatsapp_provider,
     send_whatsapp_message,
     touch_conversation_inbound,
     validate_whatsapp_signature,
@@ -48,17 +46,14 @@ def _is_whatsapp_rate_limited(phone_e164: str) -> bool:
 
 
 def _webhook_ack_message(phone_e164: str, body: str):
-    if get_whatsapp_provider() == 'META':
-        send_whatsapp_message(phone_e164, body)
-        return JsonResponse({'status': 'ok'})
-    return HttpResponse(build_twiml_response(body), content_type='application/xml')
+    send_whatsapp_message(phone_e164, body)
+    return JsonResponse({'status': 'ok'})
 
 
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def whatsapp_webhook(request):
-    provider = get_whatsapp_provider()
-    if request.method == 'GET' and provider == 'META':
+    if request.method == 'GET':
         mode = request.GET.get('hub.mode', '')
         verify_token = request.GET.get('hub.verify_token', '')
         challenge = request.GET.get('hub.challenge', '')
@@ -344,7 +339,7 @@ def api_integrations_health(request):
         seconds=max(30, int(getattr(settings, 'PRINT_JOB_STUCK_SECONDS', 120)))
     )
 
-    provider = get_whatsapp_provider()
+    provider = 'META'
     last_inbound = (
         WhatsAppMessageLog.objects.filter(direction='IN').aggregate(last=Max('created_at')).get('last')
     )
@@ -377,12 +372,8 @@ def api_integrations_health(request):
                 settings.META_WHATSAPP_TOKEN
                 and settings.META_WHATSAPP_PHONE_NUMBER_ID
                 and settings.META_WHATSAPP_VERIFY_TOKEN
-            )
-            if provider == 'META'
-            else bool(settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_WHATSAPP_NUMBER),
-            'signature_validation': bool(settings.META_SIGNATURE_VALIDATION)
-            if provider == 'META'
-            else bool(settings.TWILIO_SIGNATURE_VALIDATION),
+            ),
+            'signature_validation': bool(settings.META_SIGNATURE_VALIDATION),
             'last_inbound_at': last_inbound.isoformat() if last_inbound else None,
             'last_outbound_at': last_outbound.isoformat() if last_outbound else None,
             'rate_limited_last_hour': rate_limited_last_hour,

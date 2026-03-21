@@ -7,8 +7,6 @@ import redis
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import connection
-from twilio.base.exceptions import TwilioException
-from twilio.rest import Client
 
 from pos.models import Empleado, PrintJob, Venta
 
@@ -35,26 +33,17 @@ class Command(BaseCommand):
             action='store_true',
             help='Salida en JSON.',
         )
-        parser.add_argument(
-            '--deep-twilio',
-            action='store_true',
-            help='Valida credenciales Twilio con llamada remota (si hay internet).',
-        )
 
     def handle(self, *args, **options):
         strict = bool(options.get('strict'))
         as_json = bool(options.get('json'))
-        deep_twilio = bool(options.get('deep_twilio'))
 
         checks: list[CheckResult] = []
 
         checks.append(self._check_database())
         checks.append(self._check_celery_mode())
         checks.append(self._check_redis())
-        checks.append(self._check_whatsapp_provider())
         checks.append(self._check_whatsapp_env())
-        if deep_twilio and self._provider() == 'TWILIO':
-            checks.append(self._check_twilio_remote())
         checks.append(self._check_delivery_pool())
         checks.append(self._check_delivery_quotes_backlog())
         checks.append(self._check_print_jobs_backlog())
@@ -140,54 +129,18 @@ class Command(BaseCommand):
         except Exception as exc:
             return CheckResult('redis', False, 'error', f'fallo redis: {exc}')
 
-    def _provider(self) -> str:
-        return (getattr(settings, 'WHATSAPP_PROVIDER', 'TWILIO') or 'TWILIO').upper()
-
-    def _check_whatsapp_provider(self) -> CheckResult:
-        provider = self._provider()
-        if provider not in {'TWILIO', 'META'}:
-            return CheckResult('whatsapp_provider', False, 'error', f'proveedor invalido: {provider}')
-        return CheckResult('whatsapp_provider', True, 'info', provider)
-
     def _check_whatsapp_env(self) -> CheckResult:
-        provider = self._provider()
-        if provider == 'META':
-            token = bool(getattr(settings, 'META_WHATSAPP_TOKEN', ''))
-            phone_id = bool(getattr(settings, 'META_WHATSAPP_PHONE_NUMBER_ID', ''))
-            verify = bool(getattr(settings, 'META_WHATSAPP_VERIFY_TOKEN', ''))
-            if token and phone_id and verify:
-                return CheckResult('whatsapp_env', True, 'info', 'META credentials configuradas')
-            return CheckResult(
-                'whatsapp_env',
-                False,
-                'warning',
-                'faltan META_WHATSAPP_TOKEN / META_WHATSAPP_PHONE_NUMBER_ID / META_WHATSAPP_VERIFY_TOKEN',
-            )
-
-        sid = bool(getattr(settings, 'TWILIO_ACCOUNT_SID', ''))
-        token = bool(getattr(settings, 'TWILIO_AUTH_TOKEN', ''))
-        number = bool(getattr(settings, 'TWILIO_WHATSAPP_NUMBER', ''))
-        if sid and token and number:
-            return CheckResult('whatsapp_env', True, 'info', 'TWILIO credentials configuradas')
+        token = bool(getattr(settings, 'META_WHATSAPP_TOKEN', ''))
+        phone_id = bool(getattr(settings, 'META_WHATSAPP_PHONE_NUMBER_ID', ''))
+        verify = bool(getattr(settings, 'META_WHATSAPP_VERIFY_TOKEN', ''))
+        if token and phone_id and verify:
+            return CheckResult('whatsapp_env', True, 'info', 'META credentials configuradas')
         return CheckResult(
             'whatsapp_env',
             False,
             'warning',
-            'faltan TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_NUMBER',
+            'faltan META_WHATSAPP_TOKEN / META_WHATSAPP_PHONE_NUMBER_ID / META_WHATSAPP_VERIFY_TOKEN',
         )
-
-    def _check_twilio_remote(self) -> CheckResult:
-        sid = getattr(settings, 'TWILIO_ACCOUNT_SID', '')
-        token = getattr(settings, 'TWILIO_AUTH_TOKEN', '')
-        if not sid or not token:
-            return CheckResult('twilio_remote', False, 'warning', 'saltado: credenciales incompletas')
-        try:
-            account = Client(sid, token).api.accounts(sid).fetch()
-            return CheckResult('twilio_remote', True, 'info', f'account status={account.status}')
-        except TwilioException as exc:
-            return CheckResult('twilio_remote', False, 'error', f'error twilio: {exc}')
-        except Exception as exc:
-            return CheckResult('twilio_remote', False, 'error', f'error twilio: {exc}')
 
     def _check_delivery_pool(self) -> CheckResult:
         drivers = Empleado.objects.filter(rol='DELIVERY', activo=True).exclude(telefono='').count()

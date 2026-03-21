@@ -23,10 +23,6 @@ from .tasks import (
 
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True,
-    TWILIO_SIGNATURE_VALIDATION=False,
-    TWILIO_ACCOUNT_SID='',
-    TWILIO_AUTH_TOKEN='',
-    TWILIO_WHATSAPP_NUMBER='',
     SECURE_SSL_REDIRECT=False,
 )
 class WhatsAppWebhookTests(TestCase):
@@ -108,9 +104,6 @@ class WhatsAppWebhookTests(TestCase):
 @override_settings(
     DEBUG=True,
     CELERY_TASK_ALWAYS_EAGER=True,
-    TWILIO_ACCOUNT_SID='',
-    TWILIO_AUTH_TOKEN='',
-    TWILIO_WHATSAPP_NUMBER='',
     SECURE_SSL_REDIRECT=False,
 )
 class DeliveryQuoteRuleTests(TestCase):
@@ -231,9 +224,6 @@ class PrintJobsApiTests(TestCase):
 @override_settings(
     DEBUG=True,
     CELERY_TASK_ALWAYS_EAGER=True,
-    TWILIO_ACCOUNT_SID='',
-    TWILIO_AUTH_TOKEN='',
-    TWILIO_WHATSAPP_NUMBER='',
     SECURE_SSL_REDIRECT=False,
 )
 class CustomerConfirmationTaskTests(TestCase):
@@ -341,9 +331,6 @@ class PosPermissionsTests(TestCase):
 @override_settings(
     DEBUG=True,
     CELERY_TASK_ALWAYS_EAGER=True,
-    TWILIO_ACCOUNT_SID='',
-    TWILIO_AUTH_TOKEN='',
-    TWILIO_WHATSAPP_NUMBER='',
     REDIS_URL='redis://fake:6379/0',
     SECURE_SSL_REDIRECT=False,
 )
