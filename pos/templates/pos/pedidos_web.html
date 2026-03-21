@@ -133,10 +133,23 @@
                     <p class="text-gray-300 text-xs leading-relaxed">{{ p.direccion_envio }}</p>
                     {% endif %}
                     {% if p.ubicacion_lat and p.ubicacion_lng %}
+                    <div class="bg-black/40 border border-gray-700 rounded-lg p-2 space-y-1">
+                        <p class="text-[10px] text-gray-500 font-black uppercase tracking-wider">COORDENADAS GPS</p>
+                        <div class="grid grid-cols-[44px,1fr] gap-x-2 text-[11px]">
+                            <span class="text-gray-500 font-bold">LAT</span>
+                            <span class="text-green-300 font-mono">{{ p.ubicacion_lat|floatformat:6 }}</span>
+                            <span class="text-gray-500 font-bold">LNG</span>
+                            <span class="text-green-300 font-mono">{{ p.ubicacion_lng|floatformat:6 }}</span>
+                        </div>
+                    </div>
                     <a href="https://www.google.com/maps/search/?api=1&query={{ p.ubicacion_lat }},{{ p.ubicacion_lng }}" target="_blank"
                        class="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-blue-500 transition-colors">
                         🗺 VER EN GOOGLE MAPS
                     </a>
+                    <button onclick="copiarCoordenadas('{{ p.ubicacion_lat }}', '{{ p.ubicacion_lng }}')"
+                        class="inline-flex items-center gap-1 bg-gray-700 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-gray-600 transition-colors ml-1">
+                        COPIAR COORDENADAS
+                    </button>
                     <!-- Botón copiar ubicación para reenviar a delivery -->
                     <button onclick="copiarUbicacion('{{ p.ubicacion_lat }}', '{{ p.ubicacion_lng }}', '{{ p.direccion_envio|escapejs }}')"
                         class="inline-flex items-center gap-1 bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded hover:bg-green-500 transition-colors ml-1">
@@ -363,6 +376,15 @@
         }).catch(() => {
             // Fallback
             prompt('Copia este texto:', texto);
+        });
+    }
+
+    function copiarCoordenadas(lat, lng) {
+        const texto = `${lat},${lng}`;
+        navigator.clipboard.writeText(texto).then(() => {
+            alert('Coordenadas copiadas: ' + texto);
+        }).catch(() => {
+            prompt('Copia estas coordenadas:', texto);
         });
     }
 
@@ -629,4 +651,3 @@
     setInterval(pollFailedPrintJobs, 5000);
     pollFailedPrintJobs();</script>
 {% endblock %}
-
