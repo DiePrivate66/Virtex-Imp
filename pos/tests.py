@@ -23,26 +23,39 @@ from .tasks import (
 
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True,
+    META_SIGNATURE_VALIDATION=False,
     SECURE_SSL_REDIRECT=False,
 )
 class WhatsAppWebhookTests(TestCase):
     def setUp(self):
         cache.clear()
 
-    def test_webhook_is_idempotent_by_message_sid(self):
-        url = reverse('whatsapp_webhook')
-        payload = {
-            'From': 'whatsapp:+593991234567',
-            'Body': 'hola',
-            'MessageSid': 'SM_DUP_001',
+    def _meta_payload(self, from_number: str, body: str, message_id: str):
+        return {
+            'entry': [{
+                'changes': [{
+                    'value': {
+                        'messages': [{
+                            'from': from_number,
+                            'id': message_id,
+                            'type': 'text',
+                            'text': {'body': body},
+                        }]
+                    }
+                }]
+            }]
         }
 
-        r1 = self.client.post(url, data=payload)
-        r2 = self.client.post(url, data=payload)
+    def test_webhook_is_idempotent_by_message_sid(self):
+        url = reverse('whatsapp_webhook')
+        payload = self._meta_payload('593991234567', 'hola', 'wamid.DUP_001')
+
+        r1 = self.client.post(url, data=json.dumps(payload), content_type='application/json')
+        r2 = self.client.post(url, data=json.dumps(payload), content_type='application/json')
 
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r2.status_code, 200)
-        self.assertEqual(WhatsAppMessageLog.objects.filter(message_sid='SM_DUP_001').count(), 1)
+        self.assertEqual(WhatsAppMessageLog.objects.filter(message_sid='wamid.DUP_001').count(), 1)
 
     def test_webhook_confirms_order_when_conversation_waiting_confirmation(self):
         venta = Venta.objects.create(
@@ -61,12 +74,8 @@ class WhatsAppWebhookTests(TestCase):
         )
 
         url = reverse('whatsapp_webhook')
-        payload = {
-            'From': 'whatsapp:+593991112233',
-            'Body': 'SI',
-            'MessageSid': 'SM_CONFIRM_001',
-        }
-        resp = self.client.post(url, data=payload)
+        payload = self._meta_payload('593991112233', 'SI', 'wamid.CONFIRM_001')
+        resp = self.client.post(url, data=json.dumps(payload), content_type='application/json')
 
         venta.refresh_from_db()
         self.assertEqual(resp.status_code, 200)
@@ -81,13 +90,9 @@ class WhatsAppWebhookTests(TestCase):
     )
     def test_webhook_rate_limit_blocks_excess_messages(self):
         url = reverse('whatsapp_webhook')
-        payload_base = {
-            'From': 'whatsapp:+593991234568',
-            'Body': 'hola',
-        }
-        r1 = self.client.post(url, data={**payload_base, 'MessageSid': 'SM_RL_1'})
-        r2 = self.client.post(url, data={**payload_base, 'MessageSid': 'SM_RL_2'})
-        r3 = self.client.post(url, data={**payload_base, 'MessageSid': 'SM_RL_3'})
+        r1 = self.client.post(url, data=json.dumps(self._meta_payload('593991234568', 'hola', 'wamid.RL_1')), content_type='application/json')
+        r2 = self.client.post(url, data=json.dumps(self._meta_payload('593991234568', 'hola', 'wamid.RL_2')), content_type='application/json')
+        r3 = self.client.post(url, data=json.dumps(self._meta_payload('593991234568', 'hola', 'wamid.RL_3')), content_type='application/json')
 
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r2.status_code, 200)

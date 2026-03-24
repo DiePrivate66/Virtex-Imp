@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from .delivery_tokens import make_delivery_quote_token
 from .models import DeliveryQuote, Empleado, PrintJob, Venta, WhatsAppConversation
+from .telegram_service import notify_delivery_group
 from .whatsapp_service import (
     send_whatsapp_confirmation_buttons,
     send_whatsapp_message,
@@ -19,9 +20,12 @@ from .whatsapp_service import (
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={'max_retries': 3})
 def send_delivery_quote_requests(self, venta_id: int):
-    venta = Venta.objects.select_related('cliente').get(id=venta_id)
+    venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(id=venta_id)
     if venta.tipo_pedido != 'DOMICILIO':
         return
+
+    # Notify Telegram delivery group
+    notify_delivery_group(venta)
 
     drivers = Empleado.objects.filter(rol='DELIVERY', activo=True).exclude(telefono='')
     if not drivers.exists():
