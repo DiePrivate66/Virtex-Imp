@@ -111,7 +111,7 @@ def timed_out_quote_count() -> int:
 
 def get_web_orders_panel_context(limit: int = 50):
     return {
-        'pedidos': Venta.objects.filter(origen='WEB').exclude(estado='CANCELADO').order_by('-fecha')[:limit],
+        'pedidos': Venta.objects.filter(origen='WEB').exclude(estado='CANCELADO').select_related('repartidor_asignado').order_by('-fecha')[:limit],
         'timed_out_quote_count': timed_out_quote_count(),
     }
 

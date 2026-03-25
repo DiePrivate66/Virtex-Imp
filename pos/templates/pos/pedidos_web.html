@@ -161,6 +161,16 @@
                 </div>
                 {% endif %}
 
+                {% if p.repartidor_asignado %}
+                <div class="bg-green-900/20 border border-green-800/50 p-3 rounded-lg space-y-1">
+                    <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider">📦 DELIVERY ASIGNADO</p>
+                    <p class="text-green-300 font-bold text-sm">🛵 {{ p.repartidor_asignado.nombre }}</p>
+                    {% if p.costo_envio %}
+                    <p class="text-green-400 text-xs">💵 Envío cotizado: <strong class="text-white">${{ p.costo_envio|floatformat:2 }}</strong></p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
                 <!-- Comprobante de transferencia -->
                 {% if p.metodo_pago == 'TRANSFERENCIA' %}
                 <div class="bg-[#1a1a1a] p-3 rounded-lg">
