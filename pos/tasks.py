@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from .delivery_tokens import make_delivery_quote_token
+from .delivery_tokens import make_delivery_claim_token, make_delivery_quote_token
 from .models import DeliveryQuote, Empleado, PrintJob, Venta, WhatsAppConversation
 from .telegram_service import notify_delivery_group
 from .whatsapp_service import (
@@ -24,34 +24,8 @@ def send_delivery_quote_requests(self, venta_id: int):
     if venta.tipo_pedido != 'DOMICILIO':
         return
 
-    # Notify Telegram delivery group
+    # Notify Telegram delivery group (includes claim link)
     notify_delivery_group(venta)
-
-    drivers = Empleado.objects.filter(rol='DELIVERY', activo=True).exclude(telefono='')
-    if not drivers.exists():
-        return
-
-    if not venta.delivery_quote_deadline_at:
-        venta.delivery_quote_deadline_at = timezone.now() + timedelta(
-            seconds=settings.DELIVERY_QUOTE_TIMEOUT_SECONDS
-        )
-        venta.save(update_fields=['delivery_quote_deadline_at'])
-
-    for driver in drivers:
-        token = make_delivery_quote_token(venta.id, driver.id)
-        link = f"{settings.PUBLIC_BACKEND_URL}/integrations/delivery/quote/{token}/"
-        map_url = ''
-        if venta.ubicacion_lat is not None and venta.ubicacion_lng is not None:
-            map_url = f"https://www.google.com/maps?q={venta.ubicacion_lat},{venta.ubicacion_lng}"
-
-        msg = (
-            f"Pedido #{venta.id} para delivery\n"
-            f"Cliente: {venta.cliente_nombre}\n"
-            f"Total productos: ${venta.total:.2f}\n"
-            f"Ubicacion: {map_url or 'No compartida'}\n"
-            f"Cotiza aqui: {link}"
-        )
-        send_whatsapp_message(driver.telefono, msg, raise_on_error=True)
 
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={'max_retries': 3})
@@ -118,6 +92,13 @@ def process_customer_confirmation(self, venta_id: int, decision: str):
                 customer_phone,
                 f'Pedido #{venta.id} confirmado. Ya enviamos tu orden a cocina.',
                 raise_on_error=True,
+            )
+        # Notify assigned driver that customer accepted
+        if venta.repartidor_asignado and venta.repartidor_asignado.telefono:
+            send_whatsapp_message(
+                venta.repartidor_asignado.telefono,
+                f'Pedido #{venta.id} CONFIRMADO por el cliente. Prepárate para recogerlo.',
+                raise_on_error=False,
             )
     else:
         venta.confirmacion_cliente = 'RECHAZADA'

@@ -14,9 +14,10 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
-from .delivery_tokens import read_delivery_quote_token
-from .models import DeliveryQuote, PrintJob, Venta, WhatsAppConversation, WhatsAppMessageLog
+from .delivery_tokens import read_delivery_claim_token, read_delivery_quote_token
+from .models import DeliveryQuote, Empleado, PrintJob, Venta, WhatsAppConversation, WhatsAppMessageLog
 from .tasks import process_customer_confirmation, set_quote_and_notify
+from .telegram_service import notify_order_claimed
 from .whatsapp_service import (
     extract_inbound_whatsapp,
     send_whatsapp_message,
@@ -392,3 +393,80 @@ def api_integrations_health(request):
         },
     }
     return JsonResponse(data)
+
+
+@require_GET
+def delivery_claim_form(request, token: str):
+    """GET: show claim page with order details + PIN/price form."""
+    try:
+        payload = read_delivery_claim_token(token)
+    except Exception:
+        return render(request, 'pos/delivery_claim.html', {'token_invalido': True, 'venta': None})
+
+    venta = Venta.objects.prefetch_related('detalles__producto').filter(id=payload['venta_id']).first()
+    if not venta:
+        return HttpResponse('Pedido no encontrado', status=404)
+
+    ya_tomado = venta.repartidor_asignado is not None or venta.estado != 'PENDIENTE_COTIZACION'
+
+    return render(request, 'pos/delivery_claim.html', {
+        'token': token,
+        'venta': venta,
+        'ya_tomado': ya_tomado,
+        'token_invalido': False,
+    })
+
+
+@csrf_exempt
+@require_POST
+def delivery_claim_submit(request, token: str):
+    """POST: atomically claim order + set delivery quote."""
+    from decimal import Decimal as D
+    from django.db import transaction
+
+    try:
+        payload = read_delivery_claim_token(token)
+    except Exception:
+        return render(request, 'pos/delivery_claim.html', {'token_invalido': True, 'venta': None})
+
+    pin = (request.POST.get('pin') or '').strip()
+    precio_raw = request.POST.get('precio')
+
+    driver = Empleado.objects.filter(pin=pin, rol='DELIVERY', activo=True).first()
+    if not driver:
+        venta = Venta.objects.prefetch_related('detalles__producto').filter(id=payload['venta_id']).first()
+        return render(request, 'pos/delivery_claim.html', {
+            'token': token, 'venta': venta, 'ya_tomado': False,
+            'token_invalido': False, 'error': 'PIN invalido o no eres repartidor activo.',
+        })
+
+    try:
+        precio = D(str(precio_raw)).quantize(D('0.01'))
+        if precio <= 0:
+            raise ValueError
+    except Exception:
+        venta = Venta.objects.prefetch_related('detalles__producto').filter(id=payload['venta_id']).first()
+        return render(request, 'pos/delivery_claim.html', {
+            'token': token, 'venta': venta, 'ya_tomado': False,
+            'token_invalido': False, 'error': 'Precio invalido. Debe ser mayor a 0.',
+        })
+
+    with transaction.atomic():
+        venta = Venta.objects.select_for_update().get(id=payload['venta_id'])
+
+        if venta.repartidor_asignado is not None or venta.estado != 'PENDIENTE_COTIZACION':
+            return render(request, 'pos/delivery_claim.html', {
+                'token': token, 'venta': venta, 'ya_tomado': True, 'token_invalido': False,
+            })
+
+        venta.repartidor_asignado = driver
+        venta.save(update_fields=['repartidor_asignado'])
+
+    set_quote_and_notify.delay(venta.id, driver.id, str(precio))
+
+    notify_order_claimed(venta, driver)
+
+    return render(request, 'pos/delivery_claim.html', {
+        'token': token, 'venta': venta, 'ya_tomado': True, 'token_invalido': False,
+        'claim_exito': True, 'driver_nombre': driver.nombre, 'precio_envio': str(precio),
+    })

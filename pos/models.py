@@ -139,6 +139,10 @@ class Venta(models.Model):
     confirmacion_cliente = models.CharField(max_length=12, choices=CONFIRMACION_CLIENTE, default='PENDIENTE')
     confirmada_por_bot_at = models.DateTimeField(null=True, blank=True)
     delivery_quote_deadline_at = models.DateTimeField(null=True, blank=True)
+    repartidor_asignado = models.ForeignKey(
+        'Empleado', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='pedidos_asignados', help_text='Repartidor que tomo el pedido',
+    )
 
     @property
     def cambio(self):

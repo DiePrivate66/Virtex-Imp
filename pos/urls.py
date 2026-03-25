@@ -35,6 +35,8 @@ urlpatterns = [
     path('integrations/whatsapp/webhook/', views_integrations.whatsapp_webhook, name='whatsapp_webhook'),
     path('integrations/delivery/quote/<str:token>/', views_integrations.delivery_quote_form, name='delivery_quote_form'),
     path('integrations/delivery/quote/<str:token>/submit/', views_integrations.delivery_quote_submit, name='delivery_quote_submit'),
+    path('integrations/delivery/claim/<str:token>/', views_integrations.delivery_claim_form, name='delivery_claim_form'),
+    path('integrations/delivery/claim/<str:token>/submit/', views_integrations.delivery_claim_submit, name='delivery_claim_submit'),
     path('api/ventas/<int:venta_id>/confirmar-whatsapp/', views_integrations.confirmar_venta_whatsapp, name='confirmar_venta_whatsapp'),
 
     # Print jobs

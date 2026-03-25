@@ -45,12 +45,20 @@ def _send_telegram(method: str, payload: dict) -> Optional[dict]:
         return None
 
 
-def notify_delivery_group(venta) -> bool:
-    """Send order details + GPS location to the Telegram delivery group."""
+def notify_delivery_group(venta) -> Optional[int]:
+    """Send order details + claim link + GPS location to Telegram group.
+
+    Returns the message_id of the sent message (for reply threading), or None.
+    """
     chat_id = getattr(settings, 'TELEGRAM_DELIVERY_GROUP_ID', '')
     if not chat_id:
         logger.debug('TELEGRAM_DELIVERY_GROUP_ID not configured; skipping.')
-        return False
+        return None
+
+    from .delivery_tokens import make_delivery_claim_token
+
+    claim_token = make_delivery_claim_token(venta.id)
+    claim_url = f'{settings.PUBLIC_BACKEND_URL}/integrations/delivery/claim/{claim_token}/'
 
     map_url = ''
     if venta.ubicacion_lat is not None and venta.ubicacion_lng is not None:
@@ -69,20 +77,50 @@ def notify_delivery_group(venta) -> bool:
         f'🗺 {map_url or "Ubicacion no compartida"}\n\n'
         f'🛒 *Detalle:*\n{items_text or "  (sin items)"}\n'
         f'💰 *Total:* ${venta.total:.2f}\n'
-        f'💳 Pago: {venta.get_metodo_pago_display()}'
+        f'💳 Pago: {venta.get_metodo_pago_display()}\n\n'
+        f'📋 [Aceptar Pedido]({claim_url})'
     )
 
     result = _send_telegram('sendMessage', {
         'chat_id': chat_id,
         'text': text,
         'parse_mode': 'Markdown',
+        'disable_web_page_preview': True,
     })
+
+    message_id = None
+    if result and result.get('ok'):
+        message_id = result.get('result', {}).get('message_id')
 
     if result and venta.ubicacion_lat is not None and venta.ubicacion_lng is not None:
         _send_telegram('sendLocation', {
             'chat_id': chat_id,
             'latitude': venta.ubicacion_lat,
             'longitude': venta.ubicacion_lng,
+            'reply_to_message_id': message_id,
         })
 
+    return message_id
+
+
+def notify_order_claimed(venta, empleado, reply_to_message_id: Optional[int] = None) -> bool:
+    """Notify the Telegram group that an order was claimed by a driver."""
+    chat_id = getattr(settings, 'TELEGRAM_DELIVERY_GROUP_ID', '')
+    if not chat_id:
+        return False
+
+    text = (
+        f'✅ *Pedido #{venta.id}* tomado por *{empleado.nombre}*\n'
+        f'💵 Envío: ${venta.costo_envio:.2f}'
+    )
+
+    payload = {
+        'chat_id': chat_id,
+        'text': text,
+        'parse_mode': 'Markdown',
+    }
+    if reply_to_message_id:
+        payload['reply_to_message_id'] = reply_to_message_id
+
+    result = _send_telegram('sendMessage', payload)
     return result is not None
