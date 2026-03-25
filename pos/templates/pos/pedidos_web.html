@@ -14,8 +14,10 @@
         </div>
     </header>
 
+    <div class="mx-auto w-full max-w-[1760px]">
+
     <!-- FILTROS DE ESTADO -->
-    <div class="flex gap-2 px-4 py-3 overflow-x-auto border-b border-gray-800 bg-black/50">
+    <div class="pedidos-toolbar flex gap-2 px-4 py-3 overflow-x-auto border-b border-gray-800 bg-black/50">
         <button onclick="filtrarEstado(this,'todos')" class="filtro-btn active whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase bg-bosco-orange text-black">
             TODOS
         </button>
@@ -46,9 +48,9 @@
     </div>
 
     <!-- GRID DE PEDIDOS -->
-    <div class="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="grid-pedidos">
+    <div class="pedidos-grid px-4 pb-8" id="grid-pedidos">
         {% for p in pedidos %}
-        <div class="pedido-card bg-bosco-gray rounded-xl border border-gray-700 overflow-hidden transition-all hover:border-gray-500"
+        <div class="pedido-card w-full bg-bosco-gray rounded-xl border border-gray-700 overflow-hidden transition-all hover:border-gray-500"
              data-estado="{{ p.estado }}" data-id="{{ p.id }}">
             
             <!-- Header con # y Estado -->
@@ -292,6 +294,7 @@
         </div>
         {% endfor %}
     </div>
+    </div>
 
     <!-- Footer -->
     <div class="text-center py-6 text-gray-700 text-[10px] font-bold tracking-widest">
@@ -306,6 +309,30 @@
 </div>
 
 <style>
+    .pedidos-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .pedido-card {
+        min-width: 0;
+        height: fit-content;
+    }
+
+    @media (min-width: 1024px) {
+        .pedidos-toolbar {
+            border-radius: 0 0 1rem 1rem;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .pedidos-grid {
+            grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+        }
+    }
+
     @keyframes notifPulse {
         0%, 100% { background: #ff6600; transform: scale(1); }
         50% { background: #ef4444; transform: scale(1.3); }
