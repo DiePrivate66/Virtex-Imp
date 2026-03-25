@@ -51,7 +51,7 @@
     <div class="pedidos-grid px-4 pb-8" id="grid-pedidos">
         {% for p in pedidos %}
         <div class="pedido-card w-full bg-bosco-gray rounded-xl border border-gray-700 overflow-hidden transition-all hover:border-gray-500"
-             data-estado="{{ p.estado }}" data-id="{{ p.id }}">
+             data-estado="{{ p.estado }}" data-id="{{ p.id }}" data-base-total="{{ p.total|unlocalize }}">
             
             <!-- Header con # y Estado -->
             <div class="p-4 flex items-center justify-between 
@@ -79,7 +79,7 @@
                 <!-- TOTAL VISIBLE EN GRANDE -->
                 <div class="text-right">
                     <span class="text-xs text-gray-500 font-bold">TOTAL</span>
-                    <p class="text-2xl font-black text-bosco-orange">${{ p.total|floatformat:2 }}</p>
+                    <p class="text-2xl font-black text-bosco-orange" data-total-pedido>${{ p.total_con_envio|floatformat:2 }}</p>
                 </div>
             </div>
 
@@ -217,7 +217,8 @@
                             <span class="text-gray-400">$</span>
                             <input type="number" step="0.50" min="0" value="{{ p.costo_envio|floatformat:2 }}"
                                    class="w-16 bg-black border border-gray-600 text-white text-right p-1 rounded text-xs font-bold focus:border-bosco-orange outline-none"
-                                   onchange="actualizarEnvio({{ p.id }}, this.value)">
+                                   oninput="actualizarTotalPedido(this)"
+                                   onchange="actualizarEnvio({{ p.id }}, this)">
                         </div>
                     </div>
                     {% endif %}
@@ -233,7 +234,7 @@
                     {% endif %}
                     <div class="flex justify-between border-t border-gray-700 pt-1.5 mt-1">
                         <span class="text-white font-black text-sm">TOTAL A COBRAR</span>
-                        <span class="text-bosco-orange font-black text-lg">${{ p.total|floatformat:2 }}</span>
+                        <span class="text-bosco-orange font-black text-lg" data-total-pedido>${{ p.total_con_envio|floatformat:2 }}</span>
                     </div>
                 </div>
 
@@ -279,7 +280,7 @@
 
                 <!-- BOTÓN WHATSAPP SHARE -->
                 {% if p.telefono_cliente %}
-                <button onclick="compartirWhatsApp('{{ p.telefono_cliente|escapejs }}', {{ p.id }}, '{{ p.cliente_nombre|escapejs }}', '{{ p.total|floatformat:2 }}', '{{ p.get_estado_display|escapejs }}', '{{ p.tipo_pedido }}', '{{ p.direccion_envio|escapejs }}')"
+                <button onclick="compartirWhatsApp('{{ p.telefono_cliente|escapejs }}', {{ p.id }}, '{{ p.cliente_nombre|escapejs }}', '{{ p.total_con_envio|floatformat:2 }}', '{{ p.get_estado_display|escapejs }}', '{{ p.tipo_pedido }}', '{{ p.direccion_envio|escapejs }}')"
                     class="w-full mt-2 bg-green-700 hover:bg-green-600 text-white font-bold py-2.5 rounded-lg text-xs uppercase active:scale-95 transition-all flex items-center justify-center gap-2">
                     📲 COMPARTIR PEDIDO POR WHATSAPP
                 </button>
@@ -395,11 +396,27 @@
     }
 
     //  ACTUALIZAR ENVO 
-    function actualizarEnvio(pedidoId, valor) {
+    function actualizarTotalPedido(input) {
+        const card = input.closest('.pedido-card');
+        if (!card) return;
+
+        const baseTotal = parseFloat(card.dataset.baseTotal || '0');
+        const envio = parseFloat(input.value) || 0;
+        const total = baseTotal + envio;
+
+        card.querySelectorAll('[data-total-pedido]').forEach((node) => {
+            node.textContent = `$${total.toFixed(2)}`;
+        });
+    }
+
+    function actualizarEnvio(pedidoId, input) {
+        const valor = parseFloat(input.value) || 0;
+        actualizarTotalPedido(input);
+
         fetch('/api/actualizar-pedido/', {
             method: 'POST',
             headers: getHeaders(),
-            body: JSON.stringify({ pedido_id: pedidoId, costo_envio: parseFloat(valor) || 0 })
+            body: JSON.stringify({ pedido_id: pedidoId, costo_envio: valor })
         })
         .then(r => r.json())
         .then(data => { if (data.status !== 'ok') alert('Error: ' + data.mensaje); });

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -145,11 +147,15 @@ class Venta(models.Model):
     )
 
     @property
-    def cambio(self):
-        from decimal import Decimal
+    def total_con_envio(self):
+        total_base = self.total or Decimal('0.00')
+        envio = self.costo_envio or Decimal('0.00')
+        return total_base + envio
 
-        if self.monto_recibido is not None and self.total is not None:
-            return max(self.monto_recibido - self.total, Decimal('0.00'))
+    @property
+    def cambio(self):
+        if self.monto_recibido is not None:
+            return max(self.monto_recibido - self.total_con_envio, Decimal('0.00'))
         return Decimal('0.00')
 
 
