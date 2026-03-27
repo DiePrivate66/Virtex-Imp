@@ -636,6 +636,32 @@ class CustomerOrderConfirmationEtaTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Tiempo estimado de llegada: 15 min')
 
+    def test_order_status_api_includes_assigned_driver_name(self):
+        driver = Empleado.objects.create(
+            nombre='Carlos Repartidor',
+            pin='4455',
+            rol='DELIVERY',
+            activo=True,
+        )
+        sale = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='EN_CAMINO',
+            metodo_pago='EFECTIVO',
+            total='10.00',
+            cliente_nombre='Cliente Demo',
+            telefono_cliente='0991111111',
+            costo_envio='2.50',
+            tiempo_estimado_minutos=20,
+            salio_a_reparto_at=timezone.now(),
+            repartidor_asignado=driver,
+        )
+
+        response = self.client.get(reverse('pedido_api_estado', args=[sale.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['repartidor_nombre'], 'Carlos Repartidor')
+
 
 @override_settings(
     WHATSAPP_PROVIDER='META',

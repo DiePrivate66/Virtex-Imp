@@ -60,6 +60,8 @@ export class OrderConfirmationComponent {
         return '\u{1F6F5}';
       case 'LISTO':
         return '\u2705';
+      case 'CANCELADO':
+        return '\u274C';
       default:
         return '?';
     }
@@ -77,6 +79,8 @@ export class OrderConfirmationComponent {
         return 'PEDIDO EN CAMINO';
       case 'LISTO':
         return 'PEDIDO ENTREGADO';
+      case 'CANCELADO':
+        return 'PEDIDO CANCELADO';
       default:
         return 'PEDIDO RECIBIDO';
     }
@@ -89,17 +93,48 @@ export class OrderConfirmationComponent {
       case 'PENDIENTE':
         return 'Tu pedido fue enviado correctamente.';
       case 'COCINA':
+        if (this.status?.repartidor_nombre) {
+          return `${this.status.repartidor_nombre} ya tomo tu pedido y estamos terminando de prepararlo.`;
+        }
         return 'Tu comida esta siendo preparada.';
       case 'EN_CAMINO':
         if (this.status?.esperando_confirmacion_delivery) {
           return 'Tu repartidor esta cerrando la entrega final.';
         }
+        if (this.status?.repartidor_nombre) {
+          return `${this.status.repartidor_nombre} ya salio con tu pedido.`;
+        }
         return 'Tu repartidor ya salio con tu pedido.';
       case 'LISTO':
         return 'Tu pedido fue entregado.';
+      case 'CANCELADO':
+        return 'Este pedido fue cancelado. Si necesitas ayuda, contactanos por WhatsApp.';
       default:
         return 'Tu pedido fue enviado correctamente.';
     }
+  }
+
+  get statusDetail(): string | null {
+    if (!this.status) {
+      return null;
+    }
+
+    if (this.status.estado === 'EN_CAMINO' && this.status.repartidor_nombre) {
+      return `Repartidor asignado: ${this.status.repartidor_nombre}`;
+    }
+
+    if (
+      ['PENDIENTE_COTIZACION', 'PENDIENTE', 'COCINA'].includes(this.status.estado)
+      && this.status.repartidor_nombre
+    ) {
+      return `${this.status.repartidor_nombre} ya tomo tu pedido`;
+    }
+
+    if (this.status.estado === 'CANCELADO') {
+      return 'Si tu pago ya fue procesado, el restaurante te ayudara con la devolucion o solucion.';
+    }
+
+    return null;
   }
 
   get etaText(): string | null {

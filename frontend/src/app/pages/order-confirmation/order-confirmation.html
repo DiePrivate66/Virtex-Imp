@@ -5,6 +5,14 @@
     <p class="sub">{{ subtitle }}</p>
     <p class="id">#{{ pedidoId }}</p>
 
+    @if (status?.estado_display) {
+      <p class="status-chip">{{ status?.estado_display }}</p>
+    }
+
+    @if (statusDetail) {
+      <p class="sub detail">{{ statusDetail }}</p>
+    }
+
     @if (etaText) {
       <p class="sub eta">{{ etaText }}</p>
     }

@@ -50,6 +50,7 @@ export interface EstadoPedidoResponse {
   total_con_envio: string;
   tiempo_estimado_minutos: number | null;
   minutos_restantes_estimados: number | null;
+  repartidor_nombre: string;
   cliente_reporto_recibido: boolean;
   repartidor_confirmo_entrega: boolean;
   puede_reportar_recibido: boolean;

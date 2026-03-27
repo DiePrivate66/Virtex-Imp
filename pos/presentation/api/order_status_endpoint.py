@@ -5,7 +5,11 @@ from pos.models import Venta
 
 
 def handle_order_status_request(request, pedido_id):
-    venta = get_object_or_404(Venta, id=pedido_id, origen='WEB')
+    venta = get_object_or_404(
+        Venta.objects.select_related('repartidor_asignado'),
+        id=pedido_id,
+        origen='WEB',
+    )
     return JsonResponse(
         {
             'pedido_id': venta.id,
@@ -20,6 +24,7 @@ def handle_order_status_request(request, pedido_id):
             'total_con_envio': f'{venta.total_con_envio:.2f}',
             'tiempo_estimado_minutos': venta.tiempo_estimado_minutos,
             'minutos_restantes_estimados': venta.minutos_restantes_estimados,
+            'repartidor_nombre': venta.repartidor_asignado.nombre if venta.repartidor_asignado else '',
             'cliente_reporto_recibido': venta.cliente_reporto_recibido_at is not None,
             'repartidor_confirmo_entrega': venta.repartidor_confirmo_entrega_at is not None,
             'puede_reportar_recibido': (
