@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marcar en camino #{{ venta.id }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl p-6 space-y-4">
+    <h1 class="text-xl font-black text-orange-400">Pedido #{{ venta.id }}</h1>
+    <p class="text-sm text-gray-400">{{ venta.cliente_nombre }}</p>
+
+    {% if token_invalido %}
+      <div class="p-4 rounded-xl bg-yellow-900/30 border border-yellow-800 text-center">
+        <p class="text-yellow-300 font-bold">Link expirado o invalido</p>
+      </div>
+    {% elif link_invalido %}
+      <div class="p-4 rounded-xl bg-red-900/30 border border-red-800 text-center">
+        <p class="text-red-300 font-bold">Este link no corresponde al repartidor asignado.</p>
+      </div>
+    {% elif success %}
+      <div class="p-4 rounded-xl bg-green-900/30 border border-green-800 text-center">
+        <p class="text-green-300 font-bold text-lg">Pedido marcado en camino</p>
+        <p class="text-green-400 text-sm mt-1">{{ driver_nombre }} - ETA {{ eta_minutos }} min</p>
+        <p class="text-gray-400 text-xs mt-2">El cliente ya puede ver el tiempo estimado en su confirmacion.</p>
+      </div>
+    {% elif ya_en_camino %}
+      <div class="p-4 rounded-xl bg-blue-900/30 border border-blue-800 text-center">
+        <p class="text-blue-300 font-bold text-lg">Pedido ya va en camino</p>
+        {% if venta.tiempo_estimado_minutos %}
+        <p class="text-blue-400 text-sm mt-1">ETA actual: {{ venta.tiempo_estimado_minutos }} min</p>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="text-sm text-gray-300 space-y-1">
+        <p>Cliente: <strong class="text-white">{{ venta.cliente_nombre }}</strong></p>
+        <p>Telefono: {{ venta.telefono_cliente|default:"No proporcionado" }}</p>
+        <p>Total: <strong class="text-white">${{ venta.total_con_envio|floatformat:2 }}</strong></p>
+      </div>
+
+      <form method="post" action="/integrations/delivery/in-transit/{{ token }}/submit/" class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Tu PIN de 4 digitos</label>
+          <input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required
+                 class="w-full bg-black border border-gray-600 rounded px-3 py-3 text-white font-bold text-center text-2xl tracking-widest"
+                 placeholder="••••" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Tiempo estimado en minutos</label>
+          <input name="eta_minutos" type="number" min="1" max="180" required
+                 class="w-full bg-black border border-gray-600 rounded px-3 py-3 text-white font-bold"
+                 placeholder="Ej: 20" />
+        </div>
+
+        {% if error %}
+        <p class="text-red-400 text-sm font-bold">{{ error }}</p>
+        {% endif %}
+
+        <button type="submit"
+                class="w-full bg-orange-500 hover:bg-orange-400 text-black font-black py-3 rounded-xl text-lg transition-colors">
+          Marcar EN CAMINO
+        </button>
+      </form>
+    {% endif %}
+  </div>
+</body>
+</html>

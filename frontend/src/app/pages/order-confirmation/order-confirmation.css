@@ -33,6 +33,26 @@ h1 {
   margin: 10px 0 18px;
 }
 
+.eta {
+  color: #93c5fd;
+  font-weight: 800;
+}
+
+.error {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.success {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.waiting {
+  color: #facc15;
+  font-weight: 700;
+}
+
 .id {
   font-size: 42px;
   color: #ff6600;
@@ -49,4 +69,15 @@ h1 {
   color: #000;
   font-weight: 900;
   text-decoration: none;
+}
+
+.action-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #2f2f2f;
+  background: #22c55e;
+  color: #08110a;
+  font-weight: 900;
+  margin-bottom: 14px;
 }

@@ -3,61 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .header { background: #1a1a1a; color: white; padding: 30px; text-align: center; }
-        .header h1 { margin: 0; font-size: 28px; letter-spacing: 4px; }
-        .header p { margin: 5px 0 0; color: #aaa; font-size: 12px; }
-        .content { padding: 30px; }
-        .info-section { margin-bottom: 20px; }
-        .info-section h3 { color: #333; font-size: 14px; text-transform: uppercase; border-bottom: 2px solid #f0f0f0; padding-bottom: 5px; }
-        .info-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-        .info-label { color: #888; }
-        .info-value { font-weight: bold; color: #333; }
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        th { background: #f8f8f8; text-align: left; padding: 8px; font-size: 12px; color: #666; border-bottom: 2px solid #e0e0e0; }
-        td { padding: 8px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
-        .total-row { background: #1a1a1a; color: white; }
-        .total-row td { padding: 12px 8px; font-weight: bold; font-size: 16px; }
-        .footer { background: #f8f8f8; padding: 20px; text-align: center; font-size: 11px; color: #999; }
-        .badge { display: inline-block; background: #ff8c00; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; color: #222; }
+        .container { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.10); }
+        .header { background: #1a1a1a; color: #fff; padding: 28px 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 30px; letter-spacing: 4px; color: #ff7a00; }
+        .header p { margin: 6px 0 0; color: #bbb; font-size: 12px; }
+        .content { padding: 28px 30px; }
+        .title { text-align: center; margin-bottom: 22px; }
+        .title h2 { margin: 0; font-size: 24px; }
+        .title p { margin: 6px 0 0; color: #777; }
+        .badge { display: inline-block; background: #ff8c00; color: #fff; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: bold; margin-top: 10px; }
+        .section { margin-bottom: 22px; }
+        .section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: #555; border-bottom: 2px solid #f0f0f0; padding-bottom: 6px; margin-bottom: 12px; }
+        .info-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; }
+        .label { color: #777; }
+        .value { font-weight: bold; text-align: right; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { background: #f8f8f8; text-align: left; padding: 8px; font-size: 12px; color: #666; border-bottom: 2px solid #e5e5e5; }
+        td { padding: 8px; font-size: 13px; border-bottom: 1px solid #f1f1f1; vertical-align: top; }
+        .money { text-align: right; white-space: nowrap; }
+        .summary-row td { border-bottom: none; padding-top: 10px; padding-bottom: 4px; }
+        .grand-total td { background: #1a1a1a; color: #fff; font-weight: bold; font-size: 16px; padding: 12px 8px; }
+        .note { color: #777; font-size: 12px; margin-top: 12px; }
+        .footer { background: #f8f8f8; padding: 20px; text-align: center; font-size: 11px; color: #888; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>RAMÓN</h1>
+            <h1>RAMON</h1>
             <p>by Bosco</p>
         </div>
 
         <div class="content">
-            <div style="text-align: center; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #333;">Comprobante de Venta</h2>
-                <p style="color: #888; margin: 5px 0;">#{{ venta.id }} | {{ venta.fecha|date:"d/m/Y H:i" }}</p>
+            <div class="title">
+                <h2>Comprobante de Venta</h2>
+                <p>#{{ venta.id }} | {{ venta.fecha|date:"d/m/Y H:i" }}</p>
                 <span class="badge">{{ venta.get_metodo_pago_display|upper }}</span>
             </div>
 
-            <div class="info-section">
-                <h3>Datos del Cliente</h3>
+            <div class="section">
+                <h3>Datos del cliente</h3>
                 {% if venta.cliente %}
-                <div class="info-row"><span class="info-label">Nombre:</span><span class="info-value">{{ venta.cliente.nombre }}</span></div>
-                <div class="info-row"><span class="info-label">RUC/CI:</span><span class="info-value">{{ venta.cliente.cedula_ruc }}</span></div>
-                {% if venta.cliente.direccion %}<div class="info-row"><span class="info-label">Dirección:</span><span class="info-value">{{ venta.cliente.direccion }}</span></div>{% endif %}
-                {% if venta.cliente.telefono %}<div class="info-row"><span class="info-label">Teléfono:</span><span class="info-value">{{ venta.cliente.telefono }}</span></div>{% endif %}
+                <div class="info-row"><span class="label">Nombre:</span><span class="value">{{ venta.cliente.nombre }}</span></div>
+                <div class="info-row"><span class="label">CI/RUC:</span><span class="value">{{ venta.cliente.cedula_ruc }}</span></div>
+                {% if venta.cliente.telefono %}<div class="info-row"><span class="label">Telefono:</span><span class="value">{{ venta.cliente.telefono }}</span></div>{% endif %}
+                {% if venta.cliente.email %}<div class="info-row"><span class="label">Correo:</span><span class="value">{{ venta.cliente.email }}</span></div>{% endif %}
+                {% if venta.cliente.direccion %}<div class="info-row"><span class="label">Direccion:</span><span class="value">{{ venta.cliente.direccion }}</span></div>{% endif %}
                 {% else %}
-                <div class="info-row"><span class="info-label">Cliente:</span><span class="info-value">{{ venta.cliente_nombre }}</span></div>
+                <div class="info-row"><span class="label">Nombre:</span><span class="value">{{ venta.cliente_nombre }}</span></div>
+                {% if venta.telefono_cliente %}<div class="info-row"><span class="label">Telefono:</span><span class="value">{{ venta.telefono_cliente }}</span></div>{% endif %}
+                {% if venta.email_cliente %}<div class="info-row"><span class="label">Correo:</span><span class="value">{{ venta.email_cliente }}</span></div>{% endif %}
+                {% if venta.direccion_envio %}<div class="info-row"><span class="label">Direccion:</span><span class="value">{{ venta.direccion_envio }}</span></div>{% endif %}
                 {% endif %}
+                <div class="info-row"><span class="label">Tipo de pedido:</span><span class="value">{{ venta.get_tipo_pedido_display }}</span></div>
             </div>
 
-            <div class="info-section">
-                <h3>Detalle de Productos</h3>
+            <div class="section">
+                <h3>Detalle del pedido</h3>
                 <table>
                     <thead>
                         <tr>
                             <th>Cant.</th>
-                            <th>Descripción</th>
-                            <th style="text-align:right;">P/U</th>
-                            <th style="text-align:right;">Subtotal</th>
+                            <th>Descripcion</th>
+                            <th class="money">P/U</th>
+                            <th class="money">Subtotal</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -66,35 +76,48 @@
                             <td>{{ item.cantidad }}</td>
                             <td>
                                 {{ item.producto.nombre }}
-                                {% if item.nota %}<br><small style="color:#888;">({{ item.nota }})</small>{% endif %}
+                                {% if item.nota %}
+                                <br><small style="color:#777;">{{ item.nota }}</small>
+                                {% endif %}
                             </td>
-                            <td style="text-align:right;">${{ item.precio_unitario|floatformat:2 }}</td>
-                            <td style="text-align:right;">${{ item.subtotal|floatformat:2 }}</td>
+                            <td class="money">${{ item.precio_unitario|floatformat:2 }}</td>
+                            <td class="money">${{ item.subtotal|floatformat:2 }}</td>
                         </tr>
                         {% endfor %}
-                    </tbody>
-                    <tfoot>
-                        <tr class="total-row">
-                            <td colspan="3">TOTAL</td>
-                            <td style="text-align:right;">${{ venta.total|floatformat:2 }}</td>
+                        <tr class="summary-row">
+                            <td colspan="3" class="money"><strong>Subtotal</strong></td>
+                            <td class="money"><strong>${{ venta.total|floatformat:2 }}</strong></td>
                         </tr>
-                    </tfoot>
+                        {% if venta.tipo_pedido == 'DOMICILIO' and venta.costo_envio > 0 %}
+                        <tr class="summary-row">
+                            <td colspan="3" class="money"><strong>Envio</strong></td>
+                            <td class="money"><strong>${{ venta.costo_envio|floatformat:2 }}</strong></td>
+                        </tr>
+                        {% endif %}
+                        <tr class="grand-total">
+                            <td colspan="3">TOTAL</td>
+                            <td class="money">${{ venta.total_con_envio|floatformat:2 }}</td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
 
             {% if venta.metodo_pago == 'EFECTIVO' %}
-            <div class="info-section">
-                <div class="info-row"><span class="info-label">Recibido:</span><span class="info-value">${{ venta.monto_recibido|floatformat:2 }}</span></div>
-                <div class="info-row"><span class="info-label">Cambio:</span><span class="info-value">${{ venta.cambio|floatformat:2 }}</span></div>
+            <div class="section">
+                <h3>Pago</h3>
+                <div class="info-row"><span class="label">Monto recibido:</span><span class="value">${{ venta.monto_recibido|floatformat:2 }}</span></div>
+                <div class="info-row"><span class="label">Cambio:</span><span class="value">${{ venta.cambio|floatformat:2 }}</span></div>
             </div>
             {% endif %}
+
+            <p class="note">
+                Gracias por tu compra. Este comprobante se envio cuando el repartidor confirmo la entrega final del pedido.
+            </p>
         </div>
 
         <div class="footer">
-            <p>RAMÓN by Bosco | RUC: 0999999999001</p>
-            <p>Av. Principal y Calle 1 | Tel: 0991234567</p>
-            <p style="margin-top:10px;">Este documento es un comprobante de venta electrónico.</p>
-            <p>Conserve este email para sus registros tributarios.</p>
+            <p>RAMON by Bosco</p>
+            <p>Conserva este comprobante para tus registros.</p>
         </div>
     </div>
 </body>

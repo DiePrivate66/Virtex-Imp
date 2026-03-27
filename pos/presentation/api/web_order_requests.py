@@ -16,6 +16,7 @@ def _parse_multipart_web_order_request(request) -> tuple[dict, object | None]:
         'nombre': request.POST.get('nombre', 'CONSUMIDOR FINAL'),
         'cedula': request.POST.get('cedula', ''),
         'telefono': request.POST.get('telefono', ''),
+        'email': request.POST.get('email', ''),
         'direccion': request.POST.get('direccion', ''),
         'tipo_pedido': request.POST.get('tipo_pedido', 'DOMICILIO'),
         'metodo_pago': request.POST.get('metodo_pago', 'EFECTIVO'),

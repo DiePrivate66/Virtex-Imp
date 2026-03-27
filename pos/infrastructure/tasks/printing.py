@@ -16,6 +16,18 @@ def create_print_jobs(self, venta_id: int):
     PrintJob.objects.get_or_create(venta=venta, tipo='TICKET', defaults={'estado': 'PENDING'})
 
 
+@shared_task(name='pos.infrastructure.tasks.queue_delivery_receipt_ticket', bind=True)
+def queue_delivery_receipt_ticket(self, venta_id: int):
+    venta = Venta.objects.get(id=venta_id)
+    job, _ = PrintJob.objects.get_or_create(venta=venta, tipo='TICKET', defaults={'estado': 'PENDING'})
+    if job.estado != 'PENDING' or job.error or job.reintentos:
+        job.estado = 'PENDING'
+        job.error = ''
+        job.reintentos = 0
+        job.save(update_fields=['estado', 'error', 'reintentos', 'updated_at'])
+    return {'job_id': job.id, 'venta_id': venta.id}
+
+
 @shared_task(name='pos.infrastructure.tasks.requeue_stuck_print_jobs', bind=True)
 def requeue_stuck_print_jobs(self):
     threshold = timezone.now() - timedelta(

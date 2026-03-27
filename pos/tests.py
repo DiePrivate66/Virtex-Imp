@@ -17,6 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .application.web_orders import WebOrderError
+from .infrastructure.delivery import make_delivery_delivered_token, make_delivery_in_transit_token
 from .models import DeliveryQuote, Empleado, PrintJob, Venta, WhatsAppConversation, WhatsAppMessageLog
 from .presentation.api.web_order_requests import parse_web_order_request
 from .tasks import (
@@ -464,6 +465,176 @@ class OpsPreflightCommandTests(TestCase):
         self.assertIn('"summary"', output)
         self.assertIn('"checks"', output)
         self.assertIn('"database"', output)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class DeliveryInTransitFlowTests(TestCase):
+    def setUp(self):
+        self.driver = Empleado.objects.create(
+            nombre='Carlos Repartidor',
+            pin='4321',
+            rol='DELIVERY',
+            activo=True,
+        )
+        self.sale = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='COCINA',
+            metodo_pago='EFECTIVO',
+            total='10.00',
+            cliente_nombre='Andres Gutierrez',
+            telefono_cliente='0991111111',
+            repartidor_asignado=self.driver,
+            costo_envio='5.00',
+        )
+
+    def test_driver_can_mark_assigned_order_in_transit_with_eta(self):
+        token = make_delivery_in_transit_token(self.sale.id, self.driver.id)
+
+        response = self.client.post(
+            reverse('delivery_in_transit_submit', args=[token]),
+            data={'pin': '4321', 'eta_minutos': '20'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.estado, 'EN_CAMINO')
+        self.assertEqual(self.sale.tiempo_estimado_minutos, 20)
+        self.assertIsNotNone(self.sale.salio_a_reparto_at)
+
+    def test_driver_cannot_mark_other_drivers_order_in_transit(self):
+        other_driver = Empleado.objects.create(
+            nombre='Otro Repartidor',
+            pin='1234',
+            rol='DELIVERY',
+            activo=True,
+        )
+        token = make_delivery_in_transit_token(self.sale.id, self.driver.id)
+
+        response = self.client.post(
+            reverse('delivery_in_transit_submit', args=[token]),
+            data={'pin': '1234', 'eta_minutos': '15'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.estado, 'COCINA')
+        self.assertContains(response, 'no corresponde a tu pedido asignado')
+        self.assertEqual(other_driver.rol, 'DELIVERY')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class DeliveryCompletionFlowTests(TestCase):
+    def setUp(self):
+        self.driver = Empleado.objects.create(
+            nombre='Carlos Repartidor',
+            pin='4321',
+            rol='DELIVERY',
+            activo=True,
+        )
+        self.sale = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='EN_CAMINO',
+            metodo_pago='EFECTIVO',
+            total='10.00',
+            cliente_nombre='Andres Gutierrez',
+            telefono_cliente='0991111111',
+            email_cliente='cliente@example.com',
+            repartidor_asignado=self.driver,
+            costo_envio='5.00',
+            tiempo_estimado_minutos=20,
+            salio_a_reparto_at=timezone.now() - timedelta(minutes=5),
+        )
+
+    def test_customer_can_report_delivery_received_via_public_endpoint(self):
+        response = self.client.post(reverse('pedido_api_recibido', args=[self.sale.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'ok')
+        self.sale.refresh_from_db()
+        self.assertIsNotNone(self.sale.cliente_reporto_recibido_at)
+
+    def test_order_status_api_exposes_received_flags(self):
+        self.sale.cliente_reporto_recibido_at = timezone.now()
+        self.sale.save(update_fields=['cliente_reporto_recibido_at'])
+
+        response = self.client.get(reverse('pedido_api_estado', args=[self.sale.id]))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['cliente_reporto_recibido'])
+        self.assertFalse(payload['repartidor_confirmo_entrega'])
+        self.assertFalse(payload['puede_reportar_recibido'])
+        self.assertTrue(payload['esperando_confirmacion_delivery'])
+
+    @patch('pos.application.delivery.commands.send_sale_receipt_email_async')
+    @patch('pos.application.delivery.commands.queue_delivery_receipt_ticket.delay')
+    def test_driver_can_confirm_completed_delivery_after_customer_reports_received(
+        self,
+        mock_queue_ticket,
+        mock_send_email,
+    ):
+        self.sale.cliente_reporto_recibido_at = timezone.now()
+        self.sale.save(update_fields=['cliente_reporto_recibido_at'])
+        token = make_delivery_delivered_token(self.sale.id, self.driver.id)
+
+        response = self.client.post(
+            reverse('delivery_delivered_submit', args=[token]),
+            data={'pin': '4321'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.estado, 'LISTO')
+        self.assertIsNotNone(self.sale.repartidor_confirmo_entrega_at)
+        mock_queue_ticket.assert_called_once_with(self.sale.id)
+        mock_send_email.assert_called_once_with(self.sale, 'cliente@example.com')
+        self.assertContains(response, 'ya fue confirmada')
+
+    @patch('pos.application.delivery.commands.send_sale_receipt_email_async')
+    @patch('pos.application.delivery.commands.queue_delivery_receipt_ticket.delay')
+    def test_driver_cannot_confirm_completed_delivery_before_customer_reports_received(
+        self,
+        mock_queue_ticket,
+        mock_send_email,
+    ):
+        token = make_delivery_delivered_token(self.sale.id, self.driver.id)
+
+        response = self.client.post(
+            reverse('delivery_delivered_submit', args=[token]),
+            data={'pin': '4321'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.estado, 'EN_CAMINO')
+        self.assertIsNone(self.sale.repartidor_confirmo_entrega_at)
+        mock_queue_ticket.assert_not_called()
+        mock_send_email.assert_not_called()
+        self.assertContains(response, 'cliente aun no marca el pedido como recibido')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CustomerOrderConfirmationEtaTests(TestCase):
+    def test_confirmation_page_shows_remaining_eta_when_order_in_transit(self):
+        sale = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='EN_CAMINO',
+            metodo_pago='EFECTIVO',
+            total='10.00',
+            cliente_nombre='Cliente Demo',
+            telefono_cliente='0991111111',
+            costo_envio='2.50',
+            tiempo_estimado_minutos=20,
+            salio_a_reparto_at=timezone.now() - timedelta(minutes=5),
+        )
+
+        response = self.client.get(reverse('pedido_confirmacion', args=[sale.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tiempo estimado de llegada: 15 min')
 
 
 @override_settings(

@@ -134,8 +134,29 @@ class Venta(models.Model):
 
     direccion_envio = models.TextField(blank=True, help_text='Direccion texto libre para domicilios')
     telefono_cliente = models.CharField(max_length=20, blank=True, help_text='Telefono del cliente para contacto')
+    email_cliente = models.EmailField(blank=True, help_text='Correo del cliente para enviar comprobante final')
     ubicacion_lat = models.FloatField(null=True, blank=True, help_text='Latitud GPS del cliente')
     ubicacion_lng = models.FloatField(null=True, blank=True, help_text='Longitud GPS del cliente')
+    tiempo_estimado_minutos = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Tiempo estimado restante informado por el repartidor cuando el pedido va en camino.',
+    )
+    salio_a_reparto_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Momento en que el repartidor marco el pedido como EN_CAMINO.',
+    )
+    cliente_reporto_recibido_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Momento en que el cliente reporto haber recibido el pedido.',
+    )
+    repartidor_confirmo_entrega_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Momento en que el repartidor confirmo la entrega final.',
+    )
 
     telefono_cliente_e164 = models.CharField(max_length=20, blank=True, db_index=True)
     confirmacion_cliente = models.CharField(max_length=12, choices=CONFIRMACION_CLIENTE, default='PENDIENTE')
@@ -157,6 +178,18 @@ class Venta(models.Model):
         if self.monto_recibido is not None:
             return max(self.monto_recibido - self.total_con_envio, Decimal('0.00'))
         return Decimal('0.00')
+
+    @property
+    def minutos_restantes_estimados(self):
+        if not self.tiempo_estimado_minutos:
+            return None
+
+        if not self.salio_a_reparto_at:
+            return self.tiempo_estimado_minutos
+
+        elapsed_seconds = max((timezone.now() - self.salio_a_reparto_at).total_seconds(), 0)
+        elapsed_minutes = int(elapsed_seconds // 60)
+        return max(self.tiempo_estimado_minutos - elapsed_minutes, 0)
 
 
 class DetalleVenta(models.Model):

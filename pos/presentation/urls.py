@@ -46,6 +46,10 @@ urlpatterns = [
     path('integrations/delivery/quote/<str:token>/submit/', delivery_views.delivery_quote_submit, name='delivery_quote_submit'),
     path('integrations/delivery/claim/<str:token>/', delivery_views.delivery_claim_form, name='delivery_claim_form'),
     path('integrations/delivery/claim/<str:token>/submit/', delivery_views.delivery_claim_submit, name='delivery_claim_submit'),
+    path('integrations/delivery/in-transit/<str:token>/', delivery_views.delivery_in_transit_form, name='delivery_in_transit_form'),
+    path('integrations/delivery/in-transit/<str:token>/submit/', delivery_views.delivery_in_transit_submit, name='delivery_in_transit_submit'),
+    path('integrations/delivery/delivered/<str:token>/', delivery_views.delivery_delivered_form, name='delivery_delivered_form'),
+    path('integrations/delivery/delivered/<str:token>/submit/', delivery_views.delivery_delivered_submit, name='delivery_delivered_submit'),
 
     # Integraciones
     path('', include('pos.presentation.integrations.urls')),

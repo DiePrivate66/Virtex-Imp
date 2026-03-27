@@ -111,9 +111,15 @@ def notify_order_claimed(venta, empleado, reply_to_message_id: Optional[int] = N
     if not chat_id:
         return False
 
+    from pos.infrastructure.delivery import make_delivery_in_transit_token
+
+    in_transit_token = make_delivery_in_transit_token(venta.id, empleado.id)
+    in_transit_url = f'{settings.PUBLIC_BACKEND_URL}/integrations/delivery/in-transit/{in_transit_token}/'
+
     text = (
         f'Pedido #{venta.id} tomado por {empleado.nombre}\n'
-        f'Envio: ${venta.costo_envio:.2f}'
+        f'Envio: ${venta.costo_envio:.2f}\n'
+        f'Marcar en camino: {in_transit_url}'
     )
 
     payload = {
@@ -124,4 +130,32 @@ def notify_order_claimed(venta, empleado, reply_to_message_id: Optional[int] = N
         payload['reply_to_message_id'] = reply_to_message_id
 
     result = _send_telegram('sendMessage', payload)
+    return result is not None
+
+
+def notify_customer_reported_received(venta, empleado) -> bool:
+    """Notify the delivery group that the customer reported the order as received."""
+    chat_id = getattr(settings, 'TELEGRAM_DELIVERY_GROUP_ID', '')
+    if not chat_id:
+        return False
+
+    from pos.infrastructure.delivery import make_delivery_delivered_token
+
+    delivered_token = make_delivery_delivered_token(venta.id, empleado.id)
+    delivered_url = f'{settings.PUBLIC_BACKEND_URL}/integrations/delivery/delivered/{delivered_token}/'
+
+    text = (
+        f'Cliente marco pedido #{venta.id} como recibido.\n'
+        f'Repartidor asignado: {empleado.nombre}\n'
+        f'Confirma entrega final aqui: {delivered_url}'
+    )
+
+    result = _send_telegram(
+        'sendMessage',
+        {
+            'chat_id': chat_id,
+            'text': text,
+            'disable_web_page_preview': True,
+        },
+    )
     return result is not None

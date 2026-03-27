@@ -1,6 +1,6 @@
 """Notification integrations such as WhatsApp and email."""
 
-from .telegram import notify_delivery_group, notify_order_claimed
+from .telegram import notify_customer_reported_received, notify_delivery_group, notify_order_claimed
 from .whatsapp import (
     build_twiml_response,
     extract_inbound_whatsapp,
@@ -15,6 +15,7 @@ from .whatsapp import (
 __all__ = [
     'build_twiml_response',
     'extract_inbound_whatsapp',
+    'notify_customer_reported_received',
     'notify_delivery_group',
     'notify_order_claimed',
     'send_whatsapp_confirmation_buttons',

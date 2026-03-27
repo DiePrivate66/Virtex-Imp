@@ -4,7 +4,8 @@ import { map, Observable } from 'rxjs';
 import {
   CategoriaConProductos,
   CrearPedidoPayload,
-  CrearPedidoResponse
+  CrearPedidoResponse,
+  EstadoPedidoResponse
 } from '../models/pedido.models';
 import { environment } from '../../environments/environment';
 
@@ -36,6 +37,7 @@ export class PedidoApiService {
       formData.append('nombre', payload.nombre);
       formData.append('cedula', payload.cedula || '');
       formData.append('telefono', payload.telefono);
+      formData.append('email', payload.email || '');
       formData.append('direccion', payload.direccion || '');
       formData.append('tipo_pedido', payload.tipo_pedido);
       formData.append('metodo_pago', payload.metodo_pago);
@@ -53,5 +55,16 @@ export class PedidoApiService {
     return this.http.post<CrearPedidoResponse>(`${this.apiBase}/crear/`, payload, {
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+
+  getEstadoPedido(pedidoId: string | number): Observable<EstadoPedidoResponse> {
+    return this.http.get<EstadoPedidoResponse>(`${this.apiBase}/pedidos/${pedidoId}/estado/`);
+  }
+
+  reportarPedidoRecibido(pedidoId: string | number): Observable<{ status: 'ok' | 'error'; mensaje: string }> {
+    return this.http.post<{ status: 'ok' | 'error'; mensaje: string }>(
+      `${this.apiBase}/pedidos/${pedidoId}/recibido/`,
+      {}
+    );
   }
 }

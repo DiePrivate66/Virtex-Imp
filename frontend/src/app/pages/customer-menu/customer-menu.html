@@ -91,6 +91,11 @@
       <input [(ngModel)]="cedula" type="text" placeholder="Solo si deseas factura" />
     </div>
 
+    <div class="field-group">
+      <label>Correo (opcional)</label>
+      <input [(ngModel)]="email" type="email" placeholder="Para recibir tu comprobante" />
+    </div>
+
     <div class="field-group two-col">
       <button [class.active]="tipoPedido === 'DOMICILIO'" (click)="setTipoPedido('DOMICILIO')">DELIVERY</button>
       <button [class.active]="tipoPedido === 'LLEVAR'" (click)="setTipoPedido('LLEVAR')">RETIRO</button>

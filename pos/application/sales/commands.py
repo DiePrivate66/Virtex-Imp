@@ -70,7 +70,7 @@ def register_sale(user, data: dict):
         )
 
     if cliente and cliente.email:
-        _send_sale_receipt_email_async(venta, cliente.email)
+        send_sale_receipt_email_async(venta, cliente.email)
 
     return venta
 
@@ -130,7 +130,7 @@ def _build_sale_note(product_name: str, display_name: str, user_note: str) -> st
     return note.strip()
 
 
-def _send_sale_receipt_email_async(venta: Venta, recipient_email: str):
+def send_sale_receipt_email_async(venta: Venta, recipient_email: str):
     html_email = render_to_string('pos/email/factura_email.html', {'venta': venta})
 
     def send_async():

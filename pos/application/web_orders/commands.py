@@ -146,6 +146,7 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
             cliente_nombre=data.get('nombre', 'CONSUMIDOR FINAL'),
             telefono_cliente=raw_phone,
             telefono_cliente_e164=normalize_phone_to_e164(raw_phone),
+            email_cliente=(data.get('email') or '').strip(),
             direccion_envio=data.get('direccion', ''),
             ubicacion_lat=float(lat) if lat else None,
             ubicacion_lng=float(lng) if lng else None,
@@ -206,8 +207,28 @@ def _resolve_customer(data: dict):
             'nombre': data.get('nombre', 'CONSUMIDOR FINAL'),
             'telefono': data.get('telefono', ''),
             'direccion': data.get('direccion', ''),
+            'email': data.get('email', '').strip(),
         },
     )
+    updated_fields = []
+    nombre = data.get('nombre', 'CONSUMIDOR FINAL')
+    telefono = data.get('telefono', '')
+    direccion = data.get('direccion', '')
+    email = data.get('email', '').strip()
+    if nombre and customer.nombre != nombre:
+        customer.nombre = nombre
+        updated_fields.append('nombre')
+    if telefono and customer.telefono != telefono:
+        customer.telefono = telefono
+        updated_fields.append('telefono')
+    if direccion and customer.direccion != direccion:
+        customer.direccion = direccion
+        updated_fields.append('direccion')
+    if email and customer.email != email:
+        customer.email = email
+        updated_fields.append('email')
+    if updated_fields:
+        customer.save(update_fields=updated_fields)
     return customer
 
 

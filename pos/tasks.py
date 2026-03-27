@@ -23,6 +23,7 @@ from pos.infrastructure.tasks import (
     notify_customer_quote_total as _notify_customer_quote_total,
     process_customer_confirmation as _process_customer_confirmation,
     process_delivery_quote_timeout as _process_delivery_quote_timeout,
+    queue_delivery_receipt_ticket as _queue_delivery_receipt_ticket,
     requeue_stuck_print_jobs as _requeue_stuck_print_jobs,
     send_delivery_quote_requests as _send_delivery_quote_requests,
     set_quote_and_notify as _set_quote_and_notify,
@@ -48,6 +49,11 @@ def process_customer_confirmation(self, *args, **kwargs):
 @shared_task(name='pos.tasks.process_delivery_quote_timeout', bind=True)
 def process_delivery_quote_timeout(self, *args, **kwargs):
     return _process_delivery_quote_timeout.run(*args, **kwargs)
+
+
+@shared_task(name='pos.tasks.queue_delivery_receipt_ticket', bind=True)
+def queue_delivery_receipt_ticket(self, *args, **kwargs):
+    return _queue_delivery_receipt_ticket.run(*args, **kwargs)
 
 
 @shared_task(name='pos.tasks.requeue_stuck_print_jobs', bind=True)
@@ -79,6 +85,7 @@ __all__ = [
     'notify_customer_quote_total',
     'process_customer_confirmation',
     'process_delivery_quote_timeout',
+    'queue_delivery_receipt_ticket',
     'requeue_stuck_print_jobs',
     'send_delivery_quote_requests',
     'set_quote_and_notify',

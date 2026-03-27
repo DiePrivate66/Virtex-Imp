@@ -5,9 +5,17 @@ from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
-from pos.application.notifications import notify_order_claimed
-from pos.infrastructure.delivery import read_delivery_claim_token, read_delivery_quote_token
+from pos.application.notifications import notify_customer_reported_received, notify_order_claimed
+from pos.application.sales import send_sale_receipt_email_async
+from pos.infrastructure.delivery import (
+    read_delivery_claim_token,
+    read_delivery_delivered_token,
+    read_delivery_in_transit_token,
+    read_delivery_quote_token,
+)
+from pos.infrastructure.tasks import queue_delivery_receipt_ticket
 from pos.models import Empleado, Venta
 from pos.models import DeliveryQuote
 from pos.infrastructure.tasks import set_quote_and_notify
@@ -35,6 +43,21 @@ class DeliveryClaimSubmission:
     precio: str
 
 
+@dataclass(frozen=True)
+class DeliveryInTransitSubmission:
+    venta_id: int
+    empleado_id: int
+    empleado_nombre: str
+    eta_minutos: int
+
+
+@dataclass(frozen=True)
+class DeliveryCompletionSubmission:
+    venta_id: int
+    empleado_id: int
+    empleado_nombre: str
+
+
 def _parse_delivery_price(precio) -> Decimal:
     try:
         precio_decimal = Decimal(str(precio)).quantize(Decimal('0.01'))
@@ -59,6 +82,32 @@ def _get_claim_token_payload(token: str) -> dict:
         return read_delivery_claim_token(token)
     except Exception as exc:
         raise DeliveryError('Token invalido o expirado') from exc
+
+
+def _get_in_transit_token_payload(token: str) -> dict:
+    try:
+        return read_delivery_in_transit_token(token)
+    except Exception as exc:
+        raise DeliveryError('Token invalido o expirado') from exc
+
+
+def _get_delivered_token_payload(token: str) -> dict:
+    try:
+        return read_delivery_delivered_token(token)
+    except Exception as exc:
+        raise DeliveryError('Token invalido o expirado') from exc
+
+
+def _parse_eta_minutes(eta_minutos) -> int:
+    try:
+        eta = int(str(eta_minutos).strip())
+    except (TypeError, ValueError) as exc:
+        raise DeliveryError('Tiempo estimado invalido') from exc
+
+    if eta <= 0 or eta > 180:
+        raise DeliveryError('Tiempo estimado invalido')
+
+    return eta
 
 
 def submit_manual_delivery_quote(*, pedido_id, precio, user=None) -> DeliveryQuoteSubmission:
@@ -140,4 +189,111 @@ def claim_delivery_order(*, token: str, pin: str, precio) -> DeliveryClaimSubmis
         empleado_id=driver.id,
         empleado_nombre=driver.nombre,
         precio=str(precio_decimal),
+    )
+
+
+def mark_delivery_in_transit(*, token: str, pin: str, eta_minutos) -> DeliveryInTransitSubmission:
+    payload = _get_in_transit_token_payload(token)
+    eta = _parse_eta_minutes(eta_minutos)
+
+    driver = Empleado.objects.filter(pin=(pin or '').strip(), rol='DELIVERY', activo=True).first()
+    if not driver:
+        raise DeliveryError('PIN invalido o no eres repartidor activo.')
+
+    with transaction.atomic():
+        try:
+            venta = Venta.objects.select_for_update().get(id=payload['venta_id'])
+        except Venta.DoesNotExist as exc:
+            raise DeliveryError('Pedido no encontrado', status_code=404) from exc
+
+        if venta.repartidor_asignado_id != payload['empleado_id'] or venta.repartidor_asignado_id != driver.id:
+            raise DeliveryError('Este link no corresponde a tu pedido asignado.', status_code=403)
+
+        if venta.estado in {'CANCELADO', 'LISTO', 'PENDIENTE_COTIZACION'}:
+            raise DeliveryError('Este pedido ya no se puede marcar en camino.', status_code=409)
+
+        venta.estado = 'EN_CAMINO'
+        venta.tiempo_estimado_minutos = eta
+        venta.salio_a_reparto_at = timezone.now()
+        venta.save(update_fields=['estado', 'tiempo_estimado_minutos', 'salio_a_reparto_at'])
+
+    return DeliveryInTransitSubmission(
+        venta_id=venta.id,
+        empleado_id=driver.id,
+        empleado_nombre=driver.nombre,
+        eta_minutos=eta,
+    )
+
+
+def mark_customer_received(*, pedido_id) -> Venta:
+    try:
+        venta = Venta.objects.select_related('repartidor_asignado', 'cliente').get(id=pedido_id, origen='WEB')
+    except Venta.DoesNotExist as exc:
+        raise DeliveryError('Pedido no encontrado', status_code=404) from exc
+
+    if venta.tipo_pedido != 'DOMICILIO':
+        raise DeliveryError('Solo los pedidos delivery pueden confirmarse desde aqui.', status_code=400)
+
+    if venta.estado != 'EN_CAMINO':
+        raise DeliveryError('El pedido aun no esta en camino.', status_code=409)
+
+    if venta.repartidor_confirmo_entrega_at:
+        raise DeliveryError('Este pedido ya fue confirmado como entregado.', status_code=409)
+
+    if venta.cliente_reporto_recibido_at:
+        return venta
+
+    venta.cliente_reporto_recibido_at = timezone.now()
+    venta.save(update_fields=['cliente_reporto_recibido_at'])
+
+    if venta.repartidor_asignado:
+        notify_customer_reported_received(venta, venta.repartidor_asignado)
+
+    return venta
+
+
+def confirm_delivery_completed(*, token: str, pin: str) -> DeliveryCompletionSubmission:
+    payload = _get_delivered_token_payload(token)
+
+    driver = Empleado.objects.filter(pin=(pin or '').strip(), rol='DELIVERY', activo=True).first()
+    if not driver:
+        raise DeliveryError('PIN invalido o no eres repartidor activo.')
+
+    with transaction.atomic():
+        try:
+            venta = Venta.objects.select_for_update().select_related('cliente', 'repartidor_asignado').get(id=payload['venta_id'])
+        except Venta.DoesNotExist as exc:
+            raise DeliveryError('Pedido no encontrado', status_code=404) from exc
+
+        if venta.repartidor_asignado_id != payload['empleado_id'] or venta.repartidor_asignado_id != driver.id:
+            raise DeliveryError('Este link no corresponde a tu pedido asignado.', status_code=403)
+
+        if venta.estado != 'EN_CAMINO':
+            raise DeliveryError('Este pedido ya no esta en entrega.', status_code=409)
+
+        if not venta.cliente_reporto_recibido_at:
+            raise DeliveryError('El cliente aun no ha reportado el pedido como recibido.', status_code=409)
+
+        if venta.repartidor_confirmo_entrega_at:
+            return DeliveryCompletionSubmission(
+                venta_id=venta.id,
+                empleado_id=driver.id,
+                empleado_nombre=driver.nombre,
+            )
+
+        venta.repartidor_confirmo_entrega_at = timezone.now()
+        venta.estado = 'LISTO'
+        venta.save(update_fields=['repartidor_confirmo_entrega_at', 'estado'])
+
+    queue_delivery_receipt_ticket.delay(venta.id)
+    recipient_email = (venta.email_cliente or '').strip()
+    if not recipient_email and venta.cliente:
+        recipient_email = (venta.cliente.email or '').strip()
+    if recipient_email:
+        send_sale_receipt_email_async(venta, recipient_email)
+
+    return DeliveryCompletionSubmission(
+        venta_id=venta.id,
+        empleado_id=driver.id,
+        empleado_nombre=driver.nombre,
     )

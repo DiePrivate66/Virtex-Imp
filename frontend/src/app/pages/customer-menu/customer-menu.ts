@@ -40,6 +40,7 @@ export class CustomerMenuComponent implements OnInit, OnDestroy {
   nombre = '';
   telefono = '';
   cedula = '';
+  email = '';
 
   gpsLat: number | null = null;
   gpsLng: number | null = null;
@@ -279,6 +280,7 @@ export class CustomerMenuComponent implements OnInit, OnDestroy {
       nombre: this.nombre.trim().toUpperCase(),
       telefono: this.telefono.trim(),
       cedula: this.cedula.trim(),
+      email: this.email.trim(),
       direccion: '',
       tipo_pedido: this.tipoPedido,
       metodo_pago: this.metodoPago,
@@ -369,6 +371,7 @@ export class CustomerMenuComponent implements OnInit, OnDestroy {
     this.nombre = '';
     this.telefono = '';
     this.cedula = '';
+    this.email = '';
     this.tipoPedido = 'DOMICILIO';
     this.metodoPago = 'EFECTIVO';
     this.cancelFabMode = false;

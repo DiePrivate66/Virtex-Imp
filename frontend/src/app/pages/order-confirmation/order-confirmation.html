@@ -1,9 +1,36 @@
-﻿<div class="confirm-wrap">
+<div class="confirm-wrap">
   <div class="card">
-    <div class="emoji">?</div>
-    <h1>PEDIDO RECIBIDO</h1>
-    <p class="sub">Tu pedido fue enviado correctamente.</p>
+    <div class="emoji">{{ emoji }}</div>
+    <h1>{{ title }}</h1>
+    <p class="sub">{{ subtitle }}</p>
     <p class="id">#{{ pedidoId }}</p>
+
+    @if (etaText) {
+      <p class="sub eta">{{ etaText }}</p>
+    }
+
+    @if (totalText) {
+      <p class="sub">Total estimado: <strong>{{ totalText }}</strong></p>
+    }
+
+    @if (errorMessage) {
+      <p class="sub error">{{ errorMessage }}</p>
+    }
+
+    @if (receivedMessage) {
+      <p class="sub success">{{ receivedMessage }}</p>
+    }
+
+    @if (status?.esperando_confirmacion_delivery) {
+      <p class="sub waiting">Estamos esperando que el repartidor confirme la entrega final.</p>
+    }
+
+    @if (canReportReceived) {
+      <button type="button" class="action-btn" (click)="reportarRecibido()">
+        {{ reportingReceived ? 'ENVIANDO...' : 'YA RECIBI MI PEDIDO' }}
+      </button>
+    }
+
     <a routerLink="/" class="btn">VOLVER AL MENU</a>
   </div>
 </div>

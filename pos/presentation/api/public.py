@@ -7,6 +7,8 @@ from pos.application.web_orders import store_is_open
 from .create_web_order_endpoint import handle_create_web_order_request
 from .menu_endpoint import handle_menu_request
 from .order_confirmation_endpoint import handle_order_confirmation_request
+from .order_received_endpoint import handle_order_received_request
+from .order_status_endpoint import handle_order_status_request
 from .product_catalog_endpoint import handle_product_catalog_request
 
 logger = logging.getLogger(__name__)
@@ -38,9 +40,21 @@ def confirmacion_pedido(request, pedido_id):
     return handle_order_confirmation_request(request, pedido_id)
 
 
+def api_estado_pedido(request, pedido_id):
+    """Return public order status details for the PWA confirmation screen."""
+    return handle_order_status_request(request, pedido_id)
+
+
+def api_reportar_pedido_recibido(request, pedido_id):
+    """Allow the customer to report a delivery as received."""
+    return handle_order_received_request(request, pedido_id)
+
+
 __all__ = [
     'api_crear_pedido',
+    'api_estado_pedido',
     'api_productos',
+    'api_reportar_pedido_recibido',
     'confirmacion_pedido',
     'esta_abierto',
     'menu_cliente',

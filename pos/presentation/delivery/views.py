@@ -11,10 +11,15 @@ from django.views.decorators.http import require_GET, require_POST
 
 from pos.application.delivery import (
     claim_delivery_order,
+    confirm_delivery_completed,
     DeliveryError,
     get_delivery_claim_form_context,
+    get_delivery_delivered_form_context,
+    get_delivery_in_transit_form_context,
     get_delivery_quote_form_context,
     get_manual_delivery_portal_context,
+    mark_customer_received,
+    mark_delivery_in_transit,
     submit_manual_delivery_quote,
     submit_tokenized_delivery_quote,
 )
@@ -120,3 +125,79 @@ def delivery_claim_submit(request, token: str):
         'precio_envio': claim.precio,
     }
     return render(request, 'pos/delivery_claim.html', context)
+
+
+@require_GET
+def delivery_in_transit_form(request, token: str):
+    try:
+        context = get_delivery_in_transit_form_context(token)
+    except DeliveryError as exc:
+        return HttpResponse(exc.message, status=exc.status_code)
+    return render(request, 'pos/delivery_in_transit.html', context)
+
+
+@csrf_exempt
+@require_POST
+def delivery_in_transit_submit(request, token: str):
+    try:
+        base_context = get_delivery_in_transit_form_context(token)
+    except DeliveryError as exc:
+        return HttpResponse(exc.message, status=exc.status_code)
+
+    if base_context.get('token_invalido'):
+        return render(request, 'pos/delivery_in_transit.html', base_context)
+
+    pin = (request.POST.get('pin') or '').strip()
+    eta_raw = request.POST.get('eta_minutos') or request.POST.get('eta')
+
+    try:
+        submission = mark_delivery_in_transit(token=token, pin=pin, eta_minutos=eta_raw)
+    except DeliveryError as exc:
+        context = {**base_context, 'error': exc.message}
+        return render(request, 'pos/delivery_in_transit.html', context)
+
+    updated_context = get_delivery_in_transit_form_context(token)
+    context = {
+        **updated_context,
+        'success': True,
+        'driver_nombre': submission.empleado_nombre,
+        'eta_minutos': submission.eta_minutos,
+    }
+    return render(request, 'pos/delivery_in_transit.html', context)
+
+
+@require_GET
+def delivery_delivered_form(request, token: str):
+    try:
+        context = get_delivery_delivered_form_context(token)
+    except DeliveryError as exc:
+        return HttpResponse(exc.message, status=exc.status_code)
+    return render(request, 'pos/delivery_delivered.html', context)
+
+
+@csrf_exempt
+@require_POST
+def delivery_delivered_submit(request, token: str):
+    try:
+        base_context = get_delivery_delivered_form_context(token)
+    except DeliveryError as exc:
+        return HttpResponse(exc.message, status=exc.status_code)
+
+    if base_context.get('token_invalido'):
+        return render(request, 'pos/delivery_delivered.html', base_context)
+
+    pin = (request.POST.get('pin') or '').strip()
+
+    try:
+        submission = confirm_delivery_completed(token=token, pin=pin)
+    except DeliveryError as exc:
+        context = {**base_context, 'error': exc.message}
+        return render(request, 'pos/delivery_delivered.html', context)
+
+    updated_context = get_delivery_delivered_form_context(token)
+    context = {
+        **updated_context,
+        'success': True,
+        'driver_nombre': submission.empleado_nombre,
+    }
+    return render(request, 'pos/delivery_delivered.html', context)
