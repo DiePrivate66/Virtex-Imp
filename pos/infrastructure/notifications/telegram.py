@@ -105,7 +105,7 @@ def notify_delivery_group(venta) -> Optional[int]:
     return message_id
 
 
-def notify_order_claimed(venta, empleado, reply_to_message_id: Optional[int] = None) -> bool:
+def notify_order_claimed(venta, empleado, precio_envio=None, reply_to_message_id: Optional[int] = None) -> bool:
     """Notify the Telegram group that an order was claimed by a driver."""
     chat_id = getattr(settings, 'TELEGRAM_DELIVERY_GROUP_ID', '')
     if not chat_id:
@@ -116,9 +116,11 @@ def notify_order_claimed(venta, empleado, reply_to_message_id: Optional[int] = N
     in_transit_token = make_delivery_in_transit_token(venta.id, empleado.id)
     in_transit_url = f'{settings.PUBLIC_BACKEND_URL}/integrations/delivery/in-transit/{in_transit_token}/'
 
+    shipping_amount = precio_envio if precio_envio is not None else venta.costo_envio
+
     text = (
         f'Pedido #{venta.id} tomado por {empleado.nombre}\n'
-        f'Envio: ${venta.costo_envio:.2f}\n'
+        f'Envio: ${shipping_amount:.2f}\n'
         f'Marcar en camino: {in_transit_url}'
     )
 

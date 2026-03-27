@@ -2,6 +2,7 @@ import io
 import importlib
 import json
 import warnings
+from decimal import Decimal
 from importlib import import_module
 from datetime import timedelta
 from io import StringIO
@@ -17,7 +18,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .application.web_orders import WebOrderError
-from .infrastructure.delivery import make_delivery_delivered_token, make_delivery_in_transit_token
+from .infrastructure.delivery import (
+    make_delivery_claim_token,
+    make_delivery_delivered_token,
+    make_delivery_in_transit_token,
+)
 from .models import DeliveryQuote, Empleado, PrintJob, Venta, WhatsAppConversation, WhatsAppMessageLog
 from .presentation.api.web_order_requests import parse_web_order_request
 from .tasks import (
@@ -465,6 +470,74 @@ class OpsPreflightCommandTests(TestCase):
         self.assertIn('"summary"', output)
         self.assertIn('"checks"', output)
         self.assertIn('"database"', output)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class DeliveryClaimFlowTests(TestCase):
+    def setUp(self):
+        self.driver = Empleado.objects.create(
+            nombre='Carlos Repartidor',
+            pin='4321',
+            rol='DELIVERY',
+            activo=True,
+            telefono='0991111111',
+        )
+        self.sale = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE_COTIZACION',
+            metodo_pago='EFECTIVO',
+            total='10.00',
+            cliente_nombre='Andres Gutierrez',
+            telefono_cliente='0991111111',
+        )
+
+    @patch('pos.application.delivery.commands.set_quote_and_notify.delay')
+    @patch('pos.application.delivery.commands.notify_order_claimed')
+    def test_claim_uses_real_quoted_price_in_telegram_notification(self, mock_notify_claimed, mock_set_quote):
+        token = make_delivery_claim_token(self.sale.id)
+
+        response = self.client.post(
+            reverse('delivery_claim_submit', args=[token]),
+            data={'pin': '4321', 'precio': '5.00'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.repartidor_asignado_id, self.driver.id)
+        mock_set_quote.assert_called_once_with(self.sale.id, self.driver.id, '5.00')
+        mock_notify_claimed.assert_called_once()
+        args, kwargs = mock_notify_claimed.call_args
+        self.assertEqual(args[0].id, self.sale.id)
+        self.assertEqual(args[1].id, self.driver.id)
+        self.assertEqual(kwargs['precio_envio'], Decimal('5.00'))
+        self.assertContains(response, 'Envio: $5.00')
+
+    @patch('pos.application.delivery.commands.set_quote_and_notify.delay')
+    @patch('pos.application.delivery.commands.notify_order_claimed')
+    def test_driver_can_register_from_claim_link_and_take_order(self, mock_notify_claimed, mock_set_quote):
+        token = make_delivery_claim_token(self.sale.id)
+
+        response = self.client.post(
+            reverse('delivery_claim_submit', args=[token]),
+            data={
+                'flow': 'register',
+                'nombre': 'Nuevo Driver',
+                'telefono': '0992223334',
+                'nuevo_pin': '9876',
+                'precio': '4.50',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        new_driver = Empleado.objects.get(pin='9876')
+        self.assertEqual(new_driver.rol, 'DELIVERY')
+        self.assertTrue(new_driver.activo)
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.repartidor_asignado_id, new_driver.id)
+        mock_set_quote.assert_called_once_with(self.sale.id, new_driver.id, '4.50')
+        mock_notify_claimed.assert_called_once()
+        self.assertContains(response, 'Nuevo Driver - Envio: $4.50')
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

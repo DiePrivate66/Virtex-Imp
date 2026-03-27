@@ -20,6 +20,7 @@ from pos.application.delivery import (
     get_manual_delivery_portal_context,
     mark_customer_received,
     mark_delivery_in_transit,
+    register_delivery_and_claim_order,
     submit_manual_delivery_quote,
     submit_tokenized_delivery_quote,
 )
@@ -107,14 +108,32 @@ def delivery_claim_submit(request, token: str):
 
     pin = (request.POST.get('pin') or '').strip()
     precio_raw = request.POST.get('precio')
+    flow = (request.POST.get('flow') or 'claim').strip()
 
     try:
-        claim = claim_delivery_order(token=token, pin=pin, precio=precio_raw)
+        if flow == 'register':
+            claim = register_delivery_and_claim_order(
+                token=token,
+                nombre=request.POST.get('nombre'),
+                telefono=request.POST.get('telefono'),
+                pin=request.POST.get('nuevo_pin'),
+                precio=precio_raw,
+            )
+        else:
+            claim = claim_delivery_order(token=token, pin=pin, precio=precio_raw)
     except DeliveryError as exc:
         if exc.message == 'Pedido ya tomado':
             context = {**base_context, 'ya_tomado': True}
             return render(request, 'pos/delivery_claim.html', context)
-        context = {**base_context, 'error': exc.message, 'ya_tomado': False}
+        context = {
+            **base_context,
+            'error': exc.message,
+            'ya_tomado': False,
+            'registration_mode': flow == 'register',
+            'form_nombre': (request.POST.get('nombre') or '').strip(),
+            'form_telefono': (request.POST.get('telefono') or '').strip(),
+            'form_precio': (precio_raw or '').strip() if hasattr(precio_raw, 'strip') else precio_raw,
+        }
         return render(request, 'pos/delivery_claim.html', context)
 
     updated_context = get_delivery_claim_form_context(token)

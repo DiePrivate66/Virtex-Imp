@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+import re
 
 from django.conf import settings
 from django.db import transaction
@@ -58,6 +59,13 @@ class DeliveryCompletionSubmission:
     empleado_nombre: str
 
 
+@dataclass(frozen=True)
+class DeliveryDriverRegistration:
+    empleado_id: int
+    empleado_nombre: str
+    pin: str
+
+
 def _parse_delivery_price(precio) -> Decimal:
     try:
         precio_decimal = Decimal(str(precio)).quantize(Decimal('0.01'))
@@ -108,6 +116,56 @@ def _parse_eta_minutes(eta_minutos) -> int:
         raise DeliveryError('Tiempo estimado invalido')
 
     return eta
+
+
+def _parse_delivery_pin(pin: str | None) -> str:
+    normalized = (pin or '').strip()
+    if not re.fullmatch(r'\d{4}', normalized):
+        raise DeliveryError('El PIN debe tener exactamente 4 digitos.')
+    return normalized
+
+
+def register_delivery_driver(*, nombre: str, telefono: str, pin: str) -> DeliveryDriverRegistration:
+    normalized_name = (nombre or '').strip()
+    normalized_phone = (telefono or '').strip()
+    normalized_pin = _parse_delivery_pin(pin)
+
+    if not normalized_name:
+        raise DeliveryError('El nombre es requerido para registrarte.')
+
+    if not normalized_phone:
+        raise DeliveryError('El telefono es requerido para registrarte.')
+
+    if Empleado.objects.filter(pin=normalized_pin).exists():
+        raise DeliveryError('Ese PIN ya esta en uso. Elige otro de 4 digitos.')
+
+    driver = Empleado.objects.create(
+        nombre=normalized_name,
+        telefono=normalized_phone,
+        pin=normalized_pin,
+        rol='DELIVERY',
+        activo=True,
+    )
+
+    return DeliveryDriverRegistration(
+        empleado_id=driver.id,
+        empleado_nombre=driver.nombre,
+        pin=driver.pin,
+    )
+
+
+def register_delivery_and_claim_order(*, token: str, nombre: str, telefono: str, pin: str, precio) -> DeliveryClaimSubmission:
+    payload = _get_claim_token_payload(token)
+
+    venta = Venta.objects.filter(id=payload['venta_id']).first()
+    if not venta:
+        raise DeliveryError('Pedido no encontrado', status_code=404)
+
+    if venta.repartidor_asignado is not None or venta.estado != 'PENDIENTE_COTIZACION':
+        raise DeliveryError('Pedido ya tomado', status_code=409)
+
+    registration = register_delivery_driver(nombre=nombre, telefono=telefono, pin=pin)
+    return claim_delivery_order(token=token, pin=registration.pin, precio=precio)
 
 
 def submit_manual_delivery_quote(*, pedido_id, precio, user=None) -> DeliveryQuoteSubmission:
@@ -165,7 +223,7 @@ def claim_delivery_order(*, token: str, pin: str, precio) -> DeliveryClaimSubmis
     payload = _get_claim_token_payload(token)
     precio_decimal = _parse_delivery_price(precio)
 
-    driver = Empleado.objects.filter(pin=(pin or '').strip(), rol='DELIVERY', activo=True).first()
+    driver = Empleado.objects.filter(pin=_parse_delivery_pin(pin), rol='DELIVERY', activo=True).first()
     if not driver:
         raise DeliveryError('PIN invalido o no eres repartidor activo.')
 
@@ -182,7 +240,7 @@ def claim_delivery_order(*, token: str, pin: str, precio) -> DeliveryClaimSubmis
         venta.save(update_fields=['repartidor_asignado'])
 
     set_quote_and_notify.delay(venta.id, driver.id, str(precio_decimal))
-    notify_order_claimed(venta, driver)
+    notify_order_claimed(venta, driver, precio_envio=precio_decimal)
 
     return DeliveryClaimSubmission(
         venta_id=venta.id,
