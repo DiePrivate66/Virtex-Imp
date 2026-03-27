@@ -215,7 +215,7 @@
                         <span class="text-gray-500">🛵 Envío (cobra delivery)</span>
                         <div class="flex items-center gap-1">
                             <span class="text-gray-400">$</span>
-                            <input type="number" step="0.50" min="0" value="{{ p.costo_envio|floatformat:2 }}"
+                            <input type="number" step="0.50" min="0" value="{{ p.costo_envio|floatformat:"2u" }}"
                                    class="w-16 bg-black border border-gray-600 text-white text-right p-1 rounded text-xs font-bold focus:border-bosco-orange outline-none"
                                    oninput="actualizarTotalPedido(this)"
                                    onchange="actualizarEnvio({{ p.id }}, this)">
@@ -247,12 +247,12 @@
                         </button>
                     {% elif p.estado == 'COCINA' %}
                         {% if p.tipo_pedido == 'DOMICILIO' %}
-                        <button onclick="cambiarEstado({{ p.id }}, 'EN_CAMINO')" 
+                        <button onclick="ejecutarAccionPedidoV2({{ p.id }}, 'mark_in_transit')" 
                             class="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
                             🛵 EN CAMINO
                         </button>
                         {% endif %}
-                        <button onclick="cambiarEstado({{ p.id }}, 'LISTO')" 
+                        <button onclick="ejecutarAccionPedidoV2({{ p.id }}, 'mark_ready')" 
                             class="flex-1 bg-green-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
                             ✅ LISTO
                         </button>
@@ -261,7 +261,7 @@
                             🖨
                         </button>
                     {% elif p.estado == 'EN_CAMINO' %}
-                        <button onclick="cambiarEstado({{ p.id }}, 'LISTO')" 
+                        <button onclick="ejecutarAccionPedidoV2({{ p.id }}, 'mark_ready')" 
                             class="flex-1 bg-green-600 text-white font-bold py-3 rounded-lg text-xs uppercase active:scale-95 transition-transform flex items-center justify-center gap-1">
                             ✅ ENTREGADO
                         </button>
@@ -270,7 +270,7 @@
                     {% endif %}
                     
                     {% if p.estado != 'LISTO' and p.estado != 'CANCELADO' %}
-                    <button onclick="cambiarEstado({{ p.id }}, 'CANCELADO')" 
+                    <button onclick="ejecutarAccionPedidoV2({{ p.id }}, 'cancel_order')" 
                         class="bg-gray-800 text-red-500 font-bold px-3 py-3 rounded-lg text-[10px] active:scale-95 transition-transform border border-gray-700"
                         title="Cancelar pedido">
                         ✕
@@ -370,24 +370,39 @@
     }
 
     //  CAMBIAR ESTADO 
-    function cambiarEstado(pedidoId, nuevoEstado) {
-        const msgs = {
-            'COCINA': '🔥 ¿Enviar pedido #' + pedidoId + ' a COCINA?',
-            'EN_CAMINO': '🛵 ¿Marcar pedido #' + pedidoId + ' como EN CAMINO?',
-            'LISTO': '✅ ¿Marcar pedido #' + pedidoId + ' como ENTREGADO?',
-            'CANCELADO': '⚠ ¿CANCELAR el pedido #' + pedidoId + '? Esta acción no se puede deshacer.',
+    function ejecutarAccionPedido(pedidoId, estadoLegacy) {
+        const actionByState = {
+            'COCINA': 'accept_order',
+            'EN_CAMINO': 'mark_in_transit',
+            'LISTO': 'mark_ready',
+            'CANCELADO': 'cancel_order',
         };
-        if (!confirm(msgs[nuevoEstado] || '¿Confirmar cambio?')) return;
+        const accion = actionByState[estadoLegacy];
+        if (!accion) {
+            alert('Accion no soportada');
+            return;
+        }
+        ejecutarAccionPedidoV2(pedidoId, accion);
+    }
+
+    function ejecutarAccionPedidoV2(pedidoId, accion) {
+        const msgs = {
+            'accept_order': 'Enviar pedido #' + pedidoId + ' a COCINA?',
+            'mark_in_transit': 'Marcar pedido #' + pedidoId + ' como EN CAMINO?',
+            'mark_ready': 'Marcar pedido #' + pedidoId + ' como ENTREGADO?',
+            'cancel_order': 'CANCELAR el pedido #' + pedidoId + '? Esta accion no se puede deshacer.',
+        };
+        if (!confirm(msgs[accion] || 'Confirmar cambio?')) return;
 
         fetch('/api/actualizar-pedido/', {
             method: 'POST',
             headers: getHeaders(),
-            body: JSON.stringify({ pedido_id: pedidoId, estado: nuevoEstado })
+            body: JSON.stringify({ pedido_id: pedidoId, accion: accion })
         })
         .then(r => r.json())
         .then(data => {
             if (data.status === 'ok') {
-                if (nuevoEstado === 'COCINA') imprimirComanda(pedidoId);
+                if (accion === 'accept_order') imprimirComanda(pedidoId);
                 location.reload();
             } else {
                 alert('Error: ' + data.mensaje);
@@ -396,12 +411,19 @@
     }
 
     //  ACTUALIZAR ENVO 
+    function parseCurrencyValue(value) {
+        if (value === null || value === undefined) return 0;
+        const normalized = String(value).trim().replace(',', '.');
+        const parsed = parseFloat(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
     function actualizarTotalPedido(input) {
         const card = input.closest('.pedido-card');
         if (!card) return;
 
-        const baseTotal = parseFloat(card.dataset.baseTotal || '0');
-        const envio = parseFloat(input.value) || 0;
+        const baseTotal = parseCurrencyValue(card.dataset.baseTotal);
+        const envio = parseCurrencyValue(input.value);
         const total = baseTotal + envio;
 
         card.querySelectorAll('[data-total-pedido]').forEach((node) => {
@@ -410,7 +432,7 @@
     }
 
     function actualizarEnvio(pedidoId, input) {
-        const valor = parseFloat(input.value) || 0;
+        const valor = parseCurrencyValue(input.value);
         actualizarTotalPedido(input);
 
         fetch('/api/actualizar-pedido/', {
@@ -469,7 +491,7 @@
         fetch('/api/actualizar-pedido/', {
             method: 'POST',
             headers: getHeaders(),
-            body: JSON.stringify({ pedido_id: pedidoId, estado: 'COCINA' })
+            body: JSON.stringify({ pedido_id: pedidoId, accion: 'accept_order' })
         })
         .then(r => r.json())
         .then(data => {
@@ -526,6 +548,10 @@
         const url = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
         window.open(url, '_blank');
     }
+
+    document.querySelectorAll('.pedido-card input[type="number"]').forEach((input) => {
+        actualizarTotalPedido(input);
+    });
 
     //  SONIDO DE ALERTA 
     const audioAlerta = new Audio('https://www.soundjay.com/buttons/beeps/beep-07.mp3');

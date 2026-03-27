@@ -8,11 +8,11 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
 app.conf.beat_schedule = {
     'sweep-delivery-quote-timeouts-every-minute': {
-        'task': 'pos.tasks.sweep_delivery_quote_timeouts',
+        'task': 'pos.infrastructure.tasks.sweep_delivery_quote_timeouts',
         'schedule': 60.0,
     },
     'requeue-stuck-print-jobs-every-minute': {
-        'task': 'pos.tasks.requeue_stuck_print_jobs',
+        'task': 'pos.infrastructure.tasks.requeue_stuck_print_jobs',
         'schedule': 60.0,
     },
 }

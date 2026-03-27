@@ -1,0 +1,1 @@
+"""Printing domain rules."""

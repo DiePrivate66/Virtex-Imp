@@ -1,9 +1,29 @@
-from django.urls import path
-from . import views
+"""Compatibility facade for public ordering URLs.
 
-urlpatterns = [
-    path('', views.menu_cliente, name='pedido_menu'),
-    path('api/productos/', views.api_productos, name='pedido_api_productos'),
-    path('api/crear/', views.api_crear_pedido, name='pedido_api_crear'),
-    path('confirmacion/<int:pedido_id>/', views.confirmacion_pedido, name='pedido_confirmacion'),
+Historical module: ``pedidos.urls``
+Canonical target: ``pos.presentation.api.urls``
+Retirement phase: ``phase_4_retire_legacy_entrypoints``
+"""
+
+from pos.legacy import build_legacy_module_metadata, warn_legacy_wrapper_import
+
+(
+    LEGACY_MODULE_PATH,
+    LEGACY_CONTRACT,
+    CANONICAL_TARGET,
+    COMPATIBILITY_ROLE,
+    REMOVAL_PHASE,
+) = build_legacy_module_metadata('pedidos.urls')
+
+warn_legacy_wrapper_import(LEGACY_MODULE_PATH)
+
+from pos.presentation.api.urls import urlpatterns
+
+__all__ = [
+    'CANONICAL_TARGET',
+    'COMPATIBILITY_ROLE',
+    'LEGACY_CONTRACT',
+    'LEGACY_MODULE_PATH',
+    'REMOVAL_PHASE',
+    'urlpatterns',
 ]

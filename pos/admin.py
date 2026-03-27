@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from pos.application.staff.commands import sync_employee_user
+
 from .models import (
     Asistencia,
     CajaTurno,
@@ -109,6 +111,23 @@ class EmpleadoAdmin(admin.ModelAdmin):
     search_fields = ("nombre", "cedula", "telefono", "pin", "usuario__username")
     list_editable = ("activo",)
     readonly_fields = ("fecha_registro",)
+    actions = ("sync_selected_employee_users",)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        sync_employee_user(obj)
+
+    @admin.action(description="Sincronizar usuarios de sistema para empleados seleccionados")
+    def sync_selected_employee_users(self, request, queryset):
+        synced = 0
+        for empleado in queryset:
+            sync_employee_user(empleado)
+            synced += 1
+
+        self.message_user(
+            request,
+            f"Se sincronizaron los usuarios de sistema para {synced} empleado(s).",
+        )
 
 
 @admin.register(Asistencia)

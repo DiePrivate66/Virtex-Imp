@@ -1,4 +1,8 @@
+import io
+import importlib
 import json
+import warnings
+from importlib import import_module
 from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
@@ -7,11 +11,14 @@ from django.contrib.auth.models import Group
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.test.client import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
+from .application.web_orders import WebOrderError
 from .models import DeliveryQuote, Empleado, PrintJob, Venta, WhatsAppConversation, WhatsAppMessageLog
+from .presentation.api.web_order_requests import parse_web_order_request
 from .tasks import (
     process_customer_confirmation,
     process_delivery_quote_timeout,
@@ -19,6 +26,7 @@ from .tasks import (
     set_quote_and_notify,
     sweep_delivery_quote_timeouts,
 )
+from .application.web_orders.updates import build_web_order_update_request
 
 
 @override_settings(
@@ -332,6 +340,110 @@ class PosPermissionsTests(TestCase):
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'COCINA')
 
+    def test_update_web_order_rejects_invalid_transition(self):
+        venta = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            total='12.00',
+        )
+
+        self.client.force_login(self.allowed_user)
+        response = self.client.post(
+            reverse('api_actualizar_pedido'),
+            data=json.dumps({'pedido_id': venta.id, 'estado': 'EN_CAMINO'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'PENDIENTE')
+
+
+class WebOrderUpdateRequestTests(TestCase):
+    def test_build_update_request_accepts_legacy_status(self):
+        update_request = build_web_order_update_request({'pedido_id': 7, 'estado': 'COCINA'})
+
+        self.assertEqual(update_request.pedido_id, 7)
+        self.assertEqual(update_request.action_name, 'accept_order')
+        self.assertFalse(update_request.updates_delivery_cost)
+
+    def test_build_update_request_accepts_delivery_cost_payload(self):
+        update_request = build_web_order_update_request({'pedido_id': 9, 'costo_envio': '4.25'})
+
+        self.assertEqual(update_request.pedido_id, 9)
+        self.assertEqual(update_request.delivery_cost, '4.25')
+        self.assertTrue(update_request.updates_delivery_cost)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class WebOrderActionApiTests(TestCase):
+    def setUp(self):
+        self.admin_group = Group.objects.create(name='Admin')
+        self.allowed_user = User.objects.create_user(username='acciones-panel', password='1234')
+        self.allowed_user.groups.add(self.admin_group)
+
+    def test_update_web_order_allows_delivery_cost_update(self):
+        venta = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE_COTIZACION',
+            metodo_pago='EFECTIVO',
+            total='12.00',
+        )
+
+        self.client.force_login(self.allowed_user)
+        response = self.client.post(
+            reverse('api_actualizar_pedido'),
+            data=json.dumps({'pedido_id': venta.id, 'costo_envio': '3.50'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        venta.refresh_from_db()
+        self.assertEqual(str(venta.costo_envio), '3.50')
+
+    def test_update_web_order_accepts_action_payload(self):
+        venta = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            total='12.00',
+        )
+
+        self.client.force_login(self.allowed_user)
+        response = self.client.post(
+            reverse('api_actualizar_pedido'),
+            data=json.dumps({'pedido_id': venta.id, 'accion': 'accept_order'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'COCINA')
+
+    def test_update_web_order_rejects_invalid_action(self):
+        venta = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            total='12.00',
+        )
+
+        self.client.force_login(self.allowed_user)
+        response = self.client.post(
+            reverse('api_actualizar_pedido'),
+            data=json.dumps({'pedido_id': venta.id, 'accion': 'teleport'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'PENDIENTE')
+
 
 @override_settings(
     DEBUG=True,
@@ -407,3 +519,261 @@ class MetaWebhookTests(TestCase):
                 message_sid='wamid.TEST.001',
             ).exists()
         )
+
+
+class WebOrderApiRequestParsingTests(SimpleTestCase):
+    def test_parse_web_order_request_rejects_invalid_json_payload(self):
+        request = RequestFactory().post(
+            '/pedido/api/crear/',
+            data='{invalid json',
+            content_type='application/json',
+        )
+
+        with self.assertRaisesMessage(WebOrderError, 'Payload JSON invalido'):
+            parse_web_order_request(request)
+
+
+class LegacyImportRegistryTests(SimpleTestCase):
+    def test_legacy_registry_covers_expected_wrappers(self):
+        from pos.legacy import LEGACY_IMPORT_REDIRECTS
+
+        self.assertEqual(LEGACY_IMPORT_REDIRECTS['pos.tasks'], 'pos.infrastructure.tasks')
+        self.assertEqual(LEGACY_IMPORT_REDIRECTS['pedidos.views'], 'pos.presentation.api.public')
+        self.assertEqual(LEGACY_IMPORT_REDIRECTS['pedidos.urls'], 'pos.presentation.api.urls')
+
+    def test_legacy_registry_helper_returns_none_for_unknown_module(self):
+        from pos.legacy import get_legacy_import_redirect
+
+        self.assertIsNone(get_legacy_import_redirect('pos.nonexistent_legacy_wrapper'))
+
+    def test_legacy_contract_exposes_retirement_metadata(self):
+        from pos.legacy import get_legacy_contract
+
+        contract = get_legacy_contract('pos.tasks')
+
+        self.assertIsNotNone(contract)
+        self.assertEqual(contract.canonical_target, 'pos.infrastructure.tasks')
+        self.assertEqual(contract.compatibility_role, 'operational Celery alias')
+        self.assertEqual(contract.removal_phase, 'phase_6_retire_operational_aliases')
+
+    def test_require_legacy_contract_raises_for_unknown_module(self):
+        from pos.legacy import require_legacy_contract
+
+        with self.assertRaises(KeyError):
+            require_legacy_contract('pos.unknown_wrapper')
+
+    def test_legacy_module_file_uses_python_module_convention(self):
+        from pos.legacy import get_legacy_module_file
+
+        self.assertEqual(get_legacy_module_file('pos.tasks'), 'pos/tasks.py')
+        self.assertEqual(get_legacy_module_file('pedidos.views'), 'pedidos/views.py')
+
+    def test_legacy_wrappers_expose_registry_metadata(self):
+        from pedidos import views as legacy_pedidos_views
+        from pos import tasks as legacy_tasks
+
+        self.assertEqual(legacy_tasks.LEGACY_MODULE_PATH, 'pos.tasks')
+        self.assertEqual(legacy_tasks.CANONICAL_TARGET, 'pos.infrastructure.tasks')
+        self.assertEqual(legacy_tasks.COMPATIBILITY_ROLE, 'operational Celery alias')
+        self.assertEqual(legacy_pedidos_views.COMPATIBILITY_ROLE, 'legacy presentation alias')
+        self.assertEqual(legacy_pedidos_views.REMOVAL_PHASE, 'phase_4_retire_legacy_entrypoints')
+
+    def test_phase_4_legacy_entrypoints_emit_deprecation_warning_on_import(self):
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter('always', DeprecationWarning)
+            legacy_pedidos_views = import_module('pedidos.views')
+            importlib.reload(legacy_pedidos_views)
+            legacy_pedidos_urls = import_module('pedidos.urls')
+            importlib.reload(legacy_pedidos_urls)
+
+        messages = [str(warning.message) for warning in captured]
+        self.assertTrue(any('Legacy import "pedidos.views"' in message for message in messages))
+        self.assertTrue(any('Legacy import "pedidos.urls"' in message for message in messages))
+
+    def test_all_legacy_wrappers_export_uniform_metadata(self):
+        from pos.legacy import iter_legacy_modules
+
+        for module_path, contract in iter_legacy_modules():
+            module = import_module(module_path)
+
+            self.assertEqual(module.LEGACY_MODULE_PATH, module_path)
+            self.assertEqual(module.LEGACY_CONTRACT, contract)
+            self.assertEqual(module.CANONICAL_TARGET, contract.canonical_target)
+            self.assertEqual(module.COMPATIBILITY_ROLE, contract.compatibility_role)
+            self.assertEqual(module.REMOVAL_PHASE, contract.removal_phase)
+
+    def test_audit_legacy_imports_json_reports_known_modules(self):
+        out = io.StringIO()
+
+        call_command('audit_legacy_imports', '--json', stdout=out)
+        payload = json.loads(out.getvalue())
+
+        self.assertIn('summary', payload)
+        self.assertIn('modules', payload)
+
+        task_module = next(
+            module for module in payload['modules'] if module['module_path'] == 'pos.tasks'
+        )
+        self.assertEqual(task_module['wrapper_path'], 'pos/tasks.py')
+        self.assertGreater(task_module['reference_counts']['total'], 0)
+        self.assertGreater(task_module['reference_counts']['registry'], 0)
+        self.assertEqual(task_module['reference_counts']['code'], 0)
+        self.assertFalse(task_module['retirement_candidate'])
+
+    def test_audit_legacy_imports_marks_registry_only_modules_as_candidates(self):
+        out = io.StringIO()
+
+        call_command('audit_legacy_imports', '--json', stdout=out)
+        payload = json.loads(out.getvalue())
+
+        pedidos_views_module = next(
+            module for module in payload['modules'] if module['module_path'] == 'pedidos.views'
+        )
+        self.assertEqual(pedidos_views_module['reference_counts']['code'], 0)
+        self.assertGreater(pedidos_views_module['reference_counts']['registry'], 0)
+        self.assertTrue(pedidos_views_module['retirement_candidate'])
+
+    def test_audit_legacy_imports_does_not_count_prefix_modules_as_live_code(self):
+        out = io.StringIO()
+
+        call_command('audit_legacy_imports', '--json', stdout=out)
+        payload = json.loads(out.getvalue())
+
+        pedidos_views_module = next(
+            module for module in payload['modules'] if module['module_path'] == 'pedidos.views'
+        )
+        self.assertEqual(pedidos_views_module['reference_counts']['code'], 0)
+        self.assertTrue(pedidos_views_module['retirement_candidate'])
+
+    def test_audit_legacy_imports_marks_public_entrypoint_aliases_as_candidates(self):
+        out = io.StringIO()
+
+        call_command('audit_legacy_imports', '--json', stdout=out)
+        payload = json.loads(out.getvalue())
+        summary = payload['summary']
+
+        self.assertIn('pedidos.views', summary['candidate_module_paths'])
+        self.assertIn('pedidos.urls', summary['candidate_module_paths'])
+        self.assertGreaterEqual(
+            summary['candidate_phase_breakdown'].get('phase_4_retire_legacy_entrypoints', 0),
+            2,
+        )
+
+        pedidos_views = next(
+            module for module in payload['modules'] if module['module_path'] == 'pedidos.views'
+        )
+        pedidos_urls = next(
+            module for module in payload['modules'] if module['module_path'] == 'pedidos.urls'
+        )
+
+        self.assertTrue(pedidos_views['retirement_candidate'])
+        self.assertTrue(pedidos_urls['retirement_candidate'])
+        self.assertEqual(pedidos_views['reference_counts']['code'], 0)
+        self.assertEqual(pedidos_urls['reference_counts']['code'], 0)
+
+    def test_audit_legacy_imports_can_filter_candidates_only_by_phase(self):
+        out = io.StringIO()
+
+        call_command(
+            'audit_legacy_imports',
+            '--json',
+            '--phase',
+            'phase_4_retire_legacy_entrypoints',
+            '--candidates-only',
+            stdout=out,
+        )
+        payload = json.loads(out.getvalue())
+
+        self.assertTrue(payload['summary']['filters']['candidates_only'])
+        self.assertEqual(
+            payload['summary']['filters']['removal_phase'],
+            'phase_4_retire_legacy_entrypoints',
+        )
+        self.assertGreaterEqual(payload['summary']['retirement_candidates'], 1)
+        self.assertTrue(payload['modules'])
+        self.assertTrue(
+            all(module['retirement_candidate'] for module in payload['modules'])
+        )
+        self.assertTrue(
+            all(
+                module['removal_phase'] == 'phase_4_retire_legacy_entrypoints'
+                for module in payload['modules']
+            )
+        )
+        self.assertNotIn('pos.tasks', payload['summary']['candidate_module_paths'])
+        self.assertEqual(
+            payload['summary']['module_status_breakdown'].get('candidate'),
+            len(payload['modules']),
+        )
+
+    def test_plan_legacy_retirement_groups_candidates_by_phase(self):
+        out = io.StringIO()
+
+        call_command('plan_legacy_retirement', '--json', stdout=out)
+        payload = json.loads(out.getvalue())
+
+        self.assertIn('summary', payload)
+        self.assertIn('phases', payload)
+        self.assertIn('phase_4_retire_legacy_entrypoints', payload['phases'])
+        self.assertGreaterEqual(payload['summary']['candidate_modules'], 1)
+        self.assertEqual(payload['summary']['operational_aliases'], 1)
+
+        phase_4_modules = payload['phases']['phase_4_retire_legacy_entrypoints']['modules']
+        self.assertTrue(
+            any(module['module_path'] == 'pedidos.views' for module in phase_4_modules)
+        )
+
+    def test_plan_legacy_retirement_can_filter_by_phase(self):
+        out = io.StringIO()
+
+        call_command(
+            'plan_legacy_retirement',
+            '--json',
+            '--phase',
+            'phase_4_retire_legacy_entrypoints',
+            stdout=out,
+        )
+        payload = json.loads(out.getvalue())
+
+        self.assertEqual(
+            payload['summary']['filters']['removal_phase'],
+            'phase_4_retire_legacy_entrypoints',
+        )
+        self.assertEqual(set(payload['phases'].keys()), {'phase_4_retire_legacy_entrypoints'})
+        self.assertTrue(payload['phases']['phase_4_retire_legacy_entrypoints']['modules'])
+        self.assertTrue(
+            all(
+                module['module_path'] in {'pedidos.views', 'pedidos.urls'}
+                for module in payload['phases']['phase_4_retire_legacy_entrypoints']['modules']
+            )
+        )
+
+    def test_enforce_legacy_boundaries_passes_with_current_registry_state(self):
+        out = io.StringIO()
+
+        call_command('enforce_legacy_boundaries', stdout=out)
+
+        self.assertIn('Legacy boundaries enforced', out.getvalue())
+
+    def test_audit_legacy_imports_reports_warning_coverage_for_candidates(self):
+        out = io.StringIO()
+
+        call_command('audit_legacy_imports', '--json', stdout=out)
+        payload = json.loads(out.getvalue())
+
+        self.assertGreaterEqual(payload['summary']['warning_enabled_candidates'], 1)
+        self.assertEqual(payload['summary']['warning_missing_candidates'], 0)
+
+        pedidos_views = next(
+            module for module in payload['modules'] if module['module_path'] == 'pedidos.views'
+        )
+
+        self.assertTrue(pedidos_views['warning_enabled'])
+        self.assertEqual(payload['summary']['warning_enabled_candidates'], 2)
+
+    def test_verify_legacy_deprecations_passes_with_current_registry_state(self):
+        out = io.StringIO()
+
+        call_command('verify_legacy_deprecations', stdout=out)
+
+        self.assertIn('Legacy deprecations verified', out.getvalue())

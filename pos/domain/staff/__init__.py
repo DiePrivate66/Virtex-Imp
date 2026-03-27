@@ -1,0 +1,1 @@
+"""Staff domain rules."""
