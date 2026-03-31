@@ -125,6 +125,13 @@ def delivery_claim_submit(request, token: str):
         if exc.message == 'Pedido ya tomado':
             context = {**base_context, 'ya_tomado': True}
             return render(request, 'pos/delivery_claim.html', context)
+        if exc.message == 'Este pedido ya no se puede tomar.':
+            context = {
+                **base_context,
+                'claim_bloqueado': True,
+                'claim_bloqueado_mensaje': exc.message,
+            }
+            return render(request, 'pos/delivery_claim.html', context)
         context = {
             **base_context,
             'error': exc.message,

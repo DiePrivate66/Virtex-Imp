@@ -50,7 +50,15 @@
     {% elif ya_tomado %}
       <div class="mt-4 p-4 rounded-xl bg-red-900/30 border border-red-800 text-center">
         <p class="text-red-300 font-bold text-lg">Pedido ya tomado</p>
+        {% if venta.repartidor_asignado %}
         <p class="text-red-400 text-sm mt-1">por {{ venta.repartidor_asignado.nombre }}</p>
+        {% endif %}
+      </div>
+
+    {% elif claim_bloqueado %}
+      <div class="mt-4 p-4 rounded-xl bg-yellow-900/30 border border-yellow-800 text-center">
+        <p class="text-yellow-300 font-bold text-lg">Pedido no disponible</p>
+        <p class="text-yellow-400 text-sm mt-1">{{ claim_bloqueado_mensaje }}</p>
       </div>
 
     {% elif token_invalido %}

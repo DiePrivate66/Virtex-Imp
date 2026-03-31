@@ -66,6 +66,9 @@ class DeliveryDriverRegistration:
     pin: str
 
 
+CLAIMABLE_DELIVERY_STATUSES = {'PENDIENTE_COTIZACION', 'PENDIENTE', 'COCINA'}
+
+
 def _parse_delivery_price(precio) -> Decimal:
     try:
         precio_decimal = Decimal(str(precio)).quantize(Decimal('0.01'))
@@ -161,8 +164,10 @@ def register_delivery_and_claim_order(*, token: str, nombre: str, telefono: str,
     if not venta:
         raise DeliveryError('Pedido no encontrado', status_code=404)
 
-    if venta.repartidor_asignado is not None or venta.estado != 'PENDIENTE_COTIZACION':
+    if venta.repartidor_asignado is not None:
         raise DeliveryError('Pedido ya tomado', status_code=409)
+    if venta.estado not in CLAIMABLE_DELIVERY_STATUSES:
+        raise DeliveryError('Este pedido ya no se puede tomar.', status_code=409)
 
     registration = register_delivery_driver(nombre=nombre, telefono=telefono, pin=pin)
     return claim_delivery_order(token=token, pin=registration.pin, precio=precio)
@@ -233,14 +238,22 @@ def claim_delivery_order(*, token: str, pin: str, precio) -> DeliveryClaimSubmis
         except Venta.DoesNotExist as exc:
             raise DeliveryError('Pedido no encontrado', status_code=404) from exc
 
-        if venta.repartidor_asignado is not None or venta.estado != 'PENDIENTE_COTIZACION':
+        if venta.repartidor_asignado is not None:
             raise DeliveryError('Pedido ya tomado', status_code=409)
+        if venta.estado not in CLAIMABLE_DELIVERY_STATUSES:
+            raise DeliveryError('Este pedido ya no se puede tomar.', status_code=409)
 
         venta.repartidor_asignado = driver
-        venta.save(update_fields=['repartidor_asignado'])
+        update_fields = ['repartidor_asignado']
+        if (venta.costo_envio or Decimal('0.00')) <= Decimal('0.00'):
+            venta.costo_envio = precio_decimal
+            update_fields.append('costo_envio')
+        venta.save(update_fields=update_fields)
 
-    set_quote_and_notify.delay(venta.id, driver.id, str(precio_decimal))
-    notify_order_claimed(venta, driver, precio_envio=precio_decimal)
+    if venta.estado == 'PENDIENTE_COTIZACION':
+        set_quote_and_notify.delay(venta.id, driver.id, str(precio_decimal))
+
+    notify_order_claimed(venta, driver, precio_envio=venta.costo_envio or precio_decimal)
 
     return DeliveryClaimSubmission(
         venta_id=venta.id,

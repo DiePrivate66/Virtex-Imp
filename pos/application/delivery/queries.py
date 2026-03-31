@@ -11,6 +11,9 @@ from pos.models import DeliveryQuote, Venta
 from .commands import DeliveryError
 
 
+DELIVERY_CLAIM_BLOCKED_STATUSES = {'EN_CAMINO', 'LISTO', 'CANCELADO'}
+
+
 def get_manual_delivery_portal_context() -> dict:
     pedidos = Venta.objects.filter(estado='PENDIENTE_COTIZACION').order_by('-fecha')
     return {'pedidos': pedidos}
@@ -48,11 +51,23 @@ def get_delivery_claim_form_context(token: str) -> dict:
     if not venta:
         raise DeliveryError('Pedido no encontrado', status_code=404)
 
-    ya_tomado = venta.repartidor_asignado is not None or venta.estado != 'PENDIENTE_COTIZACION'
+    ya_tomado = venta.repartidor_asignado is not None
+    claim_bloqueado = venta.estado in DELIVERY_CLAIM_BLOCKED_STATUSES
+    if claim_bloqueado:
+        if venta.estado == 'EN_CAMINO':
+            claim_bloqueado_mensaje = 'Este pedido ya esta en camino.'
+        elif venta.estado == 'LISTO':
+            claim_bloqueado_mensaje = 'Este pedido ya fue entregado.'
+        else:
+            claim_bloqueado_mensaje = 'Este pedido fue cancelado.'
+    else:
+        claim_bloqueado_mensaje = ''
     return {
         'token': token,
         'venta': venta,
         'ya_tomado': ya_tomado,
+        'claim_bloqueado': claim_bloqueado,
+        'claim_bloqueado_mensaje': claim_bloqueado_mensaje,
         'token_invalido': False,
     }
 

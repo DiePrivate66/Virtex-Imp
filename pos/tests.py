@@ -540,6 +540,47 @@ class DeliveryClaimFlowTests(TestCase):
         mock_notify_claimed.assert_called_once()
         self.assertContains(response, 'Nuevo Driver - Envio: $4.50')
 
+    @patch('pos.application.delivery.commands.set_quote_and_notify.delay')
+    @patch('pos.application.delivery.commands.notify_order_claimed')
+    def test_pos_acceptance_does_not_mark_telegram_claim_as_taken(self, mock_notify_claimed, mock_set_quote):
+        self.sale.estado = 'COCINA'
+        self.sale.costo_envio = Decimal('0.00')
+        self.sale.save(update_fields=['estado', 'costo_envio'])
+        token = make_delivery_claim_token(self.sale.id)
+
+        form_response = self.client.get(reverse('delivery_claim_form', args=[token]))
+        self.assertEqual(form_response.status_code, 200)
+        self.assertNotContains(form_response, 'Pedido ya tomado')
+        self.assertNotContains(form_response, 'Pedido no disponible')
+
+        claim_response = self.client.post(
+            reverse('delivery_claim_submit', args=[token]),
+            data={'pin': '4321', 'precio': '5.00'},
+        )
+
+        self.assertEqual(claim_response.status_code, 200)
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.estado, 'COCINA')
+        self.assertEqual(self.sale.repartidor_asignado_id, self.driver.id)
+        self.assertEqual(self.sale.costo_envio, Decimal('5.00'))
+        mock_set_quote.assert_not_called()
+        mock_notify_claimed.assert_called_once()
+        args, kwargs = mock_notify_claimed.call_args
+        self.assertEqual(args[0].id, self.sale.id)
+        self.assertEqual(args[1].id, self.driver.id)
+        self.assertEqual(kwargs['precio_envio'], Decimal('5.00'))
+
+    def test_claim_form_shows_blocked_message_for_in_transit_order(self):
+        self.sale.estado = 'EN_CAMINO'
+        self.sale.save(update_fields=['estado'])
+        token = make_delivery_claim_token(self.sale.id)
+
+        response = self.client.get(reverse('delivery_claim_form', args=[token]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Pedido no disponible')
+        self.assertContains(response, 'Este pedido ya esta en camino.')
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class DeliveryInTransitFlowTests(TestCase):
