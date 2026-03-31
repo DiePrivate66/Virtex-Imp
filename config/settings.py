@@ -178,6 +178,9 @@ EMAIL_USE_TLS       = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', f'RAMON by Bosco <{EMAIL_HOST_USER}>')
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+RESEND_API_BASE = os.environ.get('RESEND_API_BASE', 'https://api.resend.com')
+RESEND_API_TIMEOUT_SECONDS = int(os.environ.get('RESEND_API_TIMEOUT_SECONDS', '15'))
 
 # --- INTEGRACIONES WHATSAPP / ASYNC ---
 PUBLIC_PWA_URL = os.environ.get('PUBLIC_PWA_URL', 'http://127.0.0.1:4200')

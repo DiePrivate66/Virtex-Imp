@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .application.web_orders import WebOrderError
+from .application.sales.commands import send_sale_receipt_email
 from .infrastructure.delivery import (
     make_delivery_claim_token,
     make_delivery_delivered_token,
@@ -734,6 +735,55 @@ class CustomerOrderConfirmationEtaTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['repartidor_nombre'], 'Carlos Repartidor')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class SaleReceiptEmailTests(TestCase):
+    def setUp(self):
+        self.sale = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='LISTO',
+            metodo_pago='TRANSFERENCIA',
+            total=Decimal('10.00'),
+            cliente_nombre='Cliente Demo',
+            telefono_cliente='0991111111',
+            email_cliente='cliente@example.com',
+            costo_envio=Decimal('2.50'),
+        )
+
+    @override_settings(
+        RESEND_API_KEY='re_test_123',
+        DEFAULT_FROM_EMAIL='RAMON by Bosco <onboarding@resend.dev>',
+        RESEND_API_BASE='https://api.resend.com',
+        RESEND_API_TIMEOUT_SECONDS=15,
+    )
+    @patch('pos.infrastructure.notifications.email.urlrequest.urlopen')
+    def test_sale_receipt_uses_resend_api_when_api_key_exists(self, mock_urlopen):
+        mock_response = io.BytesIO(b'{"id":"email_123"}')
+        mock_context = type('Ctx', (), {
+            '__enter__': lambda self: mock_response,
+            '__exit__': lambda self, exc_type, exc, tb: False,
+        })()
+        mock_urlopen.return_value = mock_context
+
+        send_sale_receipt_email(self.sale, 'agguti0@gmail.com')
+
+        request_obj = mock_urlopen.call_args.args[0]
+        payload = json.loads(request_obj.data.decode('utf-8'))
+        self.assertEqual(payload['from'], 'RAMON by Bosco <onboarding@resend.dev>')
+        self.assertEqual(payload['to'], ['agguti0@gmail.com'])
+        self.assertIn('Comprobante de Venta', payload['subject'])
+        self.assertIn('Bearer re_test_123', request_obj.headers['Authorization'])
+
+    @override_settings(RESEND_API_KEY='')
+    @patch('pos.application.sales.commands.send_mail')
+    def test_sale_receipt_falls_back_to_django_mail_when_resend_missing(self, mock_send_mail):
+        send_sale_receipt_email(self.sale, 'agguti0@gmail.com')
+
+        mock_send_mail.assert_called_once()
+        self.assertIn('Comprobante de Venta', mock_send_mail.call_args.kwargs['subject'])
+        self.assertEqual(mock_send_mail.call_args.kwargs['recipient_list'], ['agguti0@gmail.com'])
 
 
 @override_settings(

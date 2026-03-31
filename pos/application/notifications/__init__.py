@@ -1,5 +1,6 @@
 """Application facades for outbound and inbound notifications."""
 
+from .email import ResendEmailError, send_resend_email
 from .whatsapp import (
     build_whatsapp_twiml_response,
     extract_inbound_whatsapp_request,
@@ -13,11 +14,13 @@ from .whatsapp import (
 from .telegram import notify_customer_reported_received, notify_delivery_group, notify_order_claimed
 
 __all__ = [
+    'ResendEmailError',
     'build_whatsapp_twiml_response',
     'notify_customer_reported_received',
     'extract_inbound_whatsapp_request',
     'notify_delivery_group',
     'notify_order_claimed',
+    'send_resend_email',
     'send_whatsapp_confirmation_request',
     'send_whatsapp_text',
     'touch_whatsapp_conversation_inbound',

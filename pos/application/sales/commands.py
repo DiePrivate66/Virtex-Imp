@@ -3,13 +3,18 @@ from __future__ import annotations
 import re
 import threading
 from decimal import Decimal
+import logging
 
 from django.core.mail import send_mail
+from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils import timezone
 
 from pos.application.cash_register import find_customer_by_identity_document, get_open_cash_register_for_user
+from pos.application.notifications import ResendEmailError, send_resend_email
 from pos.models import Cliente, DetalleVenta, Producto, Venta
+
+logger = logging.getLogger(__name__)
 
 
 class PosSaleError(Exception):
@@ -130,18 +135,41 @@ def _build_sale_note(product_name: str, display_name: str, user_note: str) -> st
     return note.strip()
 
 
-def send_sale_receipt_email_async(venta: Venta, recipient_email: str):
+def send_sale_receipt_email(venta: Venta, recipient_email: str) -> None:
     html_email = render_to_string('pos/email/factura_email.html', {'venta': venta})
+    subject = f'RAMON by Bosco - Comprobante de Venta #{venta.id}'
+    text_body = f'Adjunto su comprobante de venta #{venta.id} por ${venta.total}'
+
+    if getattr(settings, 'RESEND_API_KEY', ''):
+        send_resend_email(
+            subject=subject,
+            text_body=text_body,
+            html_body=html_email,
+            recipient_email=recipient_email,
+        )
+        return
+
+    send_mail(
+        subject=subject,
+        message=text_body,
+        from_email=None,
+        recipient_list=[recipient_email],
+        html_message=html_email,
+        fail_silently=False,
+    )
+
+
+def send_sale_receipt_email_async(venta: Venta, recipient_email: str):
+    if not recipient_email:
+        return
 
     def send_async():
-        send_mail(
-            subject=f'RAMON by Bosco - Comprobante de Venta #{venta.id}',
-            message=f'Adjunto su comprobante de venta #{venta.id} por ${venta.total}',
-            from_email=None,
-            recipient_list=[recipient_email],
-            html_message=html_email,
-            fail_silently=True,
-        )
+        try:
+            send_sale_receipt_email(venta, recipient_email)
+        except ResendEmailError:
+            logger.exception('No se pudo enviar comprobante por Resend para venta #%s', venta.id)
+        except Exception:
+            logger.exception('No se pudo enviar comprobante por correo para venta #%s', venta.id)
 
     threading.Thread(target=send_async, daemon=True).start()
 
