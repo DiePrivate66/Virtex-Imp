@@ -2,13 +2,34 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import timedelta
 
 import redis
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import connection
+from django.utils import timezone
 
-from pos.models import Empleado, PrintJob, Venta
+from pos.ledger_registry import (
+    LOCKFILE_PATH,
+    MIN_SUPPORTED_QUEUE_SCHEMA,
+    REGISTRY_VERSION,
+    get_registry_hash,
+    get_system_account_defaults_map,
+    load_registry_lockfile,
+)
+from pos.models import (
+    AccountingAdjustment,
+    AuditLog,
+    Empleado,
+    IdempotencyRecord,
+    LedgerAccount,
+    LedgerRegistryActivation,
+    OutboxEvent,
+    Organization,
+    PrintJob,
+    Venta,
+)
 
 
 @dataclass
@@ -20,7 +41,7 @@ class CheckResult:
 
 
 class Command(BaseCommand):
-    help = 'Verifica estado operativo para WhatsApp + Delivery Quote + Autoimpresion.'
+    help = 'Verifica estado operativo para ledger, pagos resilientes, outbox, WhatsApp y autoimpresion.'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -43,7 +64,16 @@ class Command(BaseCommand):
         checks.append(self._check_database())
         checks.append(self._check_celery_mode())
         checks.append(self._check_redis())
+        checks.append(self._check_ledger_lockfile())
+        checks.append(self._check_ledger_activation())
+        checks.append(self._check_ledger_fencing())
+        checks.append(self._check_system_ledger_accounts())
+        checks.append(self._check_telegram_admin_alerts())
         checks.append(self._check_whatsapp_env())
+        checks.append(self._check_pending_sales_backlog())
+        checks.append(self._check_idempotency_backlog())
+        checks.append(self._check_outbox_backlog())
+        checks.append(self._check_payment_exceptions_backlog())
         checks.append(self._check_delivery_pool())
         checks.append(self._check_delivery_quotes_backlog())
         checks.append(self._check_print_jobs_backlog())
@@ -92,6 +122,9 @@ class Command(BaseCommand):
             status = 'OK' if c.ok else ('WARN' if c.level == 'warning' else 'ERROR')
             self.stdout.write(f'[{status}] {c.name}: {c.detail}')
 
+    def _db_check_failure(self, name: str, exc: Exception) -> CheckResult:
+        return CheckResult(name, False, 'error', f'fallo chequeando DB: {exc}')
+
     def _check_database(self) -> CheckResult:
         try:
             with connection.cursor() as cursor:
@@ -129,6 +162,181 @@ class Command(BaseCommand):
         except Exception as exc:
             return CheckResult('redis', False, 'error', f'fallo redis: {exc}')
 
+    def _check_ledger_lockfile(self) -> CheckResult:
+        try:
+            lock = load_registry_lockfile()
+        except Exception as exc:
+            return CheckResult(
+                'ledger_lockfile',
+                False,
+                'error',
+                f'no se pudo leer {LOCKFILE_PATH.name}: {exc}',
+            )
+
+        current_hash = get_registry_hash()
+        mismatches: list[str] = []
+        if lock.get('registry_version') != REGISTRY_VERSION:
+            mismatches.append(f"version lock={lock.get('registry_version')} code={REGISTRY_VERSION}")
+        if str(lock.get('min_supported_queue_schema')) != str(MIN_SUPPORTED_QUEUE_SCHEMA):
+            mismatches.append(
+                'queue_schema '
+                f"lock={lock.get('min_supported_queue_schema')} code={MIN_SUPPORTED_QUEUE_SCHEMA}"
+            )
+        if lock.get('registry_hash') != current_hash:
+            mismatches.append(f"hash lock={lock.get('registry_hash')} code={current_hash}")
+
+        if mismatches:
+            return CheckResult(
+                'ledger_lockfile',
+                False,
+                'error',
+                '; '.join(mismatches),
+            )
+
+        return CheckResult(
+            'ledger_lockfile',
+            True,
+            'info',
+            f'lock ok: version={REGISTRY_VERSION} hash={current_hash[:12]}',
+        )
+
+    def _check_ledger_activation(self) -> CheckResult:
+        try:
+            activation = LedgerRegistryActivation.objects.filter(singleton_key='default').first()
+            if not activation:
+                return CheckResult(
+                    'ledger_activation',
+                    False,
+                    'error',
+                    'falta LedgerRegistryActivation; ejecuta sync_ledger_registry_activation',
+                )
+
+            current_hash = get_registry_hash()
+            mismatches: list[str] = []
+            if activation.active_registry_version != REGISTRY_VERSION:
+                mismatches.append(
+                    f'version activa={activation.active_registry_version} code={REGISTRY_VERSION}'
+                )
+            if activation.active_registry_hash != current_hash:
+                mismatches.append(
+                    f'hash activo={activation.active_registry_hash} code={current_hash}'
+                )
+            if activation.min_supported_queue_schema != MIN_SUPPORTED_QUEUE_SCHEMA:
+                mismatches.append(
+                    'queue_schema '
+                    f'activo={activation.min_supported_queue_schema} code={MIN_SUPPORTED_QUEUE_SCHEMA}'
+                )
+
+            if mismatches and activation.maintenance_mode:
+                return CheckResult(
+                    'ledger_activation',
+                    False,
+                    'warning',
+                    'maintenance_mode activo; ' + '; '.join(mismatches),
+                )
+            if mismatches:
+                return CheckResult('ledger_activation', False, 'error', '; '.join(mismatches))
+            if activation.maintenance_mode:
+                return CheckResult(
+                    'ledger_activation',
+                    False,
+                    'warning',
+                    'maintenance_mode activo; mutaciones ledger se bloquearan',
+                )
+            return CheckResult(
+                'ledger_activation',
+                True,
+                'info',
+                f'activa version={activation.active_registry_version} hash={activation.active_registry_hash[:12]}',
+            )
+        except Exception as exc:
+            return self._db_check_failure('ledger_activation', exc)
+
+    def _check_ledger_fencing(self) -> CheckResult:
+        enabled = bool(getattr(settings, 'LEDGER_VERSION_FENCING_ENABLED', False))
+        mutation_paths = tuple(getattr(settings, 'LEDGER_FENCED_MUTATION_PATHS', ()))
+        if not enabled:
+            return CheckResult(
+                'ledger_fencing',
+                False,
+                'warning' if settings.DEBUG else 'error',
+                'LEDGER_VERSION_FENCING_ENABLED=False',
+            )
+        if not mutation_paths:
+            return CheckResult(
+                'ledger_fencing',
+                False,
+                'warning' if settings.DEBUG else 'error',
+                'no hay rutas mutantes protegidas en LEDGER_FENCED_MUTATION_PATHS',
+            )
+        return CheckResult(
+            'ledger_fencing',
+            True,
+            'info',
+            f'enabled para {len(mutation_paths)} ruta(s)',
+        )
+
+    def _check_system_ledger_accounts(self) -> CheckResult:
+        try:
+            required_codes = set(get_system_account_defaults_map().keys())
+            organization_count = Organization.objects.count()
+            if organization_count == 0:
+                return CheckResult(
+                    'system_ledger_accounts',
+                    False,
+                    'warning',
+                    'sin organizaciones creadas',
+                )
+
+            missing_examples: list[str] = []
+            missing_orgs = 0
+            for organization in Organization.objects.only('id', 'name').iterator():
+                present_codes = set(
+                    LedgerAccount.objects.filter(
+                        organization_id=organization.id,
+                        system_code__in=required_codes,
+                    ).values_list('system_code', flat=True)
+                )
+                missing_codes = sorted(required_codes - present_codes)
+                if missing_codes:
+                    missing_orgs += 1
+                    if len(missing_examples) < 3:
+                        missing_examples.append(f'{organization.name}: {", ".join(missing_codes)}')
+
+            if missing_orgs:
+                return CheckResult(
+                    'system_ledger_accounts',
+                    False,
+                    'warning',
+                    f'organizaciones incompletas={missing_orgs}; ejemplos: {" | ".join(missing_examples)}',
+                )
+
+            return CheckResult(
+                'system_ledger_accounts',
+                True,
+                'info',
+                f'organizaciones verificadas={organization_count}',
+            )
+        except Exception as exc:
+            return self._db_check_failure('system_ledger_accounts', exc)
+
+    def _check_telegram_admin_alerts(self) -> CheckResult:
+        bot_token = bool(getattr(settings, 'TELEGRAM_BOT_TOKEN', ''))
+        admin_chat = bool(getattr(settings, 'TELEGRAM_ADMIN_ALERT_CHAT_ID', ''))
+        if bot_token and admin_chat:
+            return CheckResult(
+                'telegram_admin_alerts',
+                True,
+                'info',
+                'canal administrativo configurado',
+            )
+        return CheckResult(
+            'telegram_admin_alerts',
+            False,
+            'warning',
+            'faltan TELEGRAM_BOT_TOKEN o TELEGRAM_ADMIN_ALERT_CHAT_ID; alertas criticas no saldran a Telegram',
+        )
+
     def _check_whatsapp_env(self) -> CheckResult:
         token = bool(getattr(settings, 'META_WHATSAPP_TOKEN', ''))
         phone_id = bool(getattr(settings, 'META_WHATSAPP_PHONE_NUMBER_ID', ''))
@@ -142,39 +350,147 @@ class Command(BaseCommand):
             'faltan META_WHATSAPP_TOKEN / META_WHATSAPP_PHONE_NUMBER_ID / META_WHATSAPP_VERIFY_TOKEN',
         )
 
+    def _check_pending_sales_backlog(self) -> CheckResult:
+        try:
+            threshold_seconds = max(60, int(getattr(settings, 'PENDING_PAYMENT_TIMEOUT_SECONDS', 600)))
+            cutoff = timezone.now() - timedelta(seconds=threshold_seconds)
+            overdue = Venta.objects.filter(
+                payment_status=Venta.PaymentStatus.PENDING,
+                fecha__lte=cutoff,
+            ).count()
+            if overdue > 0:
+                return CheckResult(
+                    'pending_sales_backlog',
+                    False,
+                    'warning',
+                    f'ventas pendientes vencidas={overdue}',
+                )
+            return CheckResult('pending_sales_backlog', True, 'info', 'sin ventas pendientes vencidas')
+        except Exception as exc:
+            return self._db_check_failure('pending_sales_backlog', exc)
+
+    def _check_idempotency_backlog(self) -> CheckResult:
+        try:
+            threshold_seconds = max(60, int(getattr(settings, 'PENDING_PAYMENT_TIMEOUT_SECONDS', 600)))
+            cutoff = timezone.now() - timedelta(seconds=threshold_seconds)
+            stale_pending = IdempotencyRecord.objects.filter(
+                status=IdempotencyRecord.Status.PENDING,
+                updated_at__lte=cutoff,
+            ).count()
+            if stale_pending > 0:
+                return CheckResult(
+                    'idempotency_backlog',
+                    False,
+                    'warning',
+                    f'registros idempotentes PENDING vencidos={stale_pending}',
+                )
+            return CheckResult('idempotency_backlog', True, 'info', 'sin registros idempotentes vencidos')
+        except Exception as exc:
+            return self._db_check_failure('idempotency_backlog', exc)
+
+    def _check_outbox_backlog(self) -> CheckResult:
+        try:
+            threshold_seconds = max(60, int(getattr(settings, 'OUTBOX_STALE_SECONDS', 300)))
+            cutoff = timezone.now() - timedelta(seconds=threshold_seconds)
+            pending = OutboxEvent.objects.filter(status=OutboxEvent.Status.PENDING).count()
+            failed = OutboxEvent.objects.filter(status=OutboxEvent.Status.FAILED).count()
+            blocked = OutboxEvent.objects.filter(status=OutboxEvent.Status.BLOCKED).count()
+            critical_blocked = OutboxEvent.objects.filter(
+                status=OutboxEvent.Status.BLOCKED,
+                priority=OutboxEvent.Priority.CRITICAL,
+            ).count()
+            stale_in_progress = OutboxEvent.objects.filter(
+                status=OutboxEvent.Status.IN_PROGRESS,
+                updated_at__lte=cutoff,
+            ).count()
+
+            detail = (
+                f'pending={pending}, failed={failed}, blocked={blocked}, stale_in_progress={stale_in_progress}'
+            )
+            if critical_blocked > 0:
+                return CheckResult('outbox_backlog', False, 'error', detail + f', critical_blocked={critical_blocked}')
+            if failed > 0 or blocked > 0 or stale_in_progress > 0:
+                return CheckResult('outbox_backlog', False, 'warning', detail)
+            return CheckResult('outbox_backlog', True, 'info', detail)
+        except Exception as exc:
+            return self._db_check_failure('outbox_backlog', exc)
+
+    def _check_payment_exceptions_backlog(self) -> CheckResult:
+        try:
+            unresolved_alerts = AuditLog.objects.filter(
+                event_type='sale.orphan_payment_detected',
+                requires_attention=True,
+                resolved_at__isnull=True,
+            ).count()
+            open_refunds = AccountingAdjustment.objects.filter(
+                account_bucket=AccountingAdjustment.AccountBucket.REFUND_LIABILITY,
+                status=AccountingAdjustment.Status.OPEN,
+            ).count()
+            open_identification = AccountingAdjustment.objects.filter(
+                account_bucket=AccountingAdjustment.AccountBucket.PENDING_IDENTIFICATION,
+                status=AccountingAdjustment.Status.OPEN,
+            ).count()
+            if unresolved_alerts > 0 or open_refunds > 0 or open_identification > 0:
+                return CheckResult(
+                    'payment_exceptions_backlog',
+                    False,
+                    'warning',
+                    (
+                        f'alertas_abiertas={unresolved_alerts}, '
+                        f'reembolsos_abiertos={open_refunds}, '
+                        f'ajustes_por_identificar={open_identification}'
+                    ),
+                )
+            return CheckResult(
+                'payment_exceptions_backlog',
+                True,
+                'info',
+                'sin alertas ni ajustes contables abiertos',
+            )
+        except Exception as exc:
+            return self._db_check_failure('payment_exceptions_backlog', exc)
+
     def _check_delivery_pool(self) -> CheckResult:
-        drivers = Empleado.objects.filter(rol='DELIVERY', activo=True).exclude(telefono='').count()
-        if drivers <= 0:
-            return CheckResult('delivery_pool', False, 'warning', 'sin drivers DELIVERY activos con telefono')
-        return CheckResult('delivery_pool', True, 'info', f'drivers activos={drivers}')
+        try:
+            drivers = Empleado.objects.filter(rol='DELIVERY', activo=True).exclude(telefono='').count()
+            if drivers <= 0:
+                return CheckResult('delivery_pool', False, 'warning', 'sin drivers DELIVERY activos con telefono')
+            return CheckResult('delivery_pool', True, 'info', f'drivers activos={drivers}')
+        except Exception as exc:
+            return self._db_check_failure('delivery_pool', exc)
 
     def _check_delivery_quotes_backlog(self) -> CheckResult:
-        pending = Venta.objects.filter(estado='PENDIENTE_COTIZACION').count()
-        from django.utils import timezone
+        try:
+            pending = Venta.objects.filter(estado='PENDIENTE_COTIZACION').count()
 
-        timed_out = Venta.objects.filter(
-            estado='PENDIENTE_COTIZACION',
-            delivery_quote_deadline_at__isnull=False,
-            delivery_quote_deadline_at__lt=timezone.now(),
-        ).count()
+            timed_out = Venta.objects.filter(
+                estado='PENDIENTE_COTIZACION',
+                delivery_quote_deadline_at__isnull=False,
+                delivery_quote_deadline_at__lt=timezone.now(),
+            ).count()
 
-        if timed_out > 0:
-            return CheckResult(
-                'delivery_quotes_backlog',
-                False,
-                'warning',
-                f'pendientes={pending}, vencidas={timed_out}',
-            )
-        return CheckResult('delivery_quotes_backlog', True, 'info', f'pendientes={pending}, vencidas=0')
+            if timed_out > 0:
+                return CheckResult(
+                    'delivery_quotes_backlog',
+                    False,
+                    'warning',
+                    f'pendientes={pending}, vencidas={timed_out}',
+                )
+            return CheckResult('delivery_quotes_backlog', True, 'info', f'pendientes={pending}, vencidas=0')
+        except Exception as exc:
+            return self._db_check_failure('delivery_quotes_backlog', exc)
 
     def _check_print_jobs_backlog(self) -> CheckResult:
-        pending = PrintJob.objects.filter(estado='PENDING').count()
-        failed = PrintJob.objects.filter(estado='FAILED').count()
-        if failed > 0:
-            return CheckResult(
-                'print_jobs_backlog',
-                False,
-                'warning',
-                f'pending={pending}, failed={failed}',
-            )
-        return CheckResult('print_jobs_backlog', True, 'info', f'pending={pending}, failed=0')
+        try:
+            pending = PrintJob.objects.filter(estado='PENDING').count()
+            failed = PrintJob.objects.filter(estado='FAILED').count()
+            if failed > 0:
+                return CheckResult(
+                    'print_jobs_backlog',
+                    False,
+                    'warning',
+                    f'pending={pending}, failed={failed}',
+                )
+            return CheckResult('print_jobs_backlog', True, 'info', f'pending={pending}, failed=0')
+        except Exception as exc:
+            return self._db_check_failure('print_jobs_backlog', exc)

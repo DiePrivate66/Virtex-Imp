@@ -1,0 +1,198 @@
+# Bosco v2 Ops Guide
+
+## Scope
+
+This guide covers the server-side operational foundation already implemented in Bosco v2:
+
+- ledger registry and version fencing
+- system ledger account provisioning
+- resilient POS sales with idempotency
+- outbox processing and admin payment alerts
+- cash closing safeguards for pending refunds
+- operational preflight checks
+
+It does **not** cover the future Electron offline runtime, JSONL journal, LAN sync, or replay gateway. Those are still pending implementation.
+
+## Daily Commands
+
+Build the registry manifest:
+
+```powershell
+python scripts/build_ledger_registry_manifest.py --output build/ledger_registry_manifest.json --build-id local-dev
+```
+
+Provision or validate required ledger accounts:
+
+```powershell
+python manage.py provision_system_ledger_accounts
+```
+
+Target one organization:
+
+```powershell
+python manage.py provision_system_ledger_accounts --organization-slug legacy-default
+```
+
+Sync the active runtime registry:
+
+```powershell
+python manage.py sync_ledger_registry_activation
+```
+
+Enable maintenance mode before a ledger-affecting rollout:
+
+```powershell
+python manage.py sync_ledger_registry_activation --maintenance-mode on
+```
+
+Disable maintenance mode after activation:
+
+```powershell
+python manage.py sync_ledger_registry_activation --maintenance-mode off
+```
+
+Run operational checks:
+
+```powershell
+python manage.py ops_preflight
+```
+
+Strict mode:
+
+```powershell
+python manage.py ops_preflight --strict
+```
+
+Machine-readable output:
+
+```powershell
+python manage.py ops_preflight --json
+```
+
+## Recommended Deploy Sequence
+
+For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:
+
+1. Deploy code to the target environment.
+2. Run migrations.
+3. Run `python manage.py provision_system_ledger_accounts`.
+4. Run `python manage.py sync_ledger_registry_activation --maintenance-mode on`.
+5. Generate the current manifest with `scripts/build_ledger_registry_manifest.py`.
+6. Verify `ops_preflight --strict`.
+7. Run `python manage.py sync_ledger_registry_activation --maintenance-mode off`.
+
+If `ops_preflight` reports a lockfile mismatch or activation mismatch, do **not** reopen mutations until that is resolved.
+
+## What Ops Preflight Checks
+
+`ops_preflight` now validates:
+
+- database connectivity
+- Celery execution mode
+- Redis reachability
+- ledger registry lockfile integrity
+- active runtime registry activation
+- version-fencing configuration
+- required system ledger accounts per organization
+- Telegram admin alert configuration
+- WhatsApp environment settings
+- stale pending sales
+- stale idempotency rows
+- outbox backlog and blocked critical events
+- unresolved payment exceptions and open refund liabilities
+- delivery pool availability
+- pending delivery quote backlog
+- print job backlog
+
+## Interpreting Important Warnings
+
+### `ledger_lockfile`
+
+The generated lockfile does not match the code registry.
+
+Action:
+
+1. Regenerate the manifest and lock data from the current branch.
+2. Confirm the deployed code hash matches the branch you expect.
+3. Re-run `ops_preflight`.
+
+### `ledger_activation`
+
+The database activation does not match the currently deployed code hash/version, or maintenance mode is still enabled.
+
+Action:
+
+1. Run `python manage.py sync_ledger_registry_activation`.
+2. If the deploy is complete, turn maintenance mode off.
+
+### `system_ledger_accounts`
+
+One or more organizations are missing required system accounts.
+
+Action:
+
+```powershell
+python manage.py provision_system_ledger_accounts
+```
+
+### `pending_sales_backlog`
+
+There are POS sales stuck in `PENDING` beyond the payment timeout.
+
+Action:
+
+1. Inspect payment provider behavior.
+2. Run the stale-payment reaper task path.
+3. Review analytics dashboard for orphan payments or refund liabilities.
+
+### `outbox_backlog`
+
+There are failed, blocked, or stale in-progress outbox events.
+
+Action:
+
+1. Confirm Redis/Celery are healthy.
+2. Inspect `OutboxEvent` rows with `FAILED` or `BLOCKED`.
+3. Prioritize `CRITICAL` events first.
+
+### `payment_exceptions_backlog`
+
+There are unresolved orphan-payment alerts, refund liabilities, or accounting adjustments pending identification.
+
+Action:
+
+1. Open the analytics dashboard.
+2. Resolve the payment exception or accounting adjustment.
+3. Do not close the operational loop by hand without an audit note.
+
+## Incident Notes
+
+### Production deploy crashes during `pos.0016`
+
+If you ever see a traceback around `pos.0016_printjob_uniqueness_and_tenant_guards`, verify the environment is running the latest hotfixes already merged on `main`.
+
+### Cash closing blocked by refunds
+
+This is intentional. Bosco now blocks closing when refund liabilities remain open unless the operator explicitly closes with a documented override note.
+
+### Telegram admin alerts not arriving
+
+Check:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_ADMIN_ALERT_CHAT_ID`
+- `REDIS_URL`
+- `ops_preflight`
+
+If Redis is unavailable, the circuit breaker fails safe and external Telegram sends are skipped.
+
+## Validation Before Push
+
+Use at least:
+
+```powershell
+python manage.py makemigrations --check --dry-run
+python manage.py test pos.tests_registry --verbosity 1
+python manage.py test pos.tests_v2 --verbosity 1
+python manage.py ops_preflight --json
+```

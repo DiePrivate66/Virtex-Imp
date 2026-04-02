@@ -92,13 +92,18 @@ python manage.py ops_preflight --json
 ```
 
 Validacion profunda Twilio (usa API remota):
-
-```powershell
-python manage.py ops_preflight --deep-twilio
-```
-
 Modo estricto (falla tambien por warnings):
 
 ```powershell
 python manage.py ops_preflight --strict
 ```
+
+Checks cubiertos hoy:
+
+- database
+- celery / redis
+- ledger registry y version fencing
+- cuentas de sistema del ledger
+- ventas pendientes, idempotencia y outbox
+- alertas administrativas de pagos
+- WhatsApp, delivery quotes y print jobs

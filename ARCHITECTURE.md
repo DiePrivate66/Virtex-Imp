@@ -226,6 +226,10 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - `web_orders` ya tiene separadas lecturas, comandos, acciones, parsing y reglas de estado
 - `domain/shared` ya concentra utilidades transversales del negocio como normalizacion de telefonos
 - `sales`, `cash_register`, `cash_movements`, `inventory`, `staff`, `delivery` y `analytics` ya tienen frontera `presentation` + `application`
+- `ledger_registry.py` ya actua como fuente semantica unica para cuentas de sistema, hash de registry y version fencing
+- el backend ya expone activacion runtime (`LedgerRegistryActivation`), manifest generation y middleware de fencing por hash para mutaciones POS
+- el POS web ya opera con idempotencia por `client_transaction_id`, outbox de eventos y reconciliacion manual de excepciones de pago
+- `cash_register` y `analytics` ya incorporan flujo operativo para reembolsos pendientes, ajustes contables y alertas administrativas
 - las tareas async viven en `pos/infrastructure/tasks`
 - `delivery_tokens.py` y `whatsapp_utils.py` ya fueron retirados; el uso canonico vive en `pos/infrastructure/delivery`, `domain/shared` y `domain/web_orders`
 - WhatsApp/Meta ya entra por `presentation.integrations`, `application.integrations` y `application.notifications`
@@ -241,6 +245,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - `pos/services.py`, `pos.views`, `pos.views_integrations`, `whatsapp_service.py`, `telegram_service.py`, `delivery_tokens.py` y `whatsapp_utils.py` ya fueron retirados; las fachadas canonicas viven en `application.notifications`, `presentation.*`, `infrastructure.delivery` y `domain/shared`
 - `pos/tasks.py` ya quedo clasificado como alias operativo de Celery: es delgado, pero no se puede retirar hasta migrar nombres de tareas y beat schedule
 - `pos/legacy.py` ya mantiene el mapa central de import paths legacy -> destino canonico para guiar futuras eliminaciones
+- `ops_preflight` ya cubre no solo WhatsApp/printing sino tambien ledger registry, cuentas de sistema, outbox, pagos pendientes y backlog de excepciones
 
 Zonas todavia a seguir limpiando:
 

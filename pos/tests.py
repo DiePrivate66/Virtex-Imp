@@ -472,6 +472,65 @@ class OpsPreflightCommandTests(TestCase):
         self.assertIn('"checks"', output)
         self.assertIn('"database"', output)
 
+    @patch('pos.management.commands.ops_preflight.Command._check_redis')
+    def test_ops_preflight_json_includes_ledger_and_outbox_checks(self, mock_check_redis):
+        from pos.management.commands.ops_preflight import CheckResult
+
+        mock_check_redis.return_value = CheckResult('redis', True, 'info', 'ping ok (mock)')
+        out = StringIO()
+        call_command('ops_preflight', '--json', stdout=out)
+        payload = json.loads(out.getvalue())
+        check_names = {item['name'] for item in payload['checks']}
+
+        self.assertIn('ledger_lockfile', check_names)
+        self.assertIn('ledger_activation', check_names)
+        self.assertIn('system_ledger_accounts', check_names)
+        self.assertIn('outbox_backlog', check_names)
+        self.assertIn('payment_exceptions_backlog', check_names)
+
+    @patch('pos.management.commands.ops_preflight.Command._check_redis')
+    def test_ops_preflight_strict_fails_on_warning(self, mock_check_redis):
+        from pos.management.commands.ops_preflight import CheckResult
+
+        mock_check_redis.return_value = CheckResult('redis', True, 'info', 'ping ok (mock)')
+        with self.assertRaises(SystemExit) as raised:
+            call_command('ops_preflight', '--strict', stdout=StringIO())
+
+        self.assertEqual(raised.exception.code, 1)
+
+    def test_ops_preflight_detects_ledger_lockfile_mismatch(self):
+        from pos.management.commands.ops_preflight import Command
+
+        command = Command()
+        with patch(
+            'pos.management.commands.ops_preflight.load_registry_lockfile',
+            return_value={
+                'registry_version': 'broken-version',
+                'registry_hash': 'broken-hash',
+                'min_supported_queue_schema': 999,
+            },
+        ):
+            result = command._check_ledger_lockfile()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'error')
+        self.assertIn('version', result.detail)
+        self.assertIn('hash', result.detail)
+
+    def test_ops_preflight_ledger_activation_check_fails_closed_on_db_error(self):
+        from pos.management.commands.ops_preflight import Command
+
+        command = Command()
+        with patch(
+            'pos.management.commands.ops_preflight.LedgerRegistryActivation.objects.filter',
+            side_effect=RuntimeError('missing table'),
+        ):
+            result = command._check_ledger_activation()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'error')
+        self.assertIn('fallo chequeando DB', result.detail)
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class DeliveryClaimFlowTests(TestCase):
