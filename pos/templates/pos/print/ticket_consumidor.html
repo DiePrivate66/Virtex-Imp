@@ -177,11 +177,11 @@
     <!-- ═══════ FORMA DE PAGO ═══════ -->
     <div class="info-block">
         <p>Forma de Pago: {{ venta.get_metodo_pago_display }} ${{ venta.total|floatformat:2 }}</p>
-        {% if venta.estado_pago %}
-        <p>Estado pago: {{ venta.get_estado_pago_display|upper }}</p>
+        {% if venta.payment_status %}
+        <p>Estado pago: {{ venta.get_payment_status_display|upper }}</p>
         {% endif %}
-        {% if venta.referencia_pago %}
-        <p>Ref. pago: {{ venta.referencia_pago }}</p>
+        {% if venta.payment_reference %}
+        <p>Ref. pago: {{ venta.payment_reference }}</p>
         {% endif %}
         {% if venta.metodo_pago == 'TARJETA' and venta.tarjeta_tipo %}
         <p>Tipo tarjeta: {{ venta.tarjeta_tipo }}</p>

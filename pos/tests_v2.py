@@ -104,6 +104,42 @@ class BoscoV2SalesTests(TestCase):
         self.assertEqual(OutboxEvent.objects.filter(event_type='SALE_PAID_PRINT').count(), 1)
         self.assertEqual(first.venta.payment_status, Venta.PaymentStatus.PAID)
 
+    def test_payment_status_backfills_from_legacy_only_when_missing(self):
+        venta = Venta.objects.create(
+            turno=self.turno,
+            organization=self.turno.organization,
+            location=self.turno.location,
+            cliente_nombre='Cliente Legacy',
+            total=Decimal('5.00'),
+            metodo_pago='EFECTIVO',
+            estado='PENDIENTE',
+            estado_pago='RECHAZADO',
+            payment_status='',
+        )
+
+        self.assertEqual(venta.payment_status, Venta.PaymentStatus.FAILED)
+        self.assertEqual(venta.estado_pago, 'RECHAZADO')
+
+    def test_payment_status_remains_authoritative_over_legacy_field(self):
+        venta = Venta.objects.create(
+            turno=self.turno,
+            organization=self.turno.organization,
+            location=self.turno.location,
+            cliente_nombre='Cliente Canonico',
+            total=Decimal('7.00'),
+            metodo_pago='EFECTIVO',
+            estado='PENDIENTE',
+            estado_pago='RECHAZADO',
+            payment_status=Venta.PaymentStatus.PAID,
+            payment_reference='PAGO-REF-001',
+            referencia_pago='LEGACY-OLD',
+        )
+
+        self.assertEqual(venta.payment_status, Venta.PaymentStatus.PAID)
+        self.assertEqual(venta.estado_pago, 'APROBADO')
+        self.assertEqual(venta.payment_reference, 'PAGO-REF-001')
+        self.assertEqual(venta.referencia_pago, 'PAGO-REF-001')
+
     def test_failed_card_payment_restores_inventory_and_marks_sale_failed(self):
         with self.assertRaises(PosSaleError):
             register_sale(

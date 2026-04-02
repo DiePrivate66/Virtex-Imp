@@ -148,12 +148,12 @@
             <div class="info-row"><span class="info-label">CLIENTE:</span><span class="info-value">CONSUMIDOR FINAL</span></div>
             {% endif %}
             <div class="info-row"><span class="info-label">PAGO:</span><span class="info-value">{{ venta.get_metodo_pago_display }}</span></div>
-            {% if venta.estado_pago %}
-            <div class="info-row"><span class="info-label">ESTADO PAGO:</span><span class="info-value">{{ venta.get_estado_pago_display|upper }}</span></div>
+            {% if venta.payment_status %}
+            <div class="info-row"><span class="info-label">ESTADO PAGO:</span><span class="info-value">{{ venta.get_payment_status_display|upper }}</span></div>
             {% endif %}
             <div class="info-row"><span class="info-label">PEDIDO:</span><span class="info-value">{{ venta.get_tipo_pedido_display }}</span></div>
-            {% if venta.referencia_pago %}
-            <div class="info-row"><span class="info-label">REF:</span><span class="info-value">{{ venta.referencia_pago }}</span></div>
+            {% if venta.payment_reference %}
+            <div class="info-row"><span class="info-label">REF:</span><span class="info-value">{{ venta.payment_reference }}</span></div>
             {% endif %}
             {% if venta.metodo_pago == 'TARJETA' and venta.tarjeta_tipo %}
             <div class="info-row"><span class="info-label">TIPO TARJETA:</span><span class="info-value">{{ venta.tarjeta_tipo }}</span></div>
@@ -215,10 +215,10 @@
             </div>
             {% elif venta.metodo_pago == 'TARJETA' %}
             <div class="divider-light"></div>
-            {% if venta.referencia_pago %}
+            {% if venta.payment_reference %}
             <div class="info-row">
                 <span>REF TARJETA:</span>
-                <span class="font-bold">{{ venta.referencia_pago }}</span>
+                <span class="font-bold">{{ venta.payment_reference }}</span>
             </div>
             {% endif %}
             {% if venta.tarjeta_tipo %}

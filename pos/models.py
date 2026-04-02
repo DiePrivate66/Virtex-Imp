@@ -525,6 +525,32 @@ class Venta(models.Model):
         related_name='pedidos_asignados', help_text='Repartidor que tomo el pedido',
     )
 
+    def _resolve_authoritative_payment_status(self) -> str:
+        status = str(self.payment_status or '').strip().upper()
+        if status:
+            if status not in self.PaymentStatus.values:
+                raise ValidationError('payment_status invalido para la venta.')
+            return status
+        legacy_status = str(self.estado_pago or '').strip().upper()
+        return LEGACY_TO_V2_PAYMENT_STATUS.get(legacy_status, self.PaymentStatus.PAID)
+
+    def _sync_payment_compatibility_fields(self):
+        # payment_status is the canonical field. Legacy fields are kept in sync
+        # only for compatibility with older reads and prints.
+        self.payment_status = self._resolve_authoritative_payment_status()
+        self.estado_pago = V2_TO_LEGACY_PAYMENT_STATUS.get(self.payment_status, self.estado_pago)
+
+        payment_method_type = str(self.payment_method_type or self.metodo_pago or '').strip().upper()
+        if payment_method_type:
+            self.payment_method_type = payment_method_type
+            if payment_method_type in dict(self.METODOS):
+                self.metodo_pago = payment_method_type
+
+        payment_reference = str(self.payment_reference or self.referencia_pago or '').strip()
+        if payment_reference:
+            self.payment_reference = payment_reference[:80]
+            self.referencia_pago = payment_reference[:40]
+
     def _apply_tenant_defaults(self):
         if self.turno_id:
             if not self.location_id and self.turno.location_id:
@@ -554,14 +580,7 @@ class Venta(models.Model):
                     timezone_name=self.location.timezone,
                     operating_day_ends_at=self.location.operating_day_ends_at,
                 )
-        if not self.payment_method_type and self.metodo_pago:
-            self.payment_method_type = self.metodo_pago
-        if not self.payment_reference and self.referencia_pago:
-            self.payment_reference = self.referencia_pago
-        if not self.payment_status:
-            self.payment_status = LEGACY_TO_V2_PAYMENT_STATUS.get(self.estado_pago, self.PaymentStatus.PAID)
-        if self.payment_status:
-            self.estado_pago = V2_TO_LEGACY_PAYMENT_STATUS.get(self.payment_status, self.estado_pago)
+        self._sync_payment_compatibility_fields()
         if self.operator_id and not self.operator_display_name_snapshot:
             self.operator_display_name_snapshot = self.operator.display_name
         if self.supervisor_id and not self.supervisor_display_name_snapshot:

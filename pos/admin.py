@@ -75,6 +75,18 @@ class CajaTurnoAdmin(admin.ModelAdmin):
 
 @admin.register(Venta)
 class VentaAdmin(admin.ModelAdmin):
+    @admin.display(ordering="payment_status", description="Estado pago")
+    def payment_status_display(self, obj):
+        return obj.get_payment_status_display()
+
+    @admin.display(description="Estado pago legacy")
+    def legacy_estado_pago_display(self, obj):
+        return obj.get_estado_pago_display()
+
+    @admin.display(description="Referencia legacy")
+    def legacy_payment_reference_display(self, obj):
+        return obj.referencia_pago or "-"
+
     list_display = (
         "id",
         "fecha",
@@ -82,20 +94,21 @@ class VentaAdmin(admin.ModelAdmin):
         "origen",
         "tipo_pedido",
         "estado",
-        "estado_pago",
-        "metodo_pago",
+        "payment_status_display",
+        "payment_method_type",
         "total",
     )
-    list_filter = ("origen", "tipo_pedido", "estado", "estado_pago", "metodo_pago", "fecha")
+    list_filter = ("origen", "tipo_pedido", "estado", "payment_status", "payment_method_type", "fecha")
     search_fields = (
         "id",
         "cliente_nombre",
         "telefono_cliente",
         "telefono_cliente_e164",
         "direccion_envio",
-        "referencia_pago",
+        "payment_reference",
     )
-    readonly_fields = ("fecha",)
+    readonly_fields = ("fecha", "legacy_estado_pago_display", "legacy_payment_reference_display")
+    exclude = ("estado_pago", "referencia_pago")
     inlines = [DetalleVentaInline]
 
 
