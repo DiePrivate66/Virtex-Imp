@@ -252,6 +252,87 @@ Zonas todavia a seguir limpiando:
 - wrappers legacy que aun mantenemos por compatibilidad
 - bordes de `integrations` que todavia pueden desacoplarse mas
 
+## Riesgos Estructurales Vigentes
+
+La migracion por dominios ya avanzo, pero todavia quedan bordes tecnicos que deben tratarse
+como deuda estructural activa y no como detalles cosmeticos.
+
+### 1. `Venta` sigue siendo un agregado demasiado cargado
+
+Hoy `Venta` mezcla en un solo modelo:
+
+- datos transaccionales POS
+- estado de pago legacy y v2
+- datos operativos de delivery
+- confirmacion por cliente
+- snapshots de operador y supervisor
+
+Eso no bloquea la operacion actual, pero si vuelve mas fragiles:
+
+- las migraciones de esquema
+- las pruebas unitarias puras
+- el aislamiento de reglas por dominio
+
+Direccion de salida:
+
+- mantener `Venta` como agregado transaccional principal
+- extraer gradualmente pago y delivery a servicios o modelos relacionados
+- evitar meter mas comportamiento nuevo dentro de `Venta`
+
+### 2. Legacy y V2 de pagos aun conviven en el mismo registro
+
+Hoy `estado_pago` y `payment_status` coexisten y se sincronizan dentro del modelo.
+
+Eso implica:
+
+- doble fuente de verdad temporal
+- riesgo de divergencia si alguien escribe un campo sin pasar por el flujo esperado
+- mayor complejidad para reporting y auditoria
+
+Direccion de salida:
+
+- declarar `payment_status` como campo autoritativo
+- mantener `estado_pago` solo como compatibilidad de lectura o migracion
+- retirar la sincronizacion dual cuando los puntos de entrada legacy desaparezcan
+
+### 3. La multitenencia aun no es uniforme
+
+Modelos operativos como ventas, caja, outbox, print jobs e idempotencia ya cargan
+`organization` y `location`, pero catalogos como `Cliente`, `Categoria` y `Producto`
+todavia no tienen frontera tenant explicita.
+
+Eso obliga a una decision de producto y de datos:
+
+- si el catalogo es global, debe documentarse como tal
+- si Bosco va a operar como SaaS multi-tenant con catalogo propio por organizacion,
+  estos modelos deben migrarse
+
+No conviene seguir creciendo sin fijar esa decision.
+
+### 4. Todavia existe logica de negocio relevante dentro de `save()`
+
+Persisten invariantes y defaults criticos en modelos como `CajaTurno` y `Venta`.
+
+Eso tiene un costo:
+
+- dificulta razonar sobre efectos secundarios
+- complica operaciones bulk
+- hace menos explicitos los contratos de la capa de aplicacion
+
+Direccion de salida:
+
+- mover invariantes complejos a `application/` o servicios de dominio
+- dejar en modelos solo validaciones minimas y consistencia local indispensable
+
+## Prioridad de Refactor Real
+
+El orden pragmatico actual no es "reescribir todo". Es este:
+
+1. congelar `payment_status` como fuente autoritativa
+2. decidir si `Cliente` y `Producto` son globales o tenant-scoped
+3. sacar comportamiento nuevo de `save()` y de helpers de modelo
+4. dividir gradualmente `Venta` en fronteras mas limpias de pago y delivery
+
 ## Mapa de Wrappers Legacy Vigentes
 
 El registro vivo de compatibilidad se mantiene en `pos/legacy.py`.
