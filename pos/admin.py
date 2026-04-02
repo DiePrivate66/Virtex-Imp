@@ -11,6 +11,8 @@ from .models import (
     DetalleVenta,
     Empleado,
     Inventario,
+    LedgerAccount,
+    LedgerRegistryActivation,
     MovimientoCaja,
     MovimientoInventario,
     PerfilUsuario,
@@ -190,3 +192,48 @@ class PrintJobAdmin(admin.ModelAdmin):
     list_filter = ("tipo", "estado", "created_at")
     search_fields = ("venta__id", "error")
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(LedgerAccount)
+class LedgerAccountAdmin(admin.ModelAdmin):
+    list_display = ("organization", "code", "name", "account_type", "system_code", "active")
+    list_filter = ("organization", "account_type", "active")
+    search_fields = ("organization__name", "code", "name", "system_code")
+    readonly_fields = ("created_at", "updated_at")
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj and obj.system_code:
+            readonly.extend(["organization", "code", "name", "account_type", "system_code", "active"])
+        return tuple(dict.fromkeys(readonly))
+
+    def has_delete_permission(self, request, obj=None):
+        if obj and obj.system_code:
+            return False
+        return super().has_delete_permission(request, obj)
+
+
+@admin.register(LedgerRegistryActivation)
+class LedgerRegistryActivationAdmin(admin.ModelAdmin):
+    list_display = (
+        "singleton_key",
+        "active_registry_version",
+        "active_registry_hash",
+        "min_supported_queue_schema",
+        "maintenance_mode",
+        "activated_at",
+    )
+    readonly_fields = (
+        "singleton_key",
+        "active_registry_version",
+        "active_registry_hash",
+        "min_supported_queue_schema",
+        "activated_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return not LedgerRegistryActivation.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

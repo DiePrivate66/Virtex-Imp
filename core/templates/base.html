@@ -39,6 +39,12 @@
 
 <script>
     // ═══════ CSRF TOKEN HELPER (GLOBAL) ═══════
+    window.BOSCO_RUNTIME_HEADERS = {
+        'X-Ledger-Registry-Hash': '{{ ledger_registry_hash|default:""|escapejs }}',
+        'X-POS-App-Version': '{{ ledger_client_app_version|default:""|escapejs }}',
+        'X-POS-Queue-Schema': '{{ ledger_min_supported_queue_schema|default:""|escapejs }}'
+    };
+
     function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== '') {
@@ -54,10 +60,16 @@
         return cookieValue;
     }
     function getHeaders() {
-        return {
+        const headers = {
             'Content-Type': 'application/json',
             'X-CSRFToken': getCookie('csrftoken'),
         };
+        Object.entries(window.BOSCO_RUNTIME_HEADERS || {}).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && String(value).trim() !== '') {
+                headers[key] = String(value);
+            }
+        });
+        return headers;
     }
 </script>
     <!-- Footer Global -->

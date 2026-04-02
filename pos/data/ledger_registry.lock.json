@@ -1,0 +1,53 @@
+{
+  "artifact_sha256": "",
+  "build_id": "",
+  "min_supported_queue_schema": 1,
+  "registry": {
+    "contingency_account": {
+      "bucket": "PENDING_IDENTIFICATION",
+      "system_code": "UNIDENTIFIED_RECEIPTS"
+    },
+    "legacy_mappings": {
+      "account_buckets": {
+        "PENDING_IDENTIFICATION": "UNIDENTIFIED_RECEIPTS",
+        "REFUND_LIABILITY": "REFUND_PAYABLE"
+      },
+      "payment_statuses": {
+        "ANULADO": "VOIDED",
+        "APROBADO": "PAID",
+        "PENDIENTE": "PENDING",
+        "RECHAZADO": "FAILED"
+      }
+    },
+    "min_supported_queue_schema": 1,
+    "registry_version": "2026.04.02-phase1",
+    "system_accounts": [
+      {
+        "account_type": "ASSET",
+        "code": "1105",
+        "deletable": false,
+        "immutable": true,
+        "name": "Cobros pasarela / banco",
+        "system_code": "PAYMENT_GATEWAY_CLEARING"
+      },
+      {
+        "account_type": "LIABILITY",
+        "code": "2105",
+        "deletable": false,
+        "immutable": true,
+        "name": "Ingresos por identificar",
+        "system_code": "UNIDENTIFIED_RECEIPTS"
+      },
+      {
+        "account_type": "LIABILITY",
+        "code": "2110",
+        "deletable": false,
+        "immutable": true,
+        "name": "Reembolsos pendientes",
+        "system_code": "REFUND_PAYABLE"
+      }
+    ]
+  },
+  "registry_hash": "6582e1c58992c2c62001c435a4f699bd50e437dea24e4083bed7b3831afac38b",
+  "registry_version": "2026.04.02-phase1"
+}

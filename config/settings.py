@@ -82,10 +82,13 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware', # WhiteNoise para archivos estaticos
     'corsheaders.middleware.CorsMiddleware',
+    'pos.middleware.CorrelationIdMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'pos.middleware.LedgerRegistryFenceMiddleware',
+    'pos.middleware.LocationContextMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -197,6 +200,11 @@ DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TOKEN_
 # --- TELEGRAM BOT (NOTIFICACION GRUPO REPARTIDORES) ---
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_DELIVERY_GROUP_ID = os.environ.get('TELEGRAM_DELIVERY_GROUP_ID', '')
+TELEGRAM_ADMIN_ALERT_CHAT_ID = os.environ.get('TELEGRAM_ADMIN_ALERT_CHAT_ID', '')
+TELEGRAM_API_TIMEOUT_SECONDS = int(os.environ.get('TELEGRAM_API_TIMEOUT_SECONDS', '10'))
+TELEGRAM_CIRCUIT_FAILURE_THRESHOLD = int(os.environ.get('TELEGRAM_CIRCUIT_FAILURE_THRESHOLD', '3'))
+TELEGRAM_CIRCUIT_OPEN_SECONDS = int(os.environ.get('TELEGRAM_CIRCUIT_OPEN_SECONDS', '180'))
+TELEGRAM_CIRCUIT_REDIS_TIMEOUT_SECONDS = float(os.environ.get('TELEGRAM_CIRCUIT_REDIS_TIMEOUT_SECONDS', '0.2'))
 
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', REDIS_URL)
@@ -215,6 +223,31 @@ WHATSAPP_INBOUND_RATE_LIMIT_WINDOW_SECONDS = int(
 )
 WHATSAPP_INBOUND_RATE_LIMIT_MAX = int(os.environ.get('WHATSAPP_INBOUND_RATE_LIMIT_MAX', '20'))
 PRINT_JOB_STUCK_SECONDS = int(os.environ.get('PRINT_JOB_STUCK_SECONDS', '120'))
+OUTBOX_STALE_SECONDS = int(os.environ.get('OUTBOX_STALE_SECONDS', '300'))
+OUTBOX_PRIORITY_AGING_STEP_SECONDS = int(os.environ.get('OUTBOX_PRIORITY_AGING_STEP_SECONDS', '300'))
+OUTBOX_PRIORITY_AGING_FACTOR = int(os.environ.get('OUTBOX_PRIORITY_AGING_FACTOR', '5'))
+OUTBOX_SWEEP_FETCH_LIMIT = int(os.environ.get('OUTBOX_SWEEP_FETCH_LIMIT', '1000'))
+OUTBOX_SWEEP_BATCH_SIZE = int(os.environ.get('OUTBOX_SWEEP_BATCH_SIZE', '200'))
+IDEMPOTENCY_TTL_HOURS = int(os.environ.get('IDEMPOTENCY_TTL_HOURS', '24'))
+PENDING_PAYMENT_TIMEOUT_SECONDS = int(os.environ.get('PENDING_PAYMENT_TIMEOUT_SECONDS', '600'))
+PENDING_PAYMENT_REAPER_BATCH_SIZE = int(os.environ.get('PENDING_PAYMENT_REAPER_BATCH_SIZE', '50'))
+MAX_OPEN_CASH_TURN_HOURS = int(os.environ.get('MAX_OPEN_CASH_TURN_HOURS', '20'))
+IDEMPOTENCY_PURGE_AFTER_HOURS = int(os.environ.get('IDEMPOTENCY_PURGE_AFTER_HOURS', '168'))
+IDEMPOTENCY_PURGE_BATCH_SIZE = int(os.environ.get('IDEMPOTENCY_PURGE_BATCH_SIZE', '1000'))
+LEDGER_VERSION_FENCING_ENABLED = os.environ.get(
+    'LEDGER_VERSION_FENCING_ENABLED',
+    'False' if DEBUG else 'True',
+) == 'True'
+LEDGER_ACTIVATION_CACHE_TTL_SECONDS = int(os.environ.get('LEDGER_ACTIVATION_CACHE_TTL_SECONDS', '5'))
+LEDGER_FENCED_MUTATION_PATHS = tuple(
+    split_env_list(
+        os.environ.get(
+            'LEDGER_FENCED_MUTATION_PATHS',
+            '/registrar_venta/,/api/reconciliar-pago/',
+        )
+    )
+)
+LEDGER_WEB_CLIENT_APP_VERSION = os.environ.get('LEDGER_WEB_CLIENT_APP_VERSION', 'pos-web')
 
 # --- OPERACION / HORARIO ---
 # En desarrollo se desactiva por defecto para facilitar pruebas.
