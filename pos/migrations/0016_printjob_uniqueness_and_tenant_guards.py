@@ -74,7 +74,7 @@ def create_tenant_guard_triggers(apps, schema_editor):
                         WHERE id = NEW.location_id
                           AND organization_id = NEW.organization_id
                     ) THEN
-                        RAISE EXCEPTION 'tenant mismatch on %', TG_TABLE_NAME;
+                        RAISE EXCEPTION 'tenant mismatch on %%', TG_TABLE_NAME;
                     END IF;
                 END IF;
                 RETURN NEW;
