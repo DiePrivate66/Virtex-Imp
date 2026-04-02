@@ -65,6 +65,138 @@
         </div>
     </div>
 
+    {% if messages %}
+    <div class="space-y-3 mb-6">
+        {% for message in messages %}
+        <div class="rounded-2xl border px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-950/40 border-green-700/50 text-green-200{% else %}bg-yellow-950/40 border-yellow-700/50 text-yellow-200{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if payment_exceptions_open_count %}
+    <div class="bg-red-950/40 rounded-2xl border border-red-700/50 p-6 mb-6">
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-red-300 font-black text-sm uppercase tracking-widest">EXCEPCIONES DE PAGO ABIERTAS</h2>
+                <p class="text-red-200 text-xs mt-1">{{ payment_exceptions_open_count }} alerta(s) requieren accion manual inmediata.</p>
+            </div>
+            <div class="bg-red-600 text-white text-2xl font-black px-4 py-2 rounded-xl">
+                {{ payment_exceptions_open_count }}
+            </div>
+        </div>
+        <div class="space-y-3">
+            {% for alert in payment_exceptions_open %}
+            <div class="bg-black/20 border border-red-800/40 rounded-xl p-4">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                    <div>
+                        <p class="text-white font-black text-sm">Venta #{{ alert.target_id }}{% if alert.location %} · {{ alert.location.name }}{% endif %}</p>
+                        <p class="text-red-200 text-xs mt-1">
+                            {{ alert.created_at|date:"d/m H:i" }} · Ref: {{ alert.payload_json.payment_reference|default:"SIN_REFERENCIA" }} ·
+                            Pasarela: {{ alert.payload_json.payment_provider|default:"DESCONOCIDO" }}
+                        </p>
+                        <p class="text-gray-300 text-xs mt-1">Inventario afectado: {{ alert.payload_json.inventory_snapshot|length }} item(s).</p>
+                    </div>
+                    <form method="post" action="{% url 'resolver_excepcion_pago' %}" class="flex flex-col gap-2 lg:items-end">
+                        {% csrf_token %}
+                        <input type="hidden" name="audit_log_id" value="{{ alert.id }}">
+                        <select
+                            name="resolution_action"
+                            class="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white w-64"
+                        >
+                            <option value="REGISTER_INCOME_ONLY">Solo registrar ingreso</option>
+                            <option value="REACTIVATE_SALE">Completar venta si hay stock</option>
+                            <option value="REFUND_REQUIRED">Registrar reembolso requerido</option>
+                        </select>
+                        <input
+                            type="text"
+                            name="resolution_note"
+                            placeholder="Justificacion obligatoria"
+                            required
+                            class="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white w-64"
+                        >
+                        <input
+                            type="text"
+                            name="resolution_reference"
+                            placeholder="Referencia externa opcional"
+                            class="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white w-64"
+                        >
+                        <button type="submit" class="bg-red-600 hover:bg-red-500 text-white text-xs font-black px-4 py-2 rounded-lg transition">
+                            Marcar Resuelta
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if refund_adjustments_open_count %}
+    <div class="bg-amber-950/40 rounded-2xl border border-amber-700/50 p-6 mb-6">
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-amber-300 font-black text-sm uppercase tracking-widest">REEMBOLSOS PENDIENTES</h2>
+                <p class="text-amber-200 text-xs mt-1">
+                    {{ refund_adjustments_open_count }} ajuste(s) por ${{ refund_adjustments_open_total|floatformat:2 }} bloquean el cierre de caja hasta que se confirme la devolucion.
+                </p>
+            </div>
+            <div class="bg-amber-500 text-black text-2xl font-black px-4 py-2 rounded-xl">
+                {{ refund_adjustments_open_count }}
+            </div>
+        </div>
+        <div class="space-y-3">
+            {% for adjustment in refund_adjustments_open %}
+            <div class="bg-black/20 border border-amber-800/40 rounded-xl p-4">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                    <div>
+                        <p class="text-white font-black text-sm">
+                            Ajuste #{{ adjustment.id }}{% if adjustment.sale_id %} · Venta #{{ adjustment.sale_id }}{% endif %}{% if adjustment.location %} · {{ adjustment.location.name }}{% endif %}
+                        </p>
+                        <p class="text-amber-200 text-xs mt-1">
+                            {{ adjustment.effective_at|date:"d/m H:i" }} · Monto: ${{ adjustment.amount|floatformat:2 }} ·
+                            {{ adjustment.get_source_account_display }} → {{ adjustment.get_destination_account_display }}
+                        </p>
+                        <p class="text-gray-300 text-xs mt-1">
+                            Ref. pago: {{ adjustment.payment_reference|default:"SIN_REFERENCIA" }} ·
+                            Ref. resolucion: {{ adjustment.external_reference|default:"SIN_REFERENCIA" }}
+                        </p>
+                    </div>
+                    <form method="post" action="{% url 'resolver_ajuste_contable' %}" class="flex flex-col gap-2 lg:items-end">
+                        {% csrf_token %}
+                        <input type="hidden" name="adjustment_id" value="{{ adjustment.id }}">
+                        <select
+                            name="settlement_mode"
+                            class="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white w-72"
+                        >
+                            <option value="CASH_DRAWER">Pagar desde caja del turno</option>
+                            <option value="EXTERNAL_REFUND">Registrar reembolso externo / transferencia</option>
+                        </select>
+                        <input
+                            type="text"
+                            name="resolution_note"
+                            placeholder="Comprobante o justificacion del reembolso"
+                            required
+                            class="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white w-72"
+                        >
+                        <input
+                            type="text"
+                            name="resolution_reference"
+                            placeholder="Referencia bancaria / transaccion"
+                            class="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white w-72"
+                        >
+                        <button type="submit" class="bg-amber-500 hover:bg-amber-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
+                            Marcar reembolso completado
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <!-- TOP PRODUCTOS -->
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6">

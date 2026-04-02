@@ -8,7 +8,31 @@
             <a href="/" class="inline-block text-gray-500 text-sm hover:text-white mb-3">← Volver al POS</a>
             <h1 class="text-3xl font-black text-white uppercase text-center">Cierre de Caja</h1>
         </div>
-        
+
+        {% if refund_adjustments_open_count %}
+        <div class="mb-6 rounded-xl border border-red-700/60 bg-red-950/40 p-4">
+            <h2 class="text-sm font-black uppercase tracking-widest text-red-200">Reembolsos pendientes detectados</h2>
+            <p class="mt-2 text-sm text-red-100">
+                Hay {{ refund_adjustments_open_count }} reembolso(s) abierto(s) por ${{ refund_adjustments_open_total|floatformat:2 }}.
+                Puedes resolverlos en el dashboard o cerrar este turno dejando la deuda arrastrada al siguiente turno con una justificacion obligatoria.
+            </p>
+            <a href="{% url 'dashboard_analytics' %}" class="mt-3 inline-block rounded-lg bg-red-600 px-4 py-2 text-xs font-black text-white hover:bg-red-500 transition">
+                IR AL DASHBOARD DE EXCEPCIONES
+            </a>
+            <div class="mt-4">
+                <label for="refund-override-note" class="block text-xs font-black uppercase tracking-widest text-red-200 mb-2">
+                    Justificacion para cerrar con deuda pendiente
+                </label>
+                <textarea
+                    id="refund-override-note"
+                    rows="3"
+                    class="w-full rounded-lg border border-red-800/60 bg-black/40 px-3 py-2 text-sm text-white"
+                    placeholder="Ej: no hay liquidez en caja fisica; reembolso se traslada al siguiente turno con seguimiento de gerencia."
+                ></textarea>
+            </div>
+        </div>
+        {% endif %}
+
         <form id="form-cierre" onsubmit="return false;" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
             <!-- Columna 1: Conteo de Dinero -->
@@ -62,11 +86,17 @@
                             <span class="text-gray-400">💳 Tarjeta</span>
                             <span class="font-bold text-purple-400">${{ caja.total_otros_sistema|floatformat:2 }}</span>
                         </div>
+                        {% if total_reembolsos_heredados_turno %}
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">↩️ Reembolsos heredados ejecutados</span>
+                            <span class="font-bold text-red-400">- ${{ total_reembolsos_heredados_turno|floatformat:2 }}</span>
+                        </div>
+                        {% endif %}
                         <div class="flex justify-between border-t border-gray-700 pt-2">
                             <span class="text-gray-400 font-bold">TOTAL ESPERADO EN CAJA</span>
                             <span class="font-bold text-xl text-white" id="label-esperado">Calculando...</span>
                         </div>
-                        <p class="text-gray-600 text-xs">(Base + Efectivo = Esperado en caja física)</p>
+                        <p class="text-gray-600 text-xs">(Base + Efectivo - egresos, incluyendo reembolsos heredados, = Esperado en caja física)</p>
                     </div>
                 </div>
 
@@ -77,8 +107,15 @@
                     <div id="diferencia-texto" class="text-xs font-bold mt-2 text-gray-400">CUADRADO</div>
                 </div>
 
-                <button onclick="cerrarCaja()" class="w-full bg-red-600 text-white font-black py-4 rounded-xl text-xl hover:bg-red-700 transition shadow-lg active:scale-95">
+                <button
+                    onclick="cerrarCaja()"
+                    class="w-full {% if refund_adjustments_open_count %}bg-amber-600 hover:bg-amber-500{% else %}bg-red-600 hover:bg-red-700{% endif %} text-white font-black py-4 rounded-xl text-xl transition shadow-lg active:scale-95"
+                >
+                    {% if refund_adjustments_open_count %}
+                    ⚠️ CERRAR CAJA CON DEUDA PENDIENTE
+                    {% else %}
                     🖨️ CERRAR CAJA E IMPRIMIR REPORTE
+                    {% endif %}
                 </button>
             </div>
         </form>
@@ -86,6 +123,7 @@
 </div>
 
 <script>
+    const refundsBlockClose = {{ refund_adjustments_open_count|default:0 }};
     const inputs = document.querySelectorAll('.denom');
     const displayReal = document.getElementById('total-real');
     const displayDiff = document.getElementById('diferencia-display');
@@ -130,6 +168,18 @@
     inputs.forEach(input => input.addEventListener('input', calcular));
 
     function cerrarCaja() {
+        let allowPendingRefundOverride = false;
+        let pendingRefundOverrideNote = '';
+        if (refundsBlockClose > 0) {
+            const noteInput = document.getElementById('refund-override-note');
+            pendingRefundOverrideNote = (noteInput?.value || '').trim();
+            if (!pendingRefundOverrideNote) {
+                alert('Debes escribir una justificación para cerrar con deuda pendiente.');
+                noteInput?.focus();
+                return;
+            }
+            allowPendingRefundOverride = true;
+        }
         if(!confirm("¿Seguro que desea cerrar caja? Esta acción no se puede deshacer.")) return;
         
         const conteo = {};
@@ -146,7 +196,9 @@
             headers: getHeaders(),
             body: JSON.stringify({
                 conteo: conteo,
-                total_declarado: total
+                total_declarado: total,
+                allow_pending_refund_override: allowPendingRefundOverride,
+                pending_refund_override_note: pendingRefundOverrideNote
             })
         })
         .then(res => res.json())

@@ -15,6 +15,8 @@ from . import web_orders as web_orders_views
 urlpatterns = [
     path('', pos_views.pos_index, name='pos_index'),
     path('registrar_venta/', pos_views.registrar_venta, name='registrar_venta'),
+    path('api/transaccion-pendiente/', pos_views.consultar_transaccion_pendiente, name='api_transaccion_pendiente'),
+    path('api/reconciliar-pago/', pos_views.reconciliar_pago, name='api_reconciliar_pago'),
 
     # Caja
     path('login/', cash_register_views.pantalla_login, name='pos_login'),
@@ -74,4 +76,6 @@ urlpatterns = [
 
     # Analytics
     path('dashboard/', analytics_views.dashboard_analytics, name='dashboard_analytics'),
+    path('dashboard/resolver-excepcion-pago/', analytics_views.resolver_excepcion_pago, name='resolver_excepcion_pago'),
+    path('dashboard/resolver-ajuste-contable/', analytics_views.resolver_ajuste_contable, name='resolver_ajuste_contable'),
 ]

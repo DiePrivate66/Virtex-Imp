@@ -7,7 +7,7 @@ from django.db.models import Avg, Count, F, Sum
 from django.db.models.functions import ExtractHour, TruncDate
 from django.utils import timezone
 
-from pos.models import Asistencia, DetalleVenta, MovimientoCaja, Venta
+from pos.models import AccountingAdjustment, Asistencia, AuditLog, DetalleVenta, MovimientoCaja, Venta
 
 
 def _resolve_period(periodo: str, hoy, desde_param, hasta_param):
@@ -37,6 +37,7 @@ def _build_previous_period_totals(hoy, desde):
         Venta.objects.filter(
             fecha__date__gte=periodo_anterior_desde,
             fecha__date__lte=periodo_anterior_hasta,
+            payment_status=Venta.PaymentStatus.PAID,
         )
         .exclude(estado='CANCELADO')
         .aggregate(t=Sum('total'))['t']
@@ -122,14 +123,18 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
     hoy = timezone.localdate()
     desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
 
-    ventas = Venta.objects.filter(fecha__date__gte=desde, fecha__date__lte=hasta).exclude(
+    ventas = Venta.objects.filter(
+        fecha__date__gte=desde,
+        fecha__date__lte=hasta,
+        payment_status=Venta.PaymentStatus.PAID,
+    ).exclude(
         estado='CANCELADO'
     )
     total_ventas = ventas.aggregate(t=Sum('total'))['t'] or Decimal('0')
     num_ventas = ventas.count()
     ticket_promedio = ventas.aggregate(a=Avg('total'))['a'] or Decimal('0')
 
-    ventas_hoy = Venta.objects.filter(fecha__date=hoy).exclude(estado='CANCELADO')
+    ventas_hoy = Venta.objects.filter(fecha__date=hoy, payment_status=Venta.PaymentStatus.PAID).exclude(estado='CANCELADO')
     total_hoy = ventas_hoy.aggregate(t=Sum('total'))['t'] or Decimal('0')
     num_hoy = ventas_hoy.count()
 
@@ -150,9 +155,24 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
     ventas_pos = ventas.filter(origen='POS').aggregate(t=Sum('total'), c=Count('id'))
     ventas_web = ventas.filter(origen='WEB').aggregate(t=Sum('total'), c=Count('id'))
 
-    movimientos = MovimientoCaja.objects.filter(fecha__date__gte=desde, fecha__date__lte=hasta)
+    movimientos = MovimientoCaja.objects.filter(fecha__date__gte=desde, fecha__date__lte=hasta).exclude(concepto='VENTA')
     total_egresos = movimientos.filter(tipo='EGRESO').aggregate(t=Sum('monto'))['t'] or Decimal('0')
     total_ingresos = movimientos.filter(tipo='INGRESO').aggregate(t=Sum('monto'))['t'] or Decimal('0')
+    payment_exceptions_queryset = AuditLog.objects.filter(
+        event_type='sale.orphan_payment_detected',
+        requires_attention=True,
+        resolved_at__isnull=True,
+    ).select_related('location', 'actor_user')
+    payment_exceptions_open = list(payment_exceptions_queryset.order_by('-created_at')[:10])
+
+    refund_adjustments_queryset = AccountingAdjustment.objects.filter(
+        account_bucket=AccountingAdjustment.AccountBucket.REFUND_LIABILITY,
+        status=AccountingAdjustment.Status.OPEN,
+    ).select_related('location', 'sale', 'created_by')
+    refund_adjustments_open = list(refund_adjustments_queryset.order_by('-effective_at', '-created_at')[:10])
+    refund_adjustments_open_total = (
+        refund_adjustments_queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    )
 
     return {
         'periodo': periodo,
@@ -180,4 +200,9 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
         'total_ingresos_extra': total_ingresos,
         'ganancia_estimada': total_ventas + total_ingresos - total_egresos,
         'asistencias': _build_attendance_data(desde, hasta),
+        'payment_exceptions_open': payment_exceptions_open,
+        'payment_exceptions_open_count': payment_exceptions_queryset.count(),
+        'refund_adjustments_open': refund_adjustments_open,
+        'refund_adjustments_open_count': refund_adjustments_queryset.count(),
+        'refund_adjustments_open_total': refund_adjustments_open_total,
     }

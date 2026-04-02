@@ -31,10 +31,12 @@ def verificar_pin(request):
 
     data = json.loads(request.body)
     pin = data.get('pin')
+    alias = data.get('alias')
+    location_uuid = data.get('location_uuid')
 
     try:
-        result = verify_pos_pin(pin)
-        login(request, result.empleado.usuario)
+        result = verify_pos_pin(pin, alias=alias, location_uuid=location_uuid)
+        login(request, result.user)
         return JsonResponse({
             'status': 'ok',
             'rol': result.rol,
@@ -92,6 +94,8 @@ def procesar_cierre(request):
             request.user,
             data.get('total_declarado'),
             data.get('conteo'),
+            allow_pending_refund_override=bool(data.get('allow_pending_refund_override')),
+            pending_refund_override_note=data.get('pending_refund_override_note', ''),
         )
         caja_id = caja.id
         logout(request)

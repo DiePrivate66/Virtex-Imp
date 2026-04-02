@@ -29,6 +29,9 @@
         <div class="bg-red-900/20 border border-red-800 rounded-xl p-5 text-center">
             <p class="text-red-500 text-[10px] font-black uppercase tracking-widest">EGRESOS</p>
             <p class="text-red-400 text-3xl font-black mt-1">-${{ total_egresos|floatformat:2 }}</p>
+            {% if total_reembolsos_heredados %}
+            <p class="text-red-200 text-[10px] mt-1">Incluye ${{ total_reembolsos_heredados|floatformat:2 }} en reembolsos heredados</p>
+            {% endif %}
         </div>
         <div class="bg-gray-800 border border-gray-700 rounded-xl p-5 text-center">
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">BALANCE</p>

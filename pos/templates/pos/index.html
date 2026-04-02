@@ -304,6 +304,7 @@
 
 <script>
     // --- ESTADO ---
+    const PENDING_SALE_STORAGE_KEY = 'bosco.pending_sale_v2';
     let carrito = [];
     let prodTemp = {}; // Producto siendo editado en el modal
     let tipoPedido = 'SERVIR';
@@ -316,6 +317,9 @@
     let dictadoInputId = null;
     let dictadoSoloDigitos = false;
     let dictadoTextoBase = '';
+    let currentClientTransactionId = null;
+    let currentCartFingerprint = '';
+    let currentCartCreatedAt = null;
 
     // --- LÓGICA FILTROS ---
     function filtrarProductos(catId) {
@@ -385,6 +389,87 @@
         btnCobrar.classList.toggle('opacity-40', !habilitado);
         btnCobrar.classList.toggle('cursor-not-allowed', !habilitado);
         btnCobrar.classList.toggle('hover:bg-bosco-orange', !habilitado);
+    }
+
+    function buildCartFingerprint() {
+        return JSON.stringify(
+            carrito.map(item => ({
+                id: item.id,
+                cantidad: item.cantidad,
+                nombre: item.nombre || '',
+                nota: item.nota || ''
+            }))
+        );
+    }
+
+    function loadPendingSaleState() {
+        try {
+            const raw = localStorage.getItem(PENDING_SALE_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            currentClientTransactionId = parsed.client_transaction_id || null;
+            currentCartFingerprint = parsed.cart_fingerprint || '';
+            currentCartCreatedAt = parsed.cart_created_at || null;
+        } catch (_error) {
+            clearPendingSaleState();
+        }
+    }
+
+    function persistPendingSaleState() {
+        if (!currentClientTransactionId) return;
+        localStorage.setItem(PENDING_SALE_STORAGE_KEY, JSON.stringify({
+            client_transaction_id: currentClientTransactionId,
+            cart_fingerprint: currentCartFingerprint,
+            cart_created_at: currentCartCreatedAt
+        }));
+    }
+
+    function clearPendingSaleState() {
+        currentClientTransactionId = null;
+        currentCartFingerprint = '';
+        currentCartCreatedAt = null;
+        localStorage.removeItem(PENDING_SALE_STORAGE_KEY);
+    }
+
+    function ensurePendingSaleState() {
+        const fingerprint = buildCartFingerprint();
+        if (currentClientTransactionId && currentCartFingerprint === fingerprint) {
+            return;
+        }
+        currentClientTransactionId = (window.crypto && window.crypto.randomUUID)
+            ? window.crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        currentCartFingerprint = fingerprint;
+        currentCartCreatedAt = new Date().toISOString();
+        persistPendingSaleState();
+    }
+
+    function invalidatePendingSaleStateIfCartChanged() {
+        if (!currentClientTransactionId) return;
+        const fingerprint = buildCartFingerprint();
+        if (fingerprint !== currentCartFingerprint) {
+            clearPendingSaleState();
+        }
+    }
+
+    function syncPendingSaleState() {
+        loadPendingSaleState();
+        if (!currentClientTransactionId) return;
+
+        const params = new URLSearchParams({ client_transaction_id: currentClientTransactionId });
+        fetch(`/api/transaccion-pendiente/?${params.toString()}`, {
+            headers: getHeaders()
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'ok' && data.ticket_id) {
+                clearPendingSaleState();
+                alert(`Se recuperó la venta #${data.ticket_id} pendiente.`);
+            } else if (data.status === 'not_found') {
+                clearPendingSaleState();
+            }
+        })
+        .catch(() => {});
     }
 
     // --- LÓGICA MODAL OPCIONES ---
@@ -479,6 +564,7 @@
             });
         }
 
+        invalidatePendingSaleStateIfCartChanged();
         renderizar();
         cerrarModalOpciones();
     }
@@ -545,6 +631,7 @@
 
     function eliminar(idx) {
         carrito.splice(idx, 1);
+        invalidatePendingSaleStateIfCartChanged();
         renderizar();
     }
 
@@ -557,6 +644,7 @@
             // Si baja a 0, preguntar o eliminar directo? Mejor eliminar
             carrito.splice(idx, 1);
         }
+        invalidatePendingSaleStateIfCartChanged();
         renderizar();
     }
 
@@ -1126,6 +1214,7 @@
 
     function finalizarVenta() {
         if (!pagoData) return;
+        ensurePendingSaleState();
 
         const data = {
             total: pagoData.total,
@@ -1139,7 +1228,9 @@
             cliente_cedula: consumidorFinal ? '' : clienteCedulaActual,
             consumidor_final: consumidorFinal,
             tipo_pedido: tipoPedido,
-            monto_recibido: pagoData.monto_recibido
+            monto_recibido: pagoData.monto_recibido,
+            client_transaction_id: currentClientTransactionId,
+            cart_created_at: currentCartCreatedAt
         };
 
         fetch('/registrar_venta/', {
@@ -1150,6 +1241,7 @@
         .then(response => response.json())
         .then(data => {
             if(data.status === 'ok') {
+                clearPendingSaleState();
                 const wPrint = window.open('/imprimir/venta/' + data.ticket_id + '/', '_blank', 'width=350,height=600');
                 if(wPrint) {
                     wPrint.addEventListener('load', function() {
@@ -1162,6 +1254,7 @@
                 pagoData = null;
                 limpiarCliente();
             } else {
+                clearPendingSaleState();
                 alert('Error: ' + data.mensaje);
             }
         })
@@ -1180,6 +1273,7 @@
 
     // ══════════════ BADGE PEDIDOS WEB ══════════════
     renderizar();
+    syncPendingSaleState();
 
     function checkPedidosWeb() {
         fetch('/api/pedidos-web/')

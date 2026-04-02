@@ -23,7 +23,7 @@ def build_sale_context(venta: Venta) -> dict:
 
 
 def build_cash_closing_context(caja) -> dict:
-    ventas = Venta.objects.filter(turno=caja)
+    ventas = Venta.objects.filter(turno=caja, payment_status=Venta.PaymentStatus.PAID).exclude(estado='CANCELADO')
 
     total_efectivo = ventas.filter(metodo_pago='EFECTIVO').aggregate(t=Sum('total'))['t'] or 0
     total_transferencia = ventas.filter(metodo_pago='TRANSFERENCIA').aggregate(t=Sum('total'))['t'] or 0
@@ -31,10 +31,10 @@ def build_cash_closing_context(caja) -> dict:
 
     total_ventas = total_efectivo + total_transferencia + total_tarjeta
     total_ingresos_caja = (
-        MovimientoCaja.objects.filter(turno=caja, tipo='INGRESO').aggregate(t=Sum('monto'))['t'] or 0
+        MovimientoCaja.objects.filter(turno=caja, tipo='INGRESO').exclude(concepto='VENTA').aggregate(t=Sum('monto'))['t'] or 0
     )
     total_egresos_caja = (
-        MovimientoCaja.objects.filter(turno=caja, tipo='EGRESO').aggregate(t=Sum('monto'))['t'] or 0
+        MovimientoCaja.objects.filter(turno=caja, tipo='EGRESO').exclude(concepto='VENTA').aggregate(t=Sum('monto'))['t'] or 0
     )
     esperado = caja.base_inicial + total_efectivo + total_ingresos_caja - total_egresos_caja
 

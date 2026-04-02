@@ -6,6 +6,7 @@ from django.contrib.auth.models import Group, User
 from django.db import transaction
 from django.utils import timezone
 
+from pos.application.context import ensure_staff_profile_for_user
 from pos.models import Asistencia, Empleado
 
 
@@ -48,6 +49,8 @@ def save_employee(data: dict) -> Empleado:
     empleado.save()
 
     sync_employee_user(empleado)
+    if empleado.usuario:
+        ensure_staff_profile_for_user(empleado.usuario)
     return empleado
 
 

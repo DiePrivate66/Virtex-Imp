@@ -11,11 +11,17 @@ from .whatsapp import (
     validate_meta_whatsapp_request,
     validate_inbound_whatsapp_request,
 )
-from .telegram import notify_customer_reported_received, notify_delivery_group, notify_order_claimed
+from .telegram import (
+    notify_admin_exception_alert,
+    notify_customer_reported_received,
+    notify_delivery_group,
+    notify_order_claimed,
+)
 
 __all__ = [
     'ResendEmailError',
     'build_whatsapp_twiml_response',
+    'notify_admin_exception_alert',
     'notify_customer_reported_received',
     'extract_inbound_whatsapp_request',
     'notify_delivery_group',

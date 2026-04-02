@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from pos.models import CajaTurno, MovimientoCaja
+from django.db import transaction
+
+from pos.application.cash_register.queries import get_locked_open_cash_register_for_user
+from pos.models import MovimientoCaja
 
 
 class CashMovementError(Exception):
@@ -21,9 +24,12 @@ class CashMovementResult:
 
 
 def get_open_turn_for_user(user):
+    from pos.models import CajaTurno
+
     return CajaTurno.objects.filter(usuario=user, fecha_cierre__isnull=True).first()
 
 
+@transaction.atomic
 def register_cash_movement(
     *,
     user,
@@ -32,7 +38,7 @@ def register_cash_movement(
     descripcion: str = "",
     monto_raw=0,
 ) -> CashMovementResult:
-    turno = get_open_turn_for_user(user)
+    turno = get_locked_open_cash_register_for_user(user)
     if not turno:
         raise CashMovementError("No hay turno abierto")
 
