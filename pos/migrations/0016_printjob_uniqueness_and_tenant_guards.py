@@ -1,4 +1,5 @@
 from django.db import migrations, models
+from django.db.models import Count
 
 
 TENANT_GUARDED_TABLES = (
@@ -35,6 +36,23 @@ def _drop_sqlite_trigger_sql(*, alias: str, action: str) -> str:
     return f'DROP TRIGGER IF EXISTS {trigger_name};'
 
 
+def dedupe_printjob_sale_type(apps, schema_editor):
+    PrintJob = apps.get_model('pos', 'PrintJob')
+    duplicate_pairs = (
+        PrintJob.objects.values('venta_id', 'tipo')
+        .annotate(row_count=Count('id'))
+        .filter(row_count__gt=1)
+    )
+    for pair in duplicate_pairs.iterator():
+        duplicate_ids = list(
+            PrintJob.objects.filter(venta_id=pair['venta_id'], tipo=pair['tipo'])
+            .order_by('-updated_at', '-id')
+            .values_list('id', flat=True)
+        )
+        if len(duplicate_ids) > 1:
+            PrintJob.objects.filter(id__in=duplicate_ids[1:]).delete()
+
+
 def create_tenant_guard_triggers(apps, schema_editor):
     vendor = schema_editor.connection.vendor
     if vendor == 'sqlite':
@@ -65,9 +83,9 @@ def create_tenant_guard_triggers(apps, schema_editor):
             """
         )
         for alias, table in TENANT_GUARDED_TABLES:
+            schema_editor.execute(f'DROP TRIGGER IF EXISTS pos_tenant_guard_{alias} ON {table};')
             schema_editor.execute(
                 f"""
-                DROP TRIGGER IF EXISTS pos_tenant_guard_{alias} ON {table};
                 CREATE TRIGGER pos_tenant_guard_{alias}
                 BEFORE INSERT OR UPDATE ON {table}
                 FOR EACH ROW
@@ -97,6 +115,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(dedupe_printjob_sale_type, migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name='printjob',
             constraint=models.UniqueConstraint(fields=('venta', 'tipo'), name='uq_printjob_sale_type'),
