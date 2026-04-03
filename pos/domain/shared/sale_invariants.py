@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
@@ -105,4 +107,51 @@ def build_sale_actor_snapshot_fields(
         'supervisor_display_name_snapshot': supervisor_display_name_snapshot or (
             supervisor.display_name if supervisor else ''
         ),
+    }
+
+
+def build_sale_detail_fields(
+    *,
+    product_name: str,
+    quantity: int,
+    unit_price,
+    display_name: str | None = None,
+    user_note: str = '',
+    gross_unit_price=None,
+    discount_amount=None,
+    tax_amount=None,
+    pricing_rule_snapshot=None,
+    tax_rule_snapshot=None,
+    discount_rule_snapshot=None,
+) -> dict:
+    if quantity <= 0:
+        raise ValidationError('La cantidad del detalle debe ser mayor a cero.')
+
+    resolved_unit_price = Decimal(str(unit_price)).quantize(Decimal('0.01'))
+    resolved_gross_unit_price = Decimal(str(gross_unit_price if gross_unit_price is not None else resolved_unit_price)).quantize(
+        Decimal('0.01')
+    )
+    resolved_discount_amount = Decimal(str(discount_amount or 0)).quantize(Decimal('0.01'))
+    resolved_tax_amount = Decimal(str(tax_amount or 0)).quantize(Decimal('0.01'))
+    subtotal = ((resolved_gross_unit_price * quantity) - resolved_discount_amount + resolved_tax_amount).quantize(
+        Decimal('0.01')
+    )
+
+    final_note = ''
+    if display_name and display_name != product_name:
+        final_note = display_name.replace(product_name, '').strip()
+    if user_note:
+        final_note = f'{final_note} | {user_note}' if final_note else user_note
+
+    return {
+        'cantidad': quantity,
+        'precio_unitario': resolved_unit_price,
+        'precio_bruto_unitario': resolved_gross_unit_price,
+        'descuento_monto': resolved_discount_amount,
+        'impuesto_monto': resolved_tax_amount,
+        'subtotal_neto': subtotal,
+        'pricing_rule_snapshot': pricing_rule_snapshot or {},
+        'tax_rule_snapshot': tax_rule_snapshot or {},
+        'discount_rule_snapshot': discount_rule_snapshot or {},
+        'nota': final_note.strip(),
     }

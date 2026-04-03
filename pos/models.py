@@ -608,14 +608,6 @@ class DetalleVenta(models.Model):
     discount_rule_snapshot = models.JSONField(default=dict, blank=True)
     nota = models.CharField(max_length=200, blank=True)
 
-    def save(self, *args, **kwargs):
-        if not self.precio_bruto_unitario:
-            self.precio_bruto_unitario = self.precio_unitario
-        if not self.subtotal_neto:
-            bruto = self.precio_bruto_unitario * self.cantidad
-            self.subtotal_neto = bruto - self.descuento_monto + self.impuesto_monto
-        super().save(*args, **kwargs)
-
     @property
     def subtotal(self):
         return self.subtotal_neto or (self.cantidad * self.precio_unitario)

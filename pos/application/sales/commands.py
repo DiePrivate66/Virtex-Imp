@@ -27,6 +27,7 @@ from pos.application.context import ensure_staff_profile_for_user, resolve_locat
 from pos.application.notifications import ResendEmailError, send_resend_email
 from pos.domain.shared.sale_invariants import (
     build_sale_actor_snapshot_fields,
+    build_sale_detail_fields,
     build_sale_payment_fields,
     build_sale_scope_fields,
 )
@@ -682,16 +683,18 @@ def _reserve_sale(
             DetalleVenta.objects.create(
                 venta=venta,
                 producto=item['producto'],
-                cantidad=item['cantidad'],
-                precio_unitario=item['precio_unitario'],
-                precio_bruto_unitario=item['precio_bruto_unitario'],
-                descuento_monto=item['descuento_monto'],
-                impuesto_monto=item['impuesto_monto'],
-                subtotal_neto=item['subtotal_neto'],
-                pricing_rule_snapshot=item['pricing_rule_snapshot'],
-                tax_rule_snapshot=item['tax_rule_snapshot'],
-                discount_rule_snapshot=item['discount_rule_snapshot'],
-                nota=item['nota'],
+                **build_sale_detail_fields(
+                    product_name=item['producto'].nombre,
+                    quantity=item['cantidad'],
+                    unit_price=item['precio_unitario'],
+                    gross_unit_price=item['precio_bruto_unitario'],
+                    discount_amount=item['descuento_monto'],
+                    tax_amount=item['impuesto_monto'],
+                    pricing_rule_snapshot=item['pricing_rule_snapshot'],
+                    tax_rule_snapshot=item['tax_rule_snapshot'],
+                    discount_rule_snapshot=item['discount_rule_snapshot'],
+                    user_note=item['nota'],
+                ),
             )
 
         _reserve_inventory(location=location, venta=venta, items=validated_items, registrado_por=user)
@@ -967,16 +970,17 @@ def _validate_and_price_cart(cart: list[dict], *, organization) -> tuple[list[di
         validated_items.append(
             {
                 'producto': producto,
-                'cantidad': cantidad,
-                'precio_unitario': precio_unitario,
-                'precio_bruto_unitario': precio_unitario,
-                'descuento_monto': Decimal('0.00'),
-                'impuesto_monto': Decimal('0.00'),
-                'subtotal_neto': subtotal,
-                'pricing_rule_snapshot': {'source': 'product.precio', 'product_price': f'{precio_unitario:.2f}'},
-                'tax_rule_snapshot': {},
-                'discount_rule_snapshot': {},
-                'nota': _build_sale_note(producto.nombre, item.get('nombre', producto.nombre), item.get('nota', '')),
+                **build_sale_detail_fields(
+                    product_name=producto.nombre,
+                    quantity=cantidad,
+                    unit_price=precio_unitario,
+                    gross_unit_price=precio_unitario,
+                    pricing_rule_snapshot={'source': 'product.precio', 'product_price': f'{precio_unitario:.2f}'},
+                    tax_rule_snapshot={},
+                    discount_rule_snapshot={},
+                    display_name=item.get('nombre', producto.nombre),
+                    user_note=item.get('nota', ''),
+                ),
             }
         )
 
@@ -1237,15 +1241,6 @@ def _build_request_fingerprint(*, location_id, cart, cart_created_at, payment_me
 
 def _parse_decimal(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal('0.01'))
-
-
-def _build_sale_note(product_name: str, display_name: str, user_note: str) -> str:
-    note = ''
-    if display_name != product_name:
-        note = display_name.replace(product_name, '').strip()
-    if user_note:
-        note = f'{note} | {user_note}' if note else user_note
-    return note.strip()
 
 
 def send_sale_receipt_email(venta: Venta, recipient_email: str) -> None:

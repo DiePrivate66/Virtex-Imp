@@ -234,6 +234,13 @@ class WebOrderCreationInvariantsTests(TestCase):
         self.assertEqual(venta.payment_status, Venta.PaymentStatus.PAID)
         self.assertEqual(venta.estado_pago, 'APROBADO')
 
+        detalle = venta.detalles.get()
+        self.assertEqual(detalle.precio_bruto_unitario, Decimal('8.50'))
+        self.assertEqual(detalle.descuento_monto, Decimal('0.00'))
+        self.assertEqual(detalle.impuesto_monto, Decimal('0.00'))
+        self.assertEqual(detalle.subtotal_neto, Decimal('17.00'))
+        self.assertEqual(detalle.pricing_rule_snapshot['source'], 'product.precio')
+
     def test_create_web_order_does_not_reuse_customer_from_other_organization(self):
         location = Location.get_or_create_default()
         categoria = Categoria.objects.create(nombre='Pizzas', organization=location.organization)

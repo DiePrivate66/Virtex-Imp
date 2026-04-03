@@ -9,7 +9,11 @@ from django.utils import timezone
 
 from pos.application.context import get_default_catalog_organization
 from pos.domain.shared import normalize_phone_to_e164
-from pos.domain.shared.sale_invariants import build_sale_payment_fields, build_sale_scope_fields
+from pos.domain.shared.sale_invariants import (
+    build_sale_detail_fields,
+    build_sale_payment_fields,
+    build_sale_scope_fields,
+)
 from pos.domain.web_orders import (
     QUOTE_EDITABLE_STATUSES,
     STATUS_CANCELLED,
@@ -127,10 +131,17 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
         validated_items.append(
             {
                 'producto': product,
-                'cantidad': quantity,
-                'precio_unitario': product.precio,
-                'nombre_display': item.get('nombre', product.nombre),
-                'nota': item.get('nota', ''),
+                **build_sale_detail_fields(
+                    product_name=product.nombre,
+                    quantity=quantity,
+                    unit_price=product.precio,
+                    gross_unit_price=product.precio,
+                    pricing_rule_snapshot={'source': 'product.precio', 'product_price': f'{product.precio:.2f}'},
+                    tax_rule_snapshot={},
+                    discount_rule_snapshot={},
+                    display_name=item.get('nombre', product.nombre),
+                    user_note=item.get('nota', ''),
+                ),
             }
         )
 
@@ -188,22 +199,19 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
         )
 
         for item_data in validated_items:
-            product = item_data['producto']
-            display_name = item_data['nombre_display']
-            user_note = item_data['nota']
-
-            final_note = ''
-            if display_name != product.nombre:
-                final_note = display_name.replace(product.nombre, '').strip()
-            if user_note:
-                final_note = f'{final_note} | {user_note}' if final_note else user_note
-
             DetalleVenta.objects.create(
                 venta=sale,
-                producto=product,
+                producto=item_data['producto'],
                 cantidad=item_data['cantidad'],
                 precio_unitario=item_data['precio_unitario'],
-                nota=final_note.strip(),
+                precio_bruto_unitario=item_data['precio_bruto_unitario'],
+                descuento_monto=item_data['descuento_monto'],
+                impuesto_monto=item_data['impuesto_monto'],
+                subtotal_neto=item_data['subtotal_neto'],
+                pricing_rule_snapshot=item_data['pricing_rule_snapshot'],
+                tax_rule_snapshot=item_data['tax_rule_snapshot'],
+                discount_rule_snapshot=item_data['discount_rule_snapshot'],
+                nota=item_data['nota'],
             )
 
         _link_whatsapp_conversation(sale)

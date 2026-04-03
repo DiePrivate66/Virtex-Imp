@@ -186,6 +186,16 @@ class BoscoV2SalesTests(TestCase):
         self.assertIsNotNone(result.venta.operator)
         self.assertEqual(result.venta.operator_display_name_snapshot, result.venta.operator.display_name)
 
+    def test_sale_registration_persists_explicit_detail_pricing_fields(self):
+        result = register_sale(self.user, self._payload(client_transaction_id='sale-v2-detail-pricing'))
+        detail = result.venta.detalles.get()
+
+        self.assertEqual(detail.precio_bruto_unitario, Decimal('3.50'))
+        self.assertEqual(detail.descuento_monto, Decimal('0.00'))
+        self.assertEqual(detail.impuesto_monto, Decimal('0.00'))
+        self.assertEqual(detail.subtotal_neto, Decimal('7.00'))
+        self.assertEqual(detail.pricing_rule_snapshot['source'], 'product.precio')
+
     def test_pos_home_context_only_exposes_catalog_for_operator_organization(self):
         other_org = Organization.objects.create(slug='org-catalog-other', name='Org Catalog Other')
         other_category = Categoria.objects.create(nombre='Comidas', organization=other_org)

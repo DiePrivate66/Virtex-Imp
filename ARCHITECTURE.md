@@ -232,6 +232,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - `cash_register` y `analytics` ya incorporan flujo operativo para reembolsos pendientes, ajustes contables y alertas administrativas
 - el cierre de caja ya se calcula y persiste desde `application.cash_register`; `CajaTurno` ya no concentra el cuadre dentro del modelo
 - las ventas nuevas POS y Web Orders ya construyen tenant, dia operativo, snapshots y compatibilidad de pago desde capa de aplicacion; `Venta.save()` queda reducido a validacion y compatibilidad minima
+- `DetalleVenta` ya no calcula precios ni subtotales en `save()`; POS y Web Orders construyen el payload completo del detalle desde capa de aplicacion
 - `Categoria`, `Producto` y `Cliente` ya quedan scopeados por `organization`; catalogo, inventario y lookup de clientes POS/PWA ya no se leen como universo global
 - los movimientos de caja e inventario ya construyen `organization` / `location` desde capa de aplicacion; `MovimientoCaja.save()` y `MovimientoInventario.save()` quedan reducidos a validacion de consistencia local
 - las tareas async viven en `pos/infrastructure/tasks`
