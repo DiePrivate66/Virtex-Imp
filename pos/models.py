@@ -411,21 +411,6 @@ class CajaTurno(models.Model):
         self._apply_tenant_defaults()
         super().save(*args, **kwargs)
 
-    def cerrar_caja(self, monto_efectivo_real, conteo_json):
-        from django.db.models import Sum
-
-        self.fecha_cierre = timezone.now()
-        self.monto_final_declarado = monto_efectivo_real
-        self.conteo_billetes = conteo_json
-
-        movimientos = self.movimientos.exclude(concepto='VENTA')
-        total_egresos = movimientos.filter(tipo='EGRESO').aggregate(t=Sum('monto'))['t'] or 0
-        total_ingresos = movimientos.filter(tipo='INGRESO').aggregate(t=Sum('monto'))['t'] or 0
-
-        esperado = self.base_inicial + self.total_efectivo_sistema + total_ingresos - total_egresos
-        self.diferencia = monto_efectivo_real - esperado
-        self.save()
-
 
 # --- PEDIDOS (UNIFICADO WEB + POS) ---
 class Venta(models.Model):

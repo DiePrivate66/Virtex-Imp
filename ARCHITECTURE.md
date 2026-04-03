@@ -230,6 +230,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - el backend ya expone activacion runtime (`LedgerRegistryActivation`), manifest generation y middleware de fencing por hash para mutaciones POS
 - el POS web ya opera con idempotencia por `client_transaction_id`, outbox de eventos y reconciliacion manual de excepciones de pago
 - `cash_register` y `analytics` ya incorporan flujo operativo para reembolsos pendientes, ajustes contables y alertas administrativas
+- el cierre de caja ya se calcula y persiste desde `application.cash_register`; `CajaTurno` ya no concentra el cuadre dentro del modelo
 - `Categoria` y `Producto` ya quedan scopeados por `organization`; el catalogo POS/PWA y el seed de menu ya no se leen como universo global
 - las tareas async viven en `pos/infrastructure/tasks`
 - `delivery_tokens.py` y `whatsapp_utils.py` ya fueron retirados; el uso canonico vive en `pos/infrastructure/delivery`, `domain/shared` y `domain/web_orders`

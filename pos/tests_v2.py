@@ -579,6 +579,45 @@ class BoscoV2SalesTests(TestCase):
             ).exists()
         )
 
+    def test_close_cash_register_recalculates_totals_without_prior_ui_snapshot(self):
+        register_sale(self.user, self._payload(client_transaction_id='sale-v2-close-recalc'))
+        MovimientoCaja.objects.create(
+            turno=self.turno,
+            organization=self.turno.organization,
+            location=self.turno.location,
+            tipo='INGRESO',
+            concepto='PROPINA',
+            descripcion='Ingreso extra',
+            monto=Decimal('3.00'),
+            registrado_por=self.user,
+        )
+        MovimientoCaja.objects.create(
+            turno=self.turno,
+            organization=self.turno.organization,
+            location=self.turno.location,
+            tipo='EGRESO',
+            concepto='ALMUERZO',
+            descripcion='Consumo interno',
+            monto=Decimal('1.25'),
+            registrado_por=self.user,
+        )
+
+        caja = close_cash_register(self.user, Decimal('30.00'), {'10': 3})
+        caja.refresh_from_db()
+
+        self.assertIsNotNone(caja.fecha_cierre)
+        self.assertEqual(caja.total_efectivo_sistema, Decimal('7.00'))
+        self.assertEqual(caja.total_transferencia_sistema, Decimal('0.00'))
+        self.assertEqual(caja.total_otros_sistema, Decimal('0.00'))
+        self.assertEqual(caja.diferencia, Decimal('1.25'))
+
+    def test_close_cash_register_rejects_invalid_cash_count_payload(self):
+        with self.assertRaises(CashRegisterError) as exc:
+            close_cash_register(self.user, Decimal('20.00'), ['10', 2])
+
+        self.assertEqual(exc.exception.status_code, 400)
+        self.assertIn('conteo', exc.exception.message.lower())
+
     def test_resolving_refund_adjustment_unblocks_cash_close(self):
         location = Location.get_or_create_default()
         self.turno.organization = location.organization

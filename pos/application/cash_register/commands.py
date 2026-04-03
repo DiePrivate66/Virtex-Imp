@@ -10,7 +10,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from pos.application.context import ensure_staff_profile_for_user
-from pos.application.cash_register.queries import get_open_refund_adjustments_for_cash_register
+from pos.application.cash_register.queries import calculate_cash_turn_metrics, get_open_refund_adjustments_for_cash_register
 from pos.models import (
     AuditLog,
     Asistencia,
@@ -40,6 +40,43 @@ class PosPinVerificationResult:
     staff_profile: StaffProfile | None
     rol: str
     empleado_nombre: str
+
+
+def _finalize_cash_register_close(*, caja: CajaTurno, staff_profile: StaffProfile, total_declarado, conteo) -> CajaTurno:
+    try:
+        monto_efectivo_real = Decimal(str(total_declarado or 0)).quantize(Decimal('0.01'))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise CashRegisterError('Total declarado invalido') from exc
+
+    if monto_efectivo_real < 0:
+        raise CashRegisterError('El total declarado no puede ser negativo')
+    if not isinstance(conteo, dict):
+        raise CashRegisterError('El conteo de billetes debe ser un objeto JSON')
+
+    metrics = calculate_cash_turn_metrics(caja)
+    esperado = caja.base_inicial + metrics.total_efectivo + metrics.total_ingresos - metrics.total_egresos
+
+    caja.operator_closed_by = staff_profile
+    caja.fecha_cierre = timezone.now()
+    caja.monto_final_declarado = monto_efectivo_real
+    caja.conteo_billetes = conteo
+    caja.total_efectivo_sistema = metrics.total_efectivo
+    caja.total_transferencia_sistema = metrics.total_transferencia
+    caja.total_otros_sistema = metrics.total_tarjeta
+    caja.diferencia = monto_efectivo_real - esperado
+    caja.save(
+        update_fields=[
+            'operator_closed_by',
+            'fecha_cierre',
+            'monto_final_declarado',
+            'conteo_billetes',
+            'total_efectivo_sistema',
+            'total_transferencia_sistema',
+            'total_otros_sistema',
+            'diferencia',
+        ]
+    )
+    return caja
 
 
 def verify_pos_pin(
@@ -261,9 +298,12 @@ def close_cash_register(
             asistencia_abierta.registrar_salida()
 
     staff_profile = ensure_staff_profile_for_user(user)
-    caja.operator_closed_by = staff_profile
-    caja.cerrar_caja(total_declarado, conteo)
-    return caja
+    return _finalize_cash_register_close(
+        caja=caja,
+        staff_profile=staff_profile,
+        total_declarado=total_declarado,
+        conteo=conteo,
+    )
 
 
 def upsert_customer(data: dict) -> Cliente:
