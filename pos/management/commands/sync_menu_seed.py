@@ -5,7 +5,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from pos.models import Categoria, Producto
+from pos.models import Categoria, Organization, Producto
 
 
 class Command(BaseCommand):
@@ -22,6 +22,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Elimina productos y categorias que no existan en el seed.",
         )
+        parser.add_argument(
+            "--organization-slug",
+            default="legacy-default",
+            help="Slug de la organizacion cuyo catalogo se desea sincronizar.",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -36,6 +41,14 @@ class Command(BaseCommand):
 
         if not isinstance(payload, list):
             raise CommandError("El seed debe ser una lista de categorias.")
+
+        organization_slug = (options["organization_slug"] or "").strip()
+        if organization_slug == "legacy-default":
+            organization = Organization.get_or_create_default()
+        else:
+            organization = Organization.objects.filter(slug=organization_slug, active=True).first()
+            if not organization:
+                raise CommandError(f"No existe una organizacion activa con slug {organization_slug}.")
 
         seed_category_names = set()
         seed_product_names = set()
@@ -55,6 +68,7 @@ class Command(BaseCommand):
                 raise CommandError(f"La categoria {category_name} tiene productos invalidos.")
 
             categoria, created = Categoria.objects.get_or_create(
+                organization=organization,
                 nombre=category_name,
                 defaults={"icono": icono},
             )
@@ -87,8 +101,10 @@ class Command(BaseCommand):
                 seed_product_names.add(product_name)
 
                 producto, created = Producto.objects.get_or_create(
+                    organization=organization,
                     nombre=product_name,
                     defaults={
+                        "organization": organization,
                         "categoria": categoria,
                         "precio": price,
                         "activo": active,
@@ -96,6 +112,9 @@ class Command(BaseCommand):
                 )
 
                 changed_fields = []
+                if producto.organization_id != organization.id:
+                    producto.organization = organization
+                    changed_fields.append("organization")
                 if producto.categoria_id != categoria.id:
                     producto.categoria = categoria
                     changed_fields.append("categoria")
@@ -115,11 +134,11 @@ class Command(BaseCommand):
         pruned_products = 0
         pruned_categories = 0
         if options["prune"]:
-            product_qs = Producto.objects.exclude(nombre__in=seed_product_names)
+            product_qs = Producto.objects.filter(organization=organization).exclude(nombre__in=seed_product_names)
             pruned_products = product_qs.count()
             product_qs.delete()
 
-            category_qs = Categoria.objects.exclude(nombre__in=seed_category_names)
+            category_qs = Categoria.objects.filter(organization=organization).exclude(nombre__in=seed_category_names)
             pruned_categories = category_qs.count()
             category_qs.delete()
 

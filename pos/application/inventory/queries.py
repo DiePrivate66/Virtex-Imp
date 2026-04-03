@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from django.db.models import F
 
+from pos.application.context import resolve_catalog_organization_for_user
 from pos.models import Inventario, MovimientoInventario, Producto
 
 from .commands import ensure_inventory_for_product
 
 
-def get_inventory_panel_context() -> dict:
-    productos_sin_inv = Producto.objects.filter(inventario__isnull=True)
+def get_inventory_panel_context(user) -> dict:
+    organization = resolve_catalog_organization_for_user(user)
+    productos_sin_inv = Producto.objects.filter(organization=organization, inventario__isnull=True)
     for producto in productos_sin_inv:
         ensure_inventory_for_product(producto)
 
-    inventarios = Inventario.objects.select_related('producto__categoria').all().order_by(
+    inventarios = Inventario.objects.select_related('producto__categoria').filter(
+        producto__organization=organization
+    ).order_by(
         'producto__categoria__nombre',
         'producto__nombre',
     )
@@ -25,8 +29,9 @@ def get_inventory_panel_context() -> dict:
     }
 
 
-def get_inventory_history_context(producto_id):
-    producto = Producto.objects.get(id=producto_id)
+def get_inventory_history_context(producto_id, *, user):
+    organization = resolve_catalog_organization_for_user(user)
+    producto = Producto.objects.get(id=producto_id, organization=organization)
     inventario = ensure_inventory_for_product(producto)
     movimientos = MovimientoInventario.objects.filter(producto=producto)[:100]
     return {
@@ -36,8 +41,11 @@ def get_inventory_history_context(producto_id):
     }
 
 
-def get_inventory_report_context(*, ahora, usuario) -> dict:
-    inventarios = Inventario.objects.select_related('producto__categoria').all().order_by(
+def get_inventory_report_context(*, ahora, usuario, user):
+    organization = resolve_catalog_organization_for_user(user)
+    inventarios = Inventario.objects.select_related('producto__categoria').filter(
+        producto__organization=organization
+    ).order_by(
         'producto__categoria__nombre',
         'producto__nombre',
     )

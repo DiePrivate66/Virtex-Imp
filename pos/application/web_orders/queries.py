@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.utils import timezone
 
+from pos.application.context import get_default_catalog_organization
 from pos.domain.web_orders import (
     STATUS_CANCELLED,
     STATUS_PENDING_QUOTE,
@@ -27,10 +28,11 @@ def store_is_open() -> bool:
 def get_menu_page_context() -> dict:
     now = timezone.localtime()
     weekday = now.weekday()
+    organization = get_default_catalog_organization()
 
     return {
-        'categorias': Categoria.objects.all(),
-        'productos': Producto.objects.filter(activo=True).select_related('categoria'),
+        'categorias': Categoria.objects.filter(organization=organization),
+        'productos': Producto.objects.filter(organization=organization, activo=True).select_related('categoria'),
         'local_abierto': store_is_open(),
         'horario_hoy': '4:00 PM - 9:00 PM' if weekday == 6 else '4:00 PM - 10:00 PM',
         'dia_hoy': ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'][weekday],
@@ -38,9 +40,10 @@ def get_menu_page_context() -> dict:
 
 
 def build_product_catalog_payload() -> dict:
+    organization = get_default_catalog_organization()
     categories_payload = []
-    for category in Categoria.objects.all():
-        products = Producto.objects.filter(categoria=category, activo=True)
+    for category in Categoria.objects.filter(organization=organization):
+        products = Producto.objects.filter(organization=organization, categoria=category, activo=True)
         categories_payload.append(
             {
                 'id': category.id,

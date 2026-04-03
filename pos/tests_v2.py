@@ -12,6 +12,8 @@ from django.utils import timezone
 
 from pos.application.cash_register import close_cash_register, get_cash_closing_context
 from pos.application.cash_register.commands import CashRegisterError, verify_pos_pin
+from pos.application.inventory import get_inventory_panel_context
+from pos.application.sales import get_pos_home_context
 from pos.application.sales.commands import (
     PosSaleError,
     _mark_sale_paid,
@@ -172,6 +174,53 @@ class BoscoV2SalesTests(TestCase):
 
         self.assertEqual(result.venta.operating_day, self.turno.operating_day)
 
+    def test_pos_home_context_only_exposes_catalog_for_operator_organization(self):
+        other_org = Organization.objects.create(slug='org-catalog-other', name='Org Catalog Other')
+        other_category = Categoria.objects.create(nombre='Comidas', organization=other_org)
+        Producto.objects.create(
+            categoria=other_category,
+            organization=other_org,
+            nombre='Filete',
+            precio='9.99',
+            activo=True,
+        )
+
+        context = get_pos_home_context(self.user)
+
+        self.assertQuerySetEqual(
+            context['categorias'].order_by('id'),
+            Categoria.objects.filter(organization=self.turno.organization).order_by('id'),
+            transform=lambda value: value,
+        )
+        self.assertQuerySetEqual(
+            context['productos'].order_by('id'),
+            Producto.objects.filter(organization=self.turno.organization, activo=True).order_by('id'),
+            transform=lambda value: value,
+        )
+
+    def test_register_sale_rejects_product_from_other_organization(self):
+        other_org = Organization.objects.create(slug='org-sale-foreign', name='Org Sale Foreign')
+        other_category = Categoria.objects.create(nombre='Especiales', organization=other_org)
+        foreign_product = Producto.objects.create(
+            categoria=other_category,
+            organization=other_org,
+            nombre='Langosta',
+            precio='20.00',
+            activo=True,
+        )
+
+        with self.assertRaises(PosSaleError) as exc:
+            register_sale(
+                self.user,
+                self._payload(
+                    client_transaction_id='sale-v2-foreign-product',
+                    carrito=[{'id': foreign_product.id, 'cantidad': 1, 'nombre': 'Langosta', 'nota': ''}],
+                ),
+            )
+
+        self.assertEqual(exc.exception.status_code, 400)
+        self.assertIn('producto no encontrado', exc.exception.message.lower())
+
     def test_reaper_restores_inventory_for_stale_pending_sales(self):
         with patch('pos.application.sales.commands._process_payment', side_effect=TimeoutError('gateway timeout')):
             with self.assertRaises(TimeoutError):
@@ -200,6 +249,24 @@ class BoscoV2SalesTests(TestCase):
             IdempotencyRecord.objects.get(location=venta.location, client_transaction_id=venta.client_transaction_id).status,
             IdempotencyRecord.Status.FAILED_FINAL,
         )
+
+    def test_inventory_panel_context_is_scoped_to_operator_organization(self):
+        other_org = Organization.objects.create(slug='org-inventory-other', name='Org Inventory Other')
+        other_category = Categoria.objects.create(nombre='Postres', organization=other_org)
+        other_product = Producto.objects.create(
+            categoria=other_category,
+            organization=other_org,
+            nombre='Brownie',
+            precio='4.50',
+            activo=True,
+        )
+        Inventario.objects.create(producto=other_product, stock_actual=5, stock_minimo=1)
+
+        context = get_inventory_panel_context(self.user)
+
+        inventory_product_ids = set(context['inventarios'].values_list('producto_id', flat=True))
+        self.assertIn(self.producto.id, inventory_product_ids)
+        self.assertNotIn(other_product.id, inventory_product_ids)
 
     def test_cannot_confirm_sale_after_reaper_voided_it(self):
         with patch('pos.application.sales.commands._process_payment', side_effect=TimeoutError('gateway timeout')):

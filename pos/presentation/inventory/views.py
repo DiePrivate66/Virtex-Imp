@@ -24,7 +24,7 @@ def panel_inventario(request):
     if not request.user.is_authenticated:
         return redirect('pos_login')
 
-    return render(request, 'pos/inventario.html', get_inventory_panel_context())
+    return render(request, 'pos/inventario.html', get_inventory_panel_context(request.user))
 
 
 def api_movimiento_inventario(request):
@@ -67,6 +67,7 @@ def api_actualizar_minimo(request):
             producto_id=data.get('producto_id'),
             stock_minimo=data['stock_minimo'] if 'stock_minimo' in data else None,
             unidad=data['unidad'] if 'unidad' in data else None,
+            user=request.user,
         )
         return JsonResponse({'status': 'ok', 'mensaje': 'Configuracion guardada'})
     except InventoryError as exc:
@@ -78,7 +79,7 @@ def historial_inventario(request, producto_id):
         return redirect('pos_login')
 
     get_object_or_404(Producto, id=producto_id)
-    return render(request, 'pos/historial_inventario.html', get_inventory_history_context(producto_id))
+    return render(request, 'pos/historial_inventario.html', get_inventory_history_context(producto_id, user=request.user))
 
 
 def reporte_inventario_pdf(request):
@@ -88,5 +89,6 @@ def reporte_inventario_pdf(request):
     context = get_inventory_report_context(
         ahora=timezone.localtime(),
         usuario=request.user.get_full_name() or request.user.username,
+        user=request.user,
     )
     return render(request, 'pos/print/reporte_inventario.html', context)

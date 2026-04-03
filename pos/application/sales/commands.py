@@ -85,7 +85,7 @@ def register_sale(user, data: dict) -> SaleRegistrationResult:
     if not cart:
         raise PosSaleError('El carrito esta vacio', status_code=400)
 
-    validated_items, total_venta = _validate_and_price_cart(cart)
+    validated_items, total_venta = _validate_and_price_cart(cart, organization=location.organization)
     referencia_pago = _normalize_reference(data.get('referencia_pago'))
     tarjeta_tipo = _normalize_simple_text(data.get('tarjeta_tipo'), 12)
     tarjeta_marca = _normalize_simple_text(data.get('tarjeta_marca'), 20)
@@ -924,12 +924,12 @@ def _resolve_customer(data: dict):
     return find_customer_by_identity_document(cedula_input)
 
 
-def _validate_and_price_cart(cart: list[dict]) -> tuple[list[dict], Decimal]:
+def _validate_and_price_cart(cart: list[dict], *, organization) -> tuple[list[dict], Decimal]:
     total = Decimal('0.00')
     validated_items: list[dict] = []
     for item in cart:
         try:
-            producto = Producto.objects.get(id=item['id'], activo=True)
+            producto = Producto.objects.get(id=item['id'], organization=organization, activo=True)
         except (KeyError, Producto.DoesNotExist) as exc:
             raise PosSaleError('Producto no encontrado o no disponible', status_code=400) from exc
 

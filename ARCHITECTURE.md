@@ -230,6 +230,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - el backend ya expone activacion runtime (`LedgerRegistryActivation`), manifest generation y middleware de fencing por hash para mutaciones POS
 - el POS web ya opera con idempotencia por `client_transaction_id`, outbox de eventos y reconciliacion manual de excepciones de pago
 - `cash_register` y `analytics` ya incorporan flujo operativo para reembolsos pendientes, ajustes contables y alertas administrativas
+- `Categoria` y `Producto` ya quedan scopeados por `organization`; el catalogo POS/PWA y el seed de menu ya no se leen como universo global
 - las tareas async viven en `pos/infrastructure/tasks`
 - `delivery_tokens.py` y `whatsapp_utils.py` ya fueron retirados; el uso canonico vive en `pos/infrastructure/delivery`, `domain/shared` y `domain/web_orders`
 - WhatsApp/Meta ya entra por `presentation.integrations`, `application.integrations` y `application.notifications`
@@ -298,14 +299,13 @@ Direccion de salida:
 ### 3. La multitenencia aun no es uniforme
 
 Modelos operativos como ventas, caja, outbox, print jobs e idempotencia ya cargan
-`organization` y `location`, pero catalogos como `Cliente`, `Categoria` y `Producto`
-todavia no tienen frontera tenant explicita.
+`organization` y `location`. El catalogo de menu (`Categoria`, `Producto`) ya quedo
+scopeado por `organization`, pero `Cliente` todavia funciona como maestro compartido.
 
 Eso obliga a una decision de producto y de datos:
 
-- si el catalogo es global, debe documentarse como tal
-- si Bosco va a operar como SaaS multi-tenant con catalogo propio por organizacion,
-  estos modelos deben migrarse
+- el catalogo ya no debe tratarse como global
+- `Cliente` debe mantenerse compartido de forma explicita o migrarse a ownership por organizacion
 
 No conviene seguir creciendo sin fijar esa decision.
 
@@ -329,7 +329,7 @@ Direccion de salida:
 El orden pragmatico actual no es "reescribir todo". Es este:
 
 1. congelar `payment_status` como fuente autoritativa
-2. decidir si `Cliente` y `Producto` son globales o tenant-scoped
+2. decidir si `Cliente` sigue como maestro compartido o migra a ownership por organizacion
 3. sacar comportamiento nuevo de `save()` y de helpers de modelo
 4. dividir gradualmente `Venta` en fronteras mas limpias de pago y delivery
 

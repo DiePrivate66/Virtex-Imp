@@ -10,6 +10,7 @@ from pos.models import (
     DEFAULT_LOCATION_TIMEZONE,
     Location,
     LocationAssignment,
+    Organization,
     OrganizationMembership,
     PersonProfile,
     StaffProfile,
@@ -35,6 +36,16 @@ class LocationContext:
 
 def build_location_context(location: Location) -> LocationContext:
     return LocationContext(location=location)
+
+
+def get_default_catalog_organization() -> Organization:
+    return Location.get_or_create_default().organization
+
+
+def resolve_catalog_organization_for_user(user) -> Organization:
+    if user and user.is_authenticated:
+        return resolve_location_for_user(user).organization
+    return get_default_catalog_organization()
 
 
 def ensure_person_profile_for_user(user) -> PersonProfile:

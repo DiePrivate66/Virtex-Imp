@@ -289,19 +289,35 @@ class Cliente(models.Model):
 
 # --- GESTION DE PRODUCTOS ---
 class Categoria(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name='categories')
     nombre = models.CharField(max_length=50)
     icono = models.CharField(max_length=50, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.organization_id:
+            self.organization = Organization.get_or_create_default()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.nombre
 
 
 class Producto(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name='products')
     categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE)
     nombre = models.CharField(max_length=100)
     precio = models.DecimalField(max_digits=10, decimal_places=2)
     imagen = models.ImageField(upload_to='productos/', null=True, blank=True)
     activo = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        if self.categoria_id and not self.organization_id:
+            self.organization = self.categoria.organization
+        if not self.organization_id:
+            self.organization = Organization.get_or_create_default()
+        if self.categoria_id and self.categoria.organization_id != self.organization_id:
+            raise ValidationError('El producto no puede pertenecer a una organizacion distinta a la de su categoria.')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.nombre} ($ {self.precio})'

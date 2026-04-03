@@ -45,15 +45,16 @@ class ClienteAdmin(admin.ModelAdmin):
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "icono")
-    search_fields = ("nombre",)
+    list_display = ("nombre", "organization", "icono")
+    list_filter = ("organization",)
+    search_fields = ("nombre", "organization__name")
 
 
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "categoria", "precio", "activo")
-    list_filter = ("activo", "categoria")
-    search_fields = ("nombre", "categoria__nombre")
+    list_display = ("nombre", "organization", "categoria", "precio", "activo")
+    list_filter = ("organization", "activo", "categoria")
+    search_fields = ("nombre", "categoria__nombre", "organization__name")
     list_editable = ("precio", "activo")
 
 

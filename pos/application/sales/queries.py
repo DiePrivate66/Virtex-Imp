@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.conf import settings
 
+from pos.application.context import resolve_catalog_organization_for_user
 from pos.ledger_registry import MIN_SUPPORTED_QUEUE_SCHEMA, REGISTRY_VERSION, get_registry_hash
 from pos.application.cash_register import get_open_cash_register_for_user
 from pos.models import Categoria, Producto
@@ -12,9 +13,10 @@ def get_user_open_cash_register(user):
 
 
 def get_pos_home_context(user):
+    organization = resolve_catalog_organization_for_user(user)
     return {
-        'categorias': Categoria.objects.all(),
-        'productos': Producto.objects.filter(activo=True),
+        'categorias': Categoria.objects.filter(organization=organization),
+        'productos': Producto.objects.filter(organization=organization, activo=True),
         'caja': get_user_open_cash_register(user),
         'rol': getattr(getattr(user, 'empleado', None), 'rol', 'OTRO'),
         'ledger_registry_hash': get_registry_hash(),

@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from pos.application.context import get_default_catalog_organization
 from pos.domain.shared import normalize_phone_to_e164
 from pos.domain.web_orders import (
     QUOTE_EDITABLE_STATUSES,
@@ -111,11 +112,12 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
     if not cart:
         raise WebOrderError('El carrito esta vacio', status_code=400)
 
+    organization = get_default_catalog_organization()
     total = Decimal('0.00')
     validated_items = []
     for item in cart:
         try:
-            product = Producto.objects.get(id=item['id'], activo=True)
+            product = Producto.objects.get(id=item['id'], organization=organization, activo=True)
         except (KeyError, Producto.DoesNotExist) as exc:
             raise WebOrderError('Producto no encontrado o no disponible', status_code=400) from exc
         quantity = int(item.get('cantidad', 1))

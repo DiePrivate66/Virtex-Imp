@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pos.application.context import resolve_catalog_organization_for_user
 from pos.models import Inventario, MovimientoInventario, Producto
 
 
@@ -24,8 +25,9 @@ def ensure_inventory_for_product(producto: Producto) -> Inventario:
 
 
 def register_inventory_movement(*, producto_id, tipo, cantidad_raw, concepto, registrado_por) -> InventoryMovementResult:
+    organization = resolve_catalog_organization_for_user(registrado_por)
     try:
-        producto = Producto.objects.get(id=producto_id)
+        producto = Producto.objects.get(id=producto_id, organization=organization)
     except Producto.DoesNotExist as exc:
         raise InventoryError('Producto no encontrado', status_code=404) from exc
 
@@ -68,9 +70,10 @@ def register_inventory_movement(*, producto_id, tipo, cantidad_raw, concepto, re
     )
 
 
-def update_inventory_configuration(*, producto_id, stock_minimo=None, unidad=None) -> Inventario:
+def update_inventory_configuration(*, producto_id, stock_minimo=None, unidad=None, user=None) -> Inventario:
+    organization = resolve_catalog_organization_for_user(user)
     try:
-        inventario = Inventario.objects.get(producto_id=producto_id)
+        inventario = Inventario.objects.get(producto_id=producto_id, producto__organization=organization)
     except Inventario.DoesNotExist as exc:
         raise InventoryError('Inventario no encontrado', status_code=404) from exc
 
