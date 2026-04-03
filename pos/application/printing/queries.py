@@ -46,10 +46,11 @@ def build_cash_closing_context(caja) -> dict:
 
     tarjetas_por_referencia = list(
         ventas.filter(metodo_pago='TARJETA')
-        .exclude(referencia_pago='')
-        .values('referencia_pago', 'tarjeta_tipo', 'tarjeta_marca')
+        .exclude(payment_reference='')
+        .exclude(payment_reference__isnull=True)
+        .values('payment_reference', 'tarjeta_tipo', 'tarjeta_marca')
         .annotate(cantidad=Count('id'), total=Sum('total'))
-        .order_by('-cantidad', 'referencia_pago')
+        .order_by('-cantidad', 'payment_reference')
     )
 
     return {

@@ -17,7 +17,8 @@ from django.test.client import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from .application.web_orders import WebOrderError, create_web_order
+from .application.printing import build_cash_closing_context
+from .application.web_orders import WebOrderError, build_web_orders_payload, create_web_order
 from .application.sales.commands import send_sale_receipt_email
 from .infrastructure.delivery import (
     make_delivery_claim_token,
@@ -25,6 +26,7 @@ from .infrastructure.delivery import (
     make_delivery_in_transit_token,
 )
 from .models import (
+    CajaTurno,
     Categoria,
     Cliente,
     DeliveryQuote,
@@ -274,6 +276,35 @@ class WebOrderCreationInvariantsTests(TestCase):
         self.assertNotEqual(venta.cliente_id, foreign_customer.id)
         self.assertEqual(venta.cliente.organization, location.organization)
 
+    def test_web_orders_payload_exposes_canonical_payment_fields(self):
+        location = Location.get_or_create_default()
+        venta = Venta.objects.create(
+            origen='WEB',
+            organization=location.organization,
+            location=location,
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE',
+            metodo_pago='TARJETA',
+            total='14.50',
+            payment_status=Venta.PaymentStatus.PAID,
+            payment_reference='PAY-WEB-001',
+            referencia_pago='LEGACY-IGNORED',
+            cliente_nombre='Cliente Web',
+            telefono_cliente='0991234567',
+            direccion_envio='Av. Central',
+        )
+
+        payload = build_web_orders_payload(limit=10)
+
+        self.assertEqual(payload['count'], 1)
+        pedido = payload['pedidos'][0]
+        self.assertEqual(pedido['id'], venta.id)
+        self.assertEqual(pedido['payment_status'], Venta.PaymentStatus.PAID)
+        self.assertEqual(pedido['payment_status_display'], venta.get_payment_status_display())
+        self.assertEqual(pedido['payment_reference'], 'PAY-WEB-001')
+        self.assertNotIn('estado_pago', pedido)
+        self.assertNotIn('referencia_pago', pedido)
+
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, SECURE_SSL_REDIRECT=False)
 class PrintJobsApiTests(TestCase):
@@ -303,6 +334,37 @@ class PrintJobsApiTests(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.estado, 'PENDING')
         self.assertEqual(job.error, '')
+
+    def test_cash_closing_print_context_groups_cards_by_canonical_payment_reference(self):
+        location = Location.get_or_create_default()
+        caja = CajaTurno.objects.create(
+            usuario=self.user,
+            base_inicial=Decimal('10.00'),
+            organization=location.organization,
+            location=location,
+        )
+        Venta.objects.create(
+            turno=caja,
+            organization=location.organization,
+            location=location,
+            origen='POS',
+            tipo_pedido='LLEVAR',
+            estado='PENDIENTE',
+            metodo_pago='TARJETA',
+            total='8.00',
+            payment_status=Venta.PaymentStatus.PAID,
+            payment_reference='PAY-PRINT-001',
+            referencia_pago='LEGACY-PRINT-001',
+            tarjeta_tipo='CREDITO',
+            tarjeta_marca='VISA',
+        )
+
+        context = build_cash_closing_context(caja)
+
+        self.assertEqual(len(context['tarjetas_por_referencia']), 1)
+        tarjeta = context['tarjetas_por_referencia'][0]
+        self.assertEqual(tarjeta['payment_reference'], 'PAY-PRINT-001')
+        self.assertNotIn('referencia_pago', tarjeta)
 
     @override_settings(PRINT_JOB_STUCK_SECONDS=60)
     def test_requeue_stuck_print_jobs_task(self):

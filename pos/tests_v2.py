@@ -17,6 +17,7 @@ from pos.application.cash_register.commands import CashRegisterError, verify_pos
 from pos.application.cash_movements import register_cash_movement
 from pos.application.inventory import get_inventory_panel_context
 from pos.application.inventory import register_inventory_movement
+from pos.application.printing import build_cash_closing_context
 from pos.application.sales import get_pos_home_context
 from pos.application.sales.commands import (
     PosSaleError,
@@ -714,6 +715,30 @@ class BoscoV2SalesTests(TestCase):
         self.assertEqual(caja.total_transferencia_sistema, Decimal('0.00'))
         self.assertEqual(caja.total_otros_sistema, Decimal('0.00'))
         self.assertEqual(caja.diferencia, Decimal('1.25'))
+
+    def test_cash_closing_print_context_uses_canonical_payment_reference(self):
+        Venta.objects.create(
+            turno=self.turno,
+            organization=self.turno.organization,
+            location=self.turno.location,
+            origen='POS',
+            tipo_pedido='LLEVAR',
+            estado='PENDIENTE',
+            metodo_pago='TARJETA',
+            total=Decimal('7.00'),
+            payment_status=Venta.PaymentStatus.PAID,
+            payment_reference='PAY-CLOSE-001',
+            referencia_pago='LEGACY-CLOSE-001',
+            tarjeta_tipo='CREDITO',
+            tarjeta_marca='VISA',
+        )
+
+        closing_context = build_cash_closing_context(self.turno)
+
+        self.assertEqual(len(closing_context['tarjetas_por_referencia']), 1)
+        tarjeta = closing_context['tarjetas_por_referencia'][0]
+        self.assertEqual(tarjeta['payment_reference'], 'PAY-CLOSE-001')
+        self.assertNotIn('referencia_pago', tarjeta)
 
     def test_register_cash_movement_sets_scope_and_operator_explicitly(self):
         register_cash_movement(

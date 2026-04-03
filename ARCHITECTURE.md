@@ -291,9 +291,9 @@ Hoy `payment_status` es el campo autoritativo.
 
 Eso reduce el riesgo anterior, pero todavia deja trabajo pendiente:
 
-- retirar lecturas UI/reporting que aun dependen de `estado_pago`
+- mantener `payment_status` y `payment_reference` como contrato de lectura en UI/reporting
 - eliminar la necesidad de backfill defensivo cuando ya no existan filas legacy
-- simplificar la superficie de compatibilidad en impresion y vistas historicas
+- simplificar la superficie de compatibilidad que aun queda en admin y vistas historicas legacy
 
 ### 3. La multitenencia necesita seguir siendo uniforme
 

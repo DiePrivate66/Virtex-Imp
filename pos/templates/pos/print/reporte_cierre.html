@@ -70,7 +70,7 @@
         <div class="text-center font-bold small" style="margin-bottom:4px;">TARJETAS POR REFERENCIA</div>
         {% for t in tarjetas_por_referencia %}
         <div class="row small">
-            <span>{{ t.referencia_pago }}{% if t.tarjeta_tipo %} / {{ t.tarjeta_tipo }}{% endif %}{% if t.tarjeta_marca %} / {{ t.tarjeta_marca }}{% endif %}</span>
+            <span>{{ t.payment_reference }}{% if t.tarjeta_tipo %} / {{ t.tarjeta_tipo }}{% endif %}{% if t.tarjeta_marca %} / {{ t.tarjeta_marca }}{% endif %}</span>
             <span>${{ t.total|floatformat:2 }} ({{ t.cantidad }})</span>
         </div>
         {% endfor %}
@@ -158,7 +158,7 @@
         <div class="text-center font-bold small" style="margin-bottom:4px;">TARJETAS POR REFERENCIA</div>
         {% for t in tarjetas_por_referencia %}
         <div class="row small">
-            <span>{{ t.referencia_pago }}{% if t.tarjeta_tipo %} / {{ t.tarjeta_tipo }}{% endif %}{% if t.tarjeta_marca %} / {{ t.tarjeta_marca }}{% endif %}</span>
+            <span>{{ t.payment_reference }}{% if t.tarjeta_tipo %} / {{ t.tarjeta_tipo }}{% endif %}{% if t.tarjeta_marca %} / {{ t.tarjeta_marca }}{% endif %}</span>
             <span>${{ t.total|floatformat:2 }} ({{ t.cantidad }})</span>
         </div>
         {% endfor %}
