@@ -38,8 +38,9 @@ class PerfilUsuarioAdmin(admin.ModelAdmin):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "cedula_ruc", "telefono", "email", "fecha_registro")
-    search_fields = ("nombre", "cedula_ruc", "telefono", "email")
+    list_display = ("nombre", "organization", "cedula_ruc", "telefono", "email", "fecha_registro")
+    list_filter = ("organization",)
+    search_fields = ("nombre", "cedula_ruc", "telefono", "email", "organization__name")
     readonly_fields = ("fecha_registro",)
 
 

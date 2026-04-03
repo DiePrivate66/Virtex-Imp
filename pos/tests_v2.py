@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -8,9 +9,10 @@ from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
-from pos.application.cash_register import close_cash_register, get_cash_closing_context
+from pos.application.cash_register import close_cash_register, get_cash_closing_context, upsert_customer
 from pos.application.cash_register.commands import CashRegisterError, verify_pos_pin
 from pos.application.inventory import get_inventory_panel_context
 from pos.application.sales import get_pos_home_context
@@ -34,6 +36,7 @@ from pos.models import (
     AuditLog,
     CajaTurno,
     Categoria,
+    Cliente,
     Empleado,
     IdempotencyRecord,
     Inventario,
@@ -220,6 +223,53 @@ class BoscoV2SalesTests(TestCase):
 
         self.assertEqual(exc.exception.status_code, 400)
         self.assertIn('producto no encontrado', exc.exception.message.lower())
+
+    def test_register_sale_rejects_customer_from_other_organization(self):
+        other_org = Organization.objects.create(slug='org-customer-foreign', name='Org Customer Foreign')
+        foreign_customer = Cliente.objects.create(
+            organization=other_org,
+            cedula_ruc='0912345678',
+            nombre='Cliente Ajeno',
+        )
+
+        with self.assertRaises(PosSaleError) as exc:
+            register_sale(
+                self.user,
+                self._payload(
+                    client_transaction_id='sale-v2-foreign-customer',
+                    cliente_id=foreign_customer.id,
+                    cliente_cedula=foreign_customer.cedula_ruc,
+                    consumidor_final=False,
+                ),
+            )
+
+        self.assertEqual(exc.exception.status_code, 400)
+        self.assertIn('cliente no encontrado', exc.exception.message.lower())
+
+    def test_upsert_customer_allows_same_identity_document_in_different_organizations(self):
+        other_org = Organization.objects.create(slug='org-customer-peer', name='Org Customer Peer')
+
+        local_customer = upsert_customer(
+            {
+                'cedula': '0999999999',
+                'nombre': 'Cliente Local',
+                'telefono': '0991111111',
+            },
+            organization=self.turno.organization,
+        )
+        foreign_customer = upsert_customer(
+            {
+                'cedula': '0999999999',
+                'nombre': 'Cliente Foraneo',
+                'telefono': '0992222222',
+            },
+            organization=other_org,
+        )
+
+        self.assertNotEqual(local_customer.id, foreign_customer.id)
+        self.assertEqual(local_customer.organization, self.turno.organization)
+        self.assertEqual(foreign_customer.organization, other_org)
+        self.assertEqual(Cliente.objects.filter(cedula_ruc='0999999999').count(), 2)
 
     def test_reaper_restores_inventory_for_stale_pending_sales(self):
         with patch('pos.application.sales.commands._process_payment', side_effect=TimeoutError('gateway timeout')):
@@ -976,6 +1026,7 @@ class BoscoV2SalesTests(TestCase):
         self.assertEqual(exc.exception.status_code, 409)
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class BoscoV2StaffTests(TestCase):
     def setUp(self):
         self.organization = Organization.objects.create(slug='org-v2', name='Org V2')
@@ -1040,3 +1091,38 @@ class BoscoV2StaffTests(TestCase):
         with self.assertRaises(CashRegisterError) as exc:
             verify_pos_pin('1234', alias='juan', location_uuid=str(self.location.uuid))
         self.assertEqual(exc.exception.status_code, 423)
+
+    def test_customer_api_search_is_scoped_to_staff_organization(self):
+        other_org = Organization.objects.create(slug='org-customer-api-other', name='Org Customer API Other')
+        Cliente.objects.create(
+            organization=other_org,
+            cedula_ruc='0922222222',
+            nombre='Cliente Ajeno API',
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('api_cliente'), {'cedula': '0922222222'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()['encontrado'])
+
+    def test_customer_api_post_creates_customer_inside_staff_organization(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('api_cliente'),
+            data=json.dumps(
+                {
+                    'cedula': '0933333333',
+                    'nombre': 'Cliente POS',
+                    'telefono': '0994444444',
+                    'direccion': 'Sucursal Norte',
+                    'email': 'cliente-pos@example.com',
+                }
+            ),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        cliente = Cliente.objects.get(id=response.json()['cliente_id'])
+        self.assertEqual(cliente.organization, self.organization)

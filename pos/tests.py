@@ -24,7 +24,19 @@ from .infrastructure.delivery import (
     make_delivery_delivered_token,
     make_delivery_in_transit_token,
 )
-from .models import Categoria, DeliveryQuote, Empleado, Location, PrintJob, Producto, Venta, WhatsAppConversation, WhatsAppMessageLog
+from .models import (
+    Categoria,
+    Cliente,
+    DeliveryQuote,
+    Empleado,
+    Location,
+    Organization,
+    PrintJob,
+    Producto,
+    Venta,
+    WhatsAppConversation,
+    WhatsAppMessageLog,
+)
 from .presentation.api.web_order_requests import parse_web_order_request
 from .tasks import (
     process_customer_confirmation,
@@ -221,6 +233,39 @@ class WebOrderCreationInvariantsTests(TestCase):
         self.assertIsNotNone(venta.operating_day)
         self.assertEqual(venta.payment_status, Venta.PaymentStatus.PAID)
         self.assertEqual(venta.estado_pago, 'APROBADO')
+
+    def test_create_web_order_does_not_reuse_customer_from_other_organization(self):
+        location = Location.get_or_create_default()
+        categoria = Categoria.objects.create(nombre='Pizzas', organization=location.organization)
+        producto = Producto.objects.create(
+            categoria=categoria,
+            organization=location.organization,
+            nombre='Bosco Pizza',
+            precio=Decimal('11.00'),
+            activo=True,
+        )
+        other_org = Organization.objects.create(slug='org-web-customer-other', name='Org Web Customer Other')
+        foreign_customer = Cliente.objects.create(
+            organization=other_org,
+            cedula_ruc='0912345678',
+            nombre='Cliente Ajeno',
+        )
+
+        venta = create_web_order(
+            {
+                'cedula': '0912345678',
+                'nombre': 'Cliente Web',
+                'telefono': '0991234567',
+                'direccion': 'Av. Central',
+                'metodo_pago': 'EFECTIVO',
+                'tipo_pedido': 'DOMICILIO',
+                'carrito': [{'id': producto.id, 'cantidad': 1, 'nombre': producto.nombre, 'nota': ''}],
+            }
+        )
+
+        self.assertIsNotNone(venta.cliente)
+        self.assertNotEqual(venta.cliente_id, foreign_customer.id)
+        self.assertEqual(venta.cliente.organization, location.organization)
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, SECURE_SSL_REDIRECT=False)

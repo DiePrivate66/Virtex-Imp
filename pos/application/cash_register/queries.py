@@ -135,5 +135,5 @@ def get_cash_closing_context(user):
     }
 
 
-def find_customer_by_identity_document(cedula: str):
-    return Cliente.objects.filter(cedula_ruc=cedula).first()
+def find_customer_by_identity_document(cedula: str, *, organization):
+    return Cliente.objects.filter(organization=organization, cedula_ruc=cedula).first()

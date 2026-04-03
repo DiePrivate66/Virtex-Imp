@@ -82,7 +82,6 @@ def register_sale(user, data: dict) -> SaleRegistrationResult:
     location = resolve_location_for_user(user, location_uuid=data.get('location_uuid'))
     operator = ensure_staff_profile_for_user(user, location=location)
 
-    cliente = _resolve_customer(data)
     metodo_pago = (data.get('metodo_pago') or '').upper().strip()
     if metodo_pago not in {'EFECTIVO', 'TRANSFERENCIA', 'TARJETA'}:
         raise PosSaleError('Metodo de pago invalido', status_code=400)
@@ -91,6 +90,7 @@ def register_sale(user, data: dict) -> SaleRegistrationResult:
     if not cart:
         raise PosSaleError('El carrito esta vacio', status_code=400)
 
+    cliente = _resolve_customer(data, organization=location.organization)
     validated_items, total_venta = _validate_and_price_cart(cart, organization=location.organization)
     referencia_pago = _normalize_reference(data.get('referencia_pago'))
     tarjeta_tipo = _normalize_simple_text(data.get('tarjeta_tipo'), 12)
@@ -918,14 +918,14 @@ def _mark_sale_payment_failed(
         return True
 
 
-def _resolve_customer(data: dict):
+def _resolve_customer(data: dict, *, organization):
     cedula_input = (data.get('cliente_cedula') or '').strip()
     consumidor_final = bool(data.get('consumidor_final'))
     if consumidor_final:
         return None
 
     if data.get('cliente_id'):
-        cliente = Cliente.objects.filter(id=data.get('cliente_id')).first()
+        cliente = Cliente.objects.filter(id=data.get('cliente_id'), organization=organization).first()
         if not cliente:
             raise PosSaleError('Cliente no encontrado', status_code=400)
         if not _is_valid_identity(cliente.cedula_ruc):
@@ -938,7 +938,7 @@ def _resolve_customer(data: dict):
     if not _is_valid_identity(cedula_input):
         raise PosSaleError('C.I/RUC invalido (10 o 13 digitos)', status_code=400)
 
-    return find_customer_by_identity_document(cedula_input)
+    return find_customer_by_identity_document(cedula_input, organization=organization)
 
 
 def _validate_and_price_cart(cart: list[dict], *, organization) -> tuple[list[dict], Decimal]:

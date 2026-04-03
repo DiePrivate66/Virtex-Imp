@@ -232,7 +232,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - `cash_register` y `analytics` ya incorporan flujo operativo para reembolsos pendientes, ajustes contables y alertas administrativas
 - el cierre de caja ya se calcula y persiste desde `application.cash_register`; `CajaTurno` ya no concentra el cuadre dentro del modelo
 - las ventas nuevas POS y Web Orders ya construyen tenant, dia operativo, snapshots y compatibilidad de pago desde capa de aplicacion; `Venta.save()` queda reducido a validacion y compatibilidad minima
-- `Categoria` y `Producto` ya quedan scopeados por `organization`; el catalogo POS/PWA y el seed de menu ya no se leen como universo global
+- `Categoria`, `Producto` y `Cliente` ya quedan scopeados por `organization`; catalogo, inventario y lookup de clientes POS/PWA ya no se leen como universo global
 - las tareas async viven en `pos/infrastructure/tasks`
 - `delivery_tokens.py` y `whatsapp_utils.py` ya fueron retirados; el uso canonico vive en `pos/infrastructure/delivery`, `domain/shared` y `domain/web_orders`
 - WhatsApp/Meta ya entra por `presentation.integrations`, `application.integrations` y `application.notifications`
@@ -298,18 +298,20 @@ Direccion de salida:
 - mantener `estado_pago` solo como compatibilidad de lectura o migracion
 - retirar la sincronizacion dual cuando los puntos de entrada legacy desaparezcan
 
-### 3. La multitenencia aun no es uniforme
+### 3. La multitenencia necesita seguir siendo uniforme
 
-Modelos operativos como ventas, caja, outbox, print jobs e idempotencia ya cargan
-`organization` y `location`. El catalogo de menu (`Categoria`, `Producto`) ya quedo
-scopeado por `organization`, pero `Cliente` todavia funciona como maestro compartido.
+Modelos operativos como ventas, caja, outbox, print jobs, idempotencia, catalogo y
+clientes ya cargan `organization` y, cuando corresponde, `location`.
 
-Eso obliga a una decision de producto y de datos:
+El riesgo residual ya no es decidir si `Cliente` es global o no. El riesgo ahora es:
 
-- el catalogo ya no debe tratarse como global
-- `Cliente` debe mantenerse compartido de forma explicita o migrarse a ownership por organizacion
+- evitar nuevos maestros compartidos por conveniencia
+- evitar lookups globales fuera de los contextos autorizados
+- seguir moviendo defaults operativos a capa de aplicacion
 
-No conviene seguir creciendo sin fijar esa decision.
+La regla actual es simple:
+
+- datos operativos que afectan venta, catalogo, inventario o cliente deben nacer scopeados por organizacion
 
 ### 4. Todavia existe logica de negocio relevante dentro de `save()`
 
@@ -331,9 +333,9 @@ Direccion de salida:
 El orden pragmatico actual no es "reescribir todo". Es este:
 
 1. congelar `payment_status` como fuente autoritativa
-2. decidir si `Cliente` sigue como maestro compartido o migra a ownership por organizacion
-3. sacar comportamiento nuevo de `save()` y de helpers de modelo
-4. dividir gradualmente `Venta` en fronteras mas limpias de pago y delivery
+2. sacar comportamiento nuevo de `save()` y de helpers de modelo
+3. dividir gradualmente `Venta` en fronteras mas limpias de pago y delivery
+4. evitar que vuelvan a aparecer maestros globales por conveniencia
 
 ## Mapa de Wrappers Legacy Vigentes
 

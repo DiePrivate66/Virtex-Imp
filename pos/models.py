@@ -277,15 +277,22 @@ class PerfilUsuario(models.Model):
 
 # --- GESTION DE CLIENTES ---
 class Cliente(models.Model):
-    cedula_ruc = models.CharField(max_length=13, unique=True)
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name='customers')
+    cedula_ruc = models.CharField(max_length=13)
     nombre = models.CharField(max_length=200)
     direccion = models.TextField(blank=True)
     telefono = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
     fecha_registro = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ['organization__name', 'nombre']
+        constraints = [
+            models.UniqueConstraint(fields=['organization', 'cedula_ruc'], name='uq_cliente_org_cedula'),
+        ]
+
     def __str__(self):
-        return f'{self.nombre} ({self.cedula_ruc})'
+        return f'{self.organization.name} / {self.nombre} ({self.cedula_ruc})'
 
 
 # --- GESTION DE PRODUCTOS ---

@@ -18,6 +18,7 @@ from pos.application.cash_register import (
     upsert_customer,
     verify_pos_pin,
 )
+from pos.application.context import resolve_location_for_user
 
 
 @ensure_csrf_cookie
@@ -113,10 +114,12 @@ def buscar_crear_cliente(request):
     if not request.user.is_authenticated:
         return JsonResponse({'status': 'error', 'mensaje': 'No autenticado'}, status=401)
 
+    organization = resolve_location_for_user(request.user).organization
+
     if request.method == 'POST':
         data = json.loads(request.body)
         try:
-            cliente = upsert_customer(data)
+            cliente = upsert_customer(data, organization=organization)
             return JsonResponse({'status': 'ok', 'cliente_id': cliente.id, 'nombre': cliente.nombre})
         except CashRegisterError as exc:
             return JsonResponse({'status': 'error', 'mensaje': exc.message}, status=exc.status_code)
@@ -127,7 +130,7 @@ def buscar_crear_cliente(request):
     if not is_valid_identity_document(cedula):
         return JsonResponse({'status': 'error', 'mensaje': 'C.I/RUC invalido (10 o 13 digitos)'}, status=400)
 
-    cliente = find_customer_by_identity_document(cedula)
+    cliente = find_customer_by_identity_document(cedula, organization=organization)
     if not cliente:
         return JsonResponse({'encontrado': False})
 

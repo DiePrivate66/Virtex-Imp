@@ -134,7 +134,7 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
             }
         )
 
-    customer = _resolve_customer(data)
+    customer = _resolve_customer(data, organization=organization)
     cash_register = CajaTurno.objects.filter(fecha_cierre__isnull=True).first()
     sale_scope = build_sale_scope_fields(
         turno=cash_register,
@@ -217,12 +217,13 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
     return sale
 
 
-def _resolve_customer(data: dict):
+def _resolve_customer(data: dict, *, organization):
     cedula = data.get('cedula', '').strip()
     if not cedula:
         return None
 
     customer, _ = Cliente.objects.get_or_create(
+        organization=organization,
         cedula_ruc=cedula,
         defaults={
             'nombre': data.get('nombre', 'CONSUMIDOR FINAL'),

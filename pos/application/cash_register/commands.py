@@ -306,12 +306,13 @@ def close_cash_register(
     )
 
 
-def upsert_customer(data: dict) -> Cliente:
+def upsert_customer(data: dict, *, organization) -> Cliente:
     cedula = data.get('cedula')
     if not is_valid_identity_document(cedula):
         raise CashRegisterError('C.I/RUC invalido (10 o 13 digitos)')
 
     cliente, created = Cliente.objects.get_or_create(
+        organization=organization,
         cedula_ruc=cedula,
         defaults={
             'nombre': data.get('nombre'),
@@ -330,7 +331,7 @@ def upsert_customer(data: dict) -> Cliente:
             cliente.telefono = data.get('telefono')
         if data.get('email'):
             cliente.email = data.get('email')
-        cliente.save()
+        cliente.save(update_fields=['nombre', 'direccion', 'telefono', 'email'])
 
     return cliente
 
