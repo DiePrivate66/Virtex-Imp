@@ -231,7 +231,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - el POS web ya opera con idempotencia por `client_transaction_id`, outbox de eventos y reconciliacion manual de excepciones de pago
 - `cash_register` y `analytics` ya incorporan flujo operativo para reembolsos pendientes, ajustes contables y alertas administrativas
 - el cierre de caja ya se calcula y persiste desde `application.cash_register`; `CajaTurno` ya no concentra el cuadre dentro del modelo
-- las ventas nuevas POS y Web Orders ya construyen tenant, dia operativo, snapshots y compatibilidad de pago desde capa de aplicacion; `Venta.save()` queda reducido a validacion y compatibilidad minima
+- las ventas nuevas POS y Web Orders ya construyen tenant, dia operativo, snapshots y pago canonico desde capa de aplicacion; `Venta.save()` queda reducido a validacion y a espejar compatibilidad legacy controlada
 - `DetalleVenta` ya no calcula precios ni subtotales en `save()`; POS y Web Orders construyen el payload completo del detalle desde capa de aplicacion
 - `Categoria`, `Producto` y `Cliente` ya quedan scopeados por `organization`; catalogo, inventario y lookup de clientes POS/PWA ya no se leen como universo global
 - los movimientos de caja e inventario ya construyen `organization` / `location` desde capa de aplicacion; `MovimientoCaja.save()` y `MovimientoInventario.save()` quedan reducidos a validacion de consistencia local
@@ -284,21 +284,16 @@ Direccion de salida:
 - extraer gradualmente pago y delivery a servicios o modelos relacionados
 - evitar meter mas comportamiento nuevo dentro de `Venta`
 
-### 2. Legacy y V2 de pagos aun conviven en el mismo registro
+### 2. Legacy y V2 de pagos siguen coexistiendo, pero ya no con la misma autoridad
 
-Hoy `estado_pago` y `payment_status` coexisten y se sincronizan dentro del modelo.
+Hoy `payment_status` es el campo autoritativo.
+`estado_pago` queda como espejo legacy de compatibilidad y backfill para filas antiguas.
 
-Eso implica:
+Eso reduce el riesgo anterior, pero todavia deja trabajo pendiente:
 
-- doble fuente de verdad temporal
-- riesgo de divergencia si alguien escribe un campo sin pasar por el flujo esperado
-- mayor complejidad para reporting y auditoria
-
-Direccion de salida:
-
-- declarar `payment_status` como campo autoritativo
-- mantener `estado_pago` solo como compatibilidad de lectura o migracion
-- retirar la sincronizacion dual cuando los puntos de entrada legacy desaparezcan
+- retirar lecturas UI/reporting que aun dependen de `estado_pago`
+- eliminar la necesidad de backfill defensivo cuando ya no existan filas legacy
+- simplificar la superficie de compatibilidad en impresion y vistas historicas
 
 ### 3. La multitenencia necesita seguir siendo uniforme
 

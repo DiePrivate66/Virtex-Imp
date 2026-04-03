@@ -192,7 +192,6 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
                 referencia_pago=data.get('referencia_pago', ''),
                 valid_payment_statuses=Venta.PaymentStatus.values,
                 payment_methods=Venta.METODOS,
-                legacy_to_v2_map={},
                 v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
                 default_payment_status=Venta.PaymentStatus.PAID,
             ),

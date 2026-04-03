@@ -148,6 +148,28 @@ class BoscoV2SalesTests(TestCase):
         self.assertEqual(venta.payment_reference, 'PAGO-REF-001')
         self.assertEqual(venta.referencia_pago, 'PAGO-REF-001')
 
+    def test_payment_status_save_updates_legacy_mirror_without_explicit_estado_pago_field(self):
+        venta = Venta.objects.create(
+            turno=self.turno,
+            organization=self.turno.organization,
+            location=self.turno.location,
+            cliente_nombre='Cliente Canonico',
+            total=Decimal('7.00'),
+            metodo_pago='EFECTIVO',
+            estado='PENDIENTE',
+            payment_status=Venta.PaymentStatus.PENDING,
+        )
+
+        venta.payment_status = Venta.PaymentStatus.FAILED
+        venta.payment_reference = 'PAGO-REF-002'
+        venta.save(update_fields=['payment_status', 'payment_reference'])
+        venta.refresh_from_db()
+
+        self.assertEqual(venta.payment_status, Venta.PaymentStatus.FAILED)
+        self.assertEqual(venta.estado_pago, 'RECHAZADO')
+        self.assertEqual(venta.payment_reference, 'PAGO-REF-002')
+        self.assertEqual(venta.referencia_pago, 'PAGO-REF-002')
+
     def test_failed_card_payment_restores_inventory_and_marks_sale_failed(self):
         with self.assertRaises(PosSaleError):
             register_sale(

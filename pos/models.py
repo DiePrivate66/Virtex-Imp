@@ -12,7 +12,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
-from pos.domain.shared.sale_invariants import build_sale_payment_fields
+from pos.domain.shared.sale_invariants import backfill_sale_payment_fields_from_legacy, build_sale_payment_fields
 from pos.ledger_registry import (
     MIN_SUPPORTED_QUEUE_SCHEMA,
     REGISTRY_VERSION,
@@ -535,25 +535,55 @@ class Venta(models.Model):
     )
 
     def _sync_payment_compatibility_fields(self):
-        payment_fields = build_sale_payment_fields(
-            payment_status=self.payment_status,
-            estado_pago=self.estado_pago,
-            payment_method_type=self.payment_method_type,
-            metodo_pago=self.metodo_pago,
-            payment_reference=self.payment_reference,
-            referencia_pago=self.referencia_pago,
-            valid_payment_statuses=self.PaymentStatus.values,
-            payment_methods=self.METODOS,
-            legacy_to_v2_map=LEGACY_TO_V2_PAYMENT_STATUS,
-            v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
-            default_payment_status=self.PaymentStatus.PAID,
-        )
+        if self.payment_status:
+            payment_fields = build_sale_payment_fields(
+                payment_status=self.payment_status,
+                payment_method_type=self.payment_method_type,
+                metodo_pago=self.metodo_pago,
+                payment_reference=self.payment_reference,
+                referencia_pago=self.referencia_pago,
+                valid_payment_statuses=self.PaymentStatus.values,
+                payment_methods=self.METODOS,
+                v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
+                default_payment_status=self.PaymentStatus.PAID,
+            )
+        else:
+            payment_fields = backfill_sale_payment_fields_from_legacy(
+                estado_pago=self.estado_pago,
+                payment_method_type=self.payment_method_type,
+                metodo_pago=self.metodo_pago,
+                payment_reference=self.payment_reference,
+                referencia_pago=self.referencia_pago,
+                valid_payment_statuses=self.PaymentStatus.values,
+                payment_methods=self.METODOS,
+                legacy_to_v2_map=LEGACY_TO_V2_PAYMENT_STATUS,
+                v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
+                default_payment_status=self.PaymentStatus.PAID,
+            )
         self.payment_status = payment_fields['payment_status']
         self.estado_pago = payment_fields['estado_pago']
         self.payment_method_type = payment_fields['payment_method_type']
         self.metodo_pago = payment_fields['metodo_pago']
         self.payment_reference = payment_fields['payment_reference']
         self.referencia_pago = payment_fields['referencia_pago']
+
+    @staticmethod
+    def _expand_payment_update_fields(update_fields):
+        if update_fields is None:
+            return None
+
+        expanded = set(update_fields)
+        payment_related_fields = {
+            'payment_status',
+            'estado_pago',
+            'payment_method_type',
+            'metodo_pago',
+            'payment_reference',
+            'referencia_pago',
+        }
+        if expanded & payment_related_fields:
+            expanded.update(payment_related_fields)
+        return list(expanded)
 
     def _validate_scope_consistency(self):
         if self.location_id and self.organization_id and self.location.organization_id != self.organization_id:
@@ -568,6 +598,7 @@ class Venta(models.Model):
     def save(self, *args, **kwargs):
         self._sync_payment_compatibility_fields()
         self._validate_scope_consistency()
+        kwargs['update_fields'] = self._expand_payment_update_fields(kwargs.get('update_fields'))
         super().save(*args, **kwargs)
 
     @property

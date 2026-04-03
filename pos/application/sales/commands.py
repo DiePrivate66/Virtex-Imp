@@ -672,7 +672,6 @@ def _reserve_sale(
                 referencia_pago=referencia_pago,
                 valid_payment_statuses=Venta.PaymentStatus.values,
                 payment_methods=Venta.METODOS,
-                legacy_to_v2_map={},
                 v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
                 default_payment_status=Venta.PaymentStatus.PAID,
             ),
@@ -722,7 +721,6 @@ def _finalize_sale_as_paid(*, venta: Venta, user, payment_reference: str, paymen
             'payment_reference',
             'payment_provider',
             'payment_checked_at',
-            'estado_pago',
             'estado',
         ]
     )
@@ -895,7 +893,6 @@ def _mark_sale_payment_failed(
                 'payment_status',
                 'payment_failure_reason',
                 'payment_checked_at',
-                'estado_pago',
                 'estado',
             ]
         )

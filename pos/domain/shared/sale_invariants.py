@@ -56,25 +56,21 @@ def build_sale_scope_fields(
 def build_sale_payment_fields(
     *,
     payment_status: str = '',
-    estado_pago: str = '',
     payment_method_type: str = '',
     metodo_pago: str = '',
     payment_reference: str = '',
     referencia_pago: str = '',
     valid_payment_statuses=(),
     payment_methods=(),
-    legacy_to_v2_map=None,
     v2_to_legacy_map=None,
     default_payment_status: str = '',
 ) -> dict:
-    legacy_to_v2_map = legacy_to_v2_map or {}
     v2_to_legacy_map = v2_to_legacy_map or {}
     payment_methods = dict(payment_methods)
 
     resolved_payment_status = str(payment_status or '').strip().upper()
     if not resolved_payment_status:
-        legacy_status = str(estado_pago or '').strip().upper()
-        resolved_payment_status = legacy_to_v2_map.get(legacy_status, default_payment_status)
+        resolved_payment_status = default_payment_status
     if resolved_payment_status not in valid_payment_statuses:
         raise ValidationError('payment_status invalido para la venta.')
 
@@ -87,12 +83,41 @@ def build_sale_payment_fields(
 
     return {
         'payment_status': resolved_payment_status,
-        'estado_pago': v2_to_legacy_map.get(resolved_payment_status, estado_pago),
+        'estado_pago': v2_to_legacy_map.get(resolved_payment_status, ''),
         'payment_method_type': resolved_payment_method_type,
         'metodo_pago': resolved_metodo_pago,
         'payment_reference': resolved_payment_reference[:80],
         'referencia_pago': resolved_payment_reference[:40],
     }
+
+
+def backfill_sale_payment_fields_from_legacy(
+    *,
+    estado_pago: str = '',
+    payment_method_type: str = '',
+    metodo_pago: str = '',
+    payment_reference: str = '',
+    referencia_pago: str = '',
+    valid_payment_statuses=(),
+    payment_methods=(),
+    legacy_to_v2_map=None,
+    v2_to_legacy_map=None,
+    default_payment_status: str = '',
+) -> dict:
+    legacy_to_v2_map = legacy_to_v2_map or {}
+    legacy_status = str(estado_pago or '').strip().upper()
+    resolved_payment_status = legacy_to_v2_map.get(legacy_status, default_payment_status)
+    return build_sale_payment_fields(
+        payment_status=resolved_payment_status,
+        payment_method_type=payment_method_type,
+        metodo_pago=metodo_pago,
+        payment_reference=payment_reference,
+        referencia_pago=referencia_pago,
+        valid_payment_statuses=valid_payment_statuses,
+        payment_methods=payment_methods,
+        v2_to_legacy_map=v2_to_legacy_map,
+        default_payment_status=default_payment_status,
+    )
 
 
 def build_sale_actor_snapshot_fields(
