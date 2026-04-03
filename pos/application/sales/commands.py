@@ -30,6 +30,7 @@ from pos.domain.shared.sale_invariants import (
     build_sale_payment_fields,
     build_sale_scope_fields,
 )
+from pos.domain.shared import build_cash_movement_scope_fields, build_inventory_movement_scope_fields
 from pos.infrastructure.tasks import process_outbox_event
 from pos.models import (
     AccountingAdjustment,
@@ -525,8 +526,6 @@ def resolve_accounting_adjustment(
             )
         cash_movement = MovimientoCaja.objects.create(
             turno=execution_turn,
-            organization=adjustment.organization,
-            location=adjustment.location or execution_turn.location,
             operator=ensure_staff_profile_for_user(user, location=execution_turn.location or adjustment.location),
             tipo='EGRESO',
             concepto=MovimientoCaja.CONCEPTO_REEMBOLSO_HEREDADO,
@@ -537,6 +536,11 @@ def resolve_accounting_adjustment(
             )[:200],
             monto=adjustment.amount,
             registrado_por=user,
+            **build_cash_movement_scope_fields(
+                turno=execution_turn,
+                location=adjustment.location or execution_turn.location,
+                organization=adjustment.organization,
+            ),
         )
 
     adjustment.status = AccountingAdjustment.Status.RESOLVED
@@ -722,14 +726,17 @@ def _finalize_sale_as_paid(*, venta: Venta, user, payment_reference: str, paymen
 
     MovimientoCaja.objects.create(
         turno=venta.turno,
-        organization=venta.organization,
-        location=venta.location,
         operator=venta.operator,
         tipo='INGRESO',
         concepto='VENTA',
         descripcion=f'Venta #{venta.id} ({venta.payment_method_type or venta.metodo_pago})',
         monto=venta.total,
         registrado_por=user,
+        **build_cash_movement_scope_fields(
+            turno=venta.turno,
+            location=venta.location,
+            organization=venta.organization,
+        ),
     )
 
     outbox_event = OutboxEvent.objects.create(
@@ -1035,8 +1042,6 @@ def _reserve_inventory(*, location, venta: Venta, items: list[dict], registrado_
 
         MovimientoInventario.objects.create(
             producto=item['producto'],
-            location=location,
-            organization=location.organization,
             venta=venta,
             tipo='SALIDA',
             cantidad=-item['cantidad'],
@@ -1044,6 +1049,12 @@ def _reserve_inventory(*, location, venta: Venta, items: list[dict], registrado_
             stock_nuevo=inventory.stock_actual,
             concepto=f'Reserva venta #{venta.id}',
             registrado_por=registrado_por,
+            **build_inventory_movement_scope_fields(
+                producto=item['producto'],
+                venta=venta,
+                location=location,
+                organization=location.organization,
+            ),
         )
 
 
@@ -1092,8 +1103,6 @@ def _restore_inventory(*, venta: Venta, registrado_por):
 
         MovimientoInventario.objects.create(
             producto=item['producto'],
-            location=venta.location,
-            organization=venta.organization,
             venta=venta,
             tipo='ENTRADA',
             cantidad=item['cantidad'],
@@ -1101,6 +1110,12 @@ def _restore_inventory(*, venta: Venta, registrado_por):
             stock_nuevo=inventory.stock_actual,
             concepto=f'Reversion pago fallido venta #{venta.id}',
             registrado_por=registrado_por,
+            **build_inventory_movement_scope_fields(
+                producto=item['producto'],
+                venta=venta,
+                location=venta.location,
+                organization=venta.organization,
+            ),
         )
 
 

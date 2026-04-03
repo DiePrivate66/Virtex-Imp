@@ -233,6 +233,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - el cierre de caja ya se calcula y persiste desde `application.cash_register`; `CajaTurno` ya no concentra el cuadre dentro del modelo
 - las ventas nuevas POS y Web Orders ya construyen tenant, dia operativo, snapshots y compatibilidad de pago desde capa de aplicacion; `Venta.save()` queda reducido a validacion y compatibilidad minima
 - `Categoria`, `Producto` y `Cliente` ya quedan scopeados por `organization`; catalogo, inventario y lookup de clientes POS/PWA ya no se leen como universo global
+- los movimientos de caja e inventario ya construyen `organization` / `location` desde capa de aplicacion; `MovimientoCaja.save()` y `MovimientoInventario.save()` quedan reducidos a validacion de consistencia local
 - las tareas async viven en `pos/infrastructure/tasks`
 - `delivery_tokens.py` y `whatsapp_utils.py` ya fueron retirados; el uso canonico vive en `pos/infrastructure/delivery`, `domain/shared` y `domain/web_orders`
 - WhatsApp/Meta ya entra por `presentation.integrations`, `application.integrations` y `application.notifications`
@@ -315,7 +316,7 @@ La regla actual es simple:
 
 ### 4. Todavia existe logica de negocio relevante dentro de `save()`
 
-Persisten invariantes y defaults criticos en modelos como `CajaTurno` y `Venta`.
+Persisten invariantes y compatibilidad critica en modelos como `Venta`.
 
 Eso tiene un costo:
 
@@ -326,7 +327,7 @@ Eso tiene un costo:
 Direccion de salida:
 
 - mover invariantes complejos a `application/` o servicios de dominio
-- dejar en modelos solo validaciones minimas y consistencia local indispensable
+- dejar en modelos solo validaciones minimas, compatibilidad indispensable y consistencia local
 
 ## Prioridad de Refactor Real
 

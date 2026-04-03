@@ -14,7 +14,9 @@ from django.utils import timezone
 
 from pos.application.cash_register import close_cash_register, get_cash_closing_context, upsert_customer
 from pos.application.cash_register.commands import CashRegisterError, verify_pos_pin
+from pos.application.cash_movements import register_cash_movement
 from pos.application.inventory import get_inventory_panel_context
+from pos.application.inventory import register_inventory_movement
 from pos.application.sales import get_pos_home_context
 from pos.application.sales.commands import (
     PosSaleError,
@@ -44,6 +46,7 @@ from pos.models import (
     LocationAssignment,
     LocationInventory,
     MovimientoCaja,
+    MovimientoInventario,
     Organization,
     OrganizationMembership,
     OutboxEvent,
@@ -176,6 +179,12 @@ class BoscoV2SalesTests(TestCase):
         result = register_sale(self.user, self._payload(client_transaction_id='sale-v2-day'))
 
         self.assertEqual(result.venta.operating_day, self.turno.operating_day)
+
+    def test_sale_registration_persists_operator_snapshot_from_application_layer(self):
+        result = register_sale(self.user, self._payload(client_transaction_id='sale-v2-snapshot'))
+
+        self.assertIsNotNone(result.venta.operator)
+        self.assertEqual(result.venta.operator_display_name_snapshot, result.venta.operator.display_name)
 
     def test_pos_home_context_only_exposes_catalog_for_operator_organization(self):
         other_org = Organization.objects.create(slug='org-catalog-other', name='Org Catalog Other')
@@ -317,6 +326,19 @@ class BoscoV2SalesTests(TestCase):
         inventory_product_ids = set(context['inventarios'].values_list('producto_id', flat=True))
         self.assertIn(self.producto.id, inventory_product_ids)
         self.assertNotIn(other_product.id, inventory_product_ids)
+
+    def test_register_inventory_movement_sets_scope_explicitly(self):
+        register_inventory_movement(
+            producto_id=self.producto.id,
+            tipo='ENTRADA',
+            cantidad_raw=2,
+            concepto='Reposicion',
+            registrado_por=self.user,
+        )
+
+        movement = MovimientoInventario.objects.latest('id')
+        self.assertEqual(movement.organization, self.producto.organization)
+        self.assertIsNone(movement.location)
 
     def test_cannot_confirm_sale_after_reaper_voided_it(self):
         with patch('pos.application.sales.commands._process_payment', side_effect=TimeoutError('gateway timeout')):
@@ -660,6 +682,20 @@ class BoscoV2SalesTests(TestCase):
         self.assertEqual(caja.total_transferencia_sistema, Decimal('0.00'))
         self.assertEqual(caja.total_otros_sistema, Decimal('0.00'))
         self.assertEqual(caja.diferencia, Decimal('1.25'))
+
+    def test_register_cash_movement_sets_scope_and_operator_explicitly(self):
+        register_cash_movement(
+            user=self.user,
+            tipo='INGRESO',
+            concepto='PROPINA',
+            descripcion='Ingreso lateral',
+            monto_raw='3.50',
+        )
+
+        movement = MovimientoCaja.objects.latest('id')
+        self.assertEqual(movement.organization, self.turno.organization)
+        self.assertEqual(movement.location, self.turno.location)
+        self.assertIsNotNone(movement.operator)
 
     def test_close_cash_register_rejects_invalid_cash_count_payload(self):
         with self.assertRaises(CashRegisterError) as exc:

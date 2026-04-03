@@ -5,6 +5,8 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 
+from pos.application.context import ensure_staff_profile_for_user
+from pos.domain.shared import build_cash_movement_scope_fields
 from pos.application.cash_register.queries import get_locked_open_cash_register_for_user
 from pos.models import MovimientoCaja
 
@@ -54,13 +56,22 @@ def register_cash_movement(
     if tipo not in {"INGRESO", "EGRESO"}:
         raise CashMovementError("Tipo de movimiento invalido")
 
+    movement_scope = build_cash_movement_scope_fields(
+        turno=turno,
+        location=turno.location if turno.location_id else None,
+        organization=turno.organization if turno.organization_id else None,
+    )
+    operator = ensure_staff_profile_for_user(user, location=turno.location) if turno.location_id else None
+
     movimiento = MovimientoCaja.objects.create(
         turno=turno,
+        operator=operator,
         tipo=tipo,
         concepto=concepto,
         descripcion=descripcion or "",
         monto=monto,
         registrado_por=user,
+        **movement_scope,
     )
     return CashMovementResult(id=movimiento.id, tipo=movimiento.tipo, monto=movimiento.monto)
 

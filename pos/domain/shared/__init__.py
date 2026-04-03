@@ -1,6 +1,10 @@
 """Shared domain helpers used across Bosco domains."""
 
 from .phones import normalize_phone_to_e164
+from .operational_invariants import (
+    build_cash_movement_scope_fields,
+    build_inventory_movement_scope_fields,
+)
 from .sale_invariants import (
     build_sale_actor_snapshot_fields,
     build_sale_payment_fields,
@@ -8,6 +12,8 @@ from .sale_invariants import (
 )
 
 __all__ = [
+    'build_cash_movement_scope_fields',
+    'build_inventory_movement_scope_fields',
     'build_sale_actor_snapshot_fields',
     'build_sale_payment_fields',
     'build_sale_scope_fields',

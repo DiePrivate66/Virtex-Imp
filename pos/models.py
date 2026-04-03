@@ -12,7 +12,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
-from pos.domain.shared.sale_invariants import build_sale_actor_snapshot_fields, build_sale_payment_fields
+from pos.domain.shared.sale_invariants import build_sale_payment_fields
 from pos.ledger_registry import (
     MIN_SUPPORTED_QUEUE_SCHEMA,
     REGISTRY_VERSION,
@@ -562,18 +562,12 @@ class Venta(models.Model):
             raise ValidationError('La venta no puede apuntar a una sucursal distinta al turno.')
         if self.turno_id and self.organization_id and self.turno.organization_id and self.turno.organization_id != self.organization_id:
             raise ValidationError('La venta no puede apuntar a una organizacion distinta al turno.')
+        if self.cliente_id and self.organization_id and self.cliente.organization_id != self.organization_id:
+            raise ValidationError('La venta no puede referenciar un cliente de otra organizacion.')
 
     def save(self, *args, **kwargs):
         self._sync_payment_compatibility_fields()
         self._validate_scope_consistency()
-        snapshot_fields = build_sale_actor_snapshot_fields(
-            operator=self.operator,
-            supervisor=self.supervisor,
-            operator_display_name_snapshot=self.operator_display_name_snapshot,
-            supervisor_display_name_snapshot=self.supervisor_display_name_snapshot,
-        )
-        self.operator_display_name_snapshot = snapshot_fields['operator_display_name_snapshot']
-        self.supervisor_display_name_snapshot = snapshot_fields['supervisor_display_name_snapshot']
         super().save(*args, **kwargs)
 
     @property
@@ -708,15 +702,14 @@ class MovimientoCaja(models.Model):
         ordering = ['-fecha']
 
     def save(self, *args, **kwargs):
-        if self.turno_id:
-            if not self.location_id and self.turno.location_id:
-                self.location = self.turno.location
-            if not self.organization_id and self.turno.organization_id:
-                self.organization = self.turno.organization
-        if self.location_id and not self.organization_id:
-            self.organization = self.location.organization
+        if self.turno_id and self.location_id and self.turno.location_id and self.turno.location_id != self.location_id:
+            raise ValidationError('El movimiento de caja no puede apuntar a una sucursal distinta al turno.')
+        if self.turno_id and self.organization_id and self.turno.organization_id and self.turno.organization_id != self.organization_id:
+            raise ValidationError('El movimiento de caja no puede pertenecer a una organizacion distinta al turno.')
         if self.location_id and self.organization_id and self.location.organization_id != self.organization_id:
             raise ValidationError('El movimiento de caja no puede pertenecer a otra organizacion.')
+        if self.operator_id and self.organization_id and self.operator.organization.id != self.organization_id:
+            raise ValidationError('El movimiento de caja no puede referenciar un operador de otra organizacion.')
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -768,8 +761,14 @@ class MovimientoInventario(models.Model):
         ordering = ['-fecha']
 
     def save(self, *args, **kwargs):
-        if self.location_id and not self.organization_id:
-            self.organization = self.location.organization
+        if self.location_id and self.organization_id and self.location.organization_id != self.organization_id:
+            raise ValidationError('El movimiento de inventario no puede pertenecer a otra organizacion.')
+        if self.venta_id and self.location_id and self.venta.location_id and self.venta.location_id != self.location_id:
+            raise ValidationError('El movimiento de inventario no puede apuntar a una sucursal distinta a la venta.')
+        if self.venta_id and self.organization_id and self.venta.organization_id and self.venta.organization_id != self.organization_id:
+            raise ValidationError('El movimiento de inventario no puede pertenecer a una organizacion distinta a la venta.')
+        if self.organization_id and self.producto.organization_id != self.organization_id:
+            raise ValidationError('El movimiento de inventario no puede pertenecer a una organizacion distinta al producto.')
         super().save(*args, **kwargs)
 
     def __str__(self):

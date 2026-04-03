@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from pos.application.context import resolve_catalog_organization_for_user
+from pos.domain.shared import build_inventory_movement_scope_fields
 from pos.models import Inventario, MovimientoInventario, Producto
 
 
@@ -54,6 +55,11 @@ def register_inventory_movement(*, producto_id, tipo, cantidad_raw, concepto, re
 
     inventario.save()
 
+    movement_scope = build_inventory_movement_scope_fields(
+        producto=producto,
+        organization=organization,
+    )
+
     MovimientoInventario.objects.create(
         producto=producto,
         tipo=tipo,
@@ -62,6 +68,7 @@ def register_inventory_movement(*, producto_id, tipo, cantidad_raw, concepto, re
         stock_nuevo=inventario.stock_actual,
         concepto=concepto or '',
         registrado_por=registrado_por,
+        **movement_scope,
     )
 
     return InventoryMovementResult(
