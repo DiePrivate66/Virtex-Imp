@@ -25,6 +25,11 @@ from pos.application.cash_register import (
 )
 from pos.application.context import ensure_staff_profile_for_user, resolve_location_for_user
 from pos.application.notifications import ResendEmailError, send_resend_email
+from pos.domain.shared.sale_invariants import (
+    build_sale_actor_snapshot_fields,
+    build_sale_payment_fields,
+    build_sale_scope_fields,
+)
 from pos.infrastructure.tasks import process_outbox_event
 from pos.models import (
     AccountingAdjustment,
@@ -33,6 +38,7 @@ from pos.models import (
     DetalleVenta,
     IdempotencyRecord,
     Inventario,
+    V2_TO_LEGACY_PAYMENT_STATUS,
     LocationInventory,
     MovimientoCaja,
     MovimientoInventario,
@@ -637,8 +643,6 @@ def _reserve_sale(
         venta = Venta.objects.create(
             cliente_nombre=data.get('cliente_nombre', 'CONSUMIDOR FINAL'),
             cliente=cliente,
-            metodo_pago=metodo_pago,
-            referencia_pago=referencia_pago,
             tarjeta_tipo=tarjeta_tipo,
             tarjeta_marca=tarjeta_marca,
             total=total_venta,
@@ -647,14 +651,27 @@ def _reserve_sale(
             tipo_pedido=data.get('tipo_pedido', 'SERVIR'),
             monto_recibido=_parse_decimal(data.get('monto_recibido', 0)),
             turno=turno,
-            organization=location.organization,
-            location=location,
             operator=operator,
-            operating_day=turno.operating_day,
             client_transaction_id=client_transaction_id,
-            payment_status=Venta.PaymentStatus.PENDING,
-            payment_method_type=metodo_pago,
-            payment_reference=referencia_pago,
+            **build_sale_scope_fields(
+                turno=turno,
+                location=location,
+                organization=location.organization,
+                operating_day=turno.operating_day,
+                timestamp=timezone.now(),
+                compute_operating_day_fn=compute_operating_day,
+            ),
+            **build_sale_payment_fields(
+                payment_status=Venta.PaymentStatus.PENDING,
+                metodo_pago=metodo_pago,
+                referencia_pago=referencia_pago,
+                valid_payment_statuses=Venta.PaymentStatus.values,
+                payment_methods=Venta.METODOS,
+                legacy_to_v2_map={},
+                v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
+                default_payment_status=Venta.PaymentStatus.PAID,
+            ),
+            **build_sale_actor_snapshot_fields(operator=operator),
         )
 
         for item in validated_items:

@@ -17,14 +17,14 @@ from django.test.client import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from .application.web_orders import WebOrderError
+from .application.web_orders import WebOrderError, create_web_order
 from .application.sales.commands import send_sale_receipt_email
 from .infrastructure.delivery import (
     make_delivery_claim_token,
     make_delivery_delivered_token,
     make_delivery_in_transit_token,
 )
-from .models import DeliveryQuote, Empleado, PrintJob, Venta, WhatsAppConversation, WhatsAppMessageLog
+from .models import Categoria, DeliveryQuote, Empleado, Location, PrintJob, Producto, Venta, WhatsAppConversation, WhatsAppMessageLog
 from .presentation.api.web_order_requests import parse_web_order_request
 from .tasks import (
     process_customer_confirmation,
@@ -190,6 +190,37 @@ class DeliveryQuoteRuleTests(TestCase):
 
         self.assertEqual(res.get('processed'), 1)
         self.assertEqual(venta.estado, 'PENDIENTE_COTIZACION')
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True, SECURE_SSL_REDIRECT=False)
+class WebOrderCreationInvariantsTests(TestCase):
+    def test_create_web_order_sets_scope_and_operating_day_explicitly(self):
+        location = Location.get_or_create_default()
+        categoria = Categoria.objects.create(nombre='Hamburguesas', organization=location.organization)
+        producto = Producto.objects.create(
+            categoria=categoria,
+            organization=location.organization,
+            nombre='Bosco Burger',
+            precio=Decimal('8.50'),
+            activo=True,
+        )
+
+        venta = create_web_order(
+            {
+                'nombre': 'Cliente Web',
+                'telefono': '0991234567',
+                'direccion': 'Av. Central',
+                'metodo_pago': 'EFECTIVO',
+                'tipo_pedido': 'DOMICILIO',
+                'carrito': [{'id': producto.id, 'cantidad': 2, 'nombre': producto.nombre, 'nota': ''}],
+            }
+        )
+
+        self.assertEqual(venta.location, location)
+        self.assertEqual(venta.organization, location.organization)
+        self.assertIsNotNone(venta.operating_day)
+        self.assertEqual(venta.payment_status, Venta.PaymentStatus.PAID)
+        self.assertEqual(venta.estado_pago, 'APROBADO')
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, SECURE_SSL_REDIRECT=False)

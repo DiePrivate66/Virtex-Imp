@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from pos.application.context import get_default_catalog_organization
 from pos.domain.shared import normalize_phone_to_e164
+from pos.domain.shared.sale_invariants import build_sale_payment_fields, build_sale_scope_fields
 from pos.domain.web_orders import (
     QUOTE_EDITABLE_STATUSES,
     STATUS_CANCELLED,
@@ -19,7 +20,7 @@ from pos.domain.web_orders import (
     can_transition,
 )
 from pos.infrastructure.tasks import process_delivery_quote_timeout, send_delivery_quote_requests
-from pos.models import CajaTurno, Cliente, DetalleVenta, Producto, Venta, WhatsAppConversation
+from pos.models import CajaTurno, Cliente, DetalleVenta, Location, Producto, V2_TO_LEGACY_PAYMENT_STATUS, Venta, WhatsAppConversation, compute_operating_day
 
 
 class WebOrderError(Exception):
@@ -135,6 +136,14 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
 
     customer = _resolve_customer(data)
     cash_register = CajaTurno.objects.filter(fecha_cierre__isnull=True).first()
+    sale_scope = build_sale_scope_fields(
+        turno=cash_register,
+        location=cash_register.location if cash_register and cash_register.location_id else None,
+        organization=cash_register.organization if cash_register and cash_register.organization_id else None,
+        timestamp=timezone.now(),
+        default_location_getter=Location.get_or_create_default,
+        compute_operating_day_fn=compute_operating_day,
+    )
     order_type = data.get('tipo_pedido', 'DOMICILIO')
     initial_status = STATUS_PENDING_QUOTE if order_type == 'DOMICILIO' else 'PENDIENTE'
 
@@ -152,7 +161,6 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
             direccion_envio=data.get('direccion', ''),
             ubicacion_lat=float(lat) if lat else None,
             ubicacion_lng=float(lng) if lng else None,
-            metodo_pago=data.get('metodo_pago', 'EFECTIVO'),
             tipo_pedido=order_type,
             total=total,
             monto_recibido=total if data.get('metodo_pago') == 'TRANSFERENCIA' else Decimal('0.00'),
@@ -165,6 +173,17 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
                 timezone.now() + timedelta(seconds=settings.DELIVERY_QUOTE_TIMEOUT_SECONDS)
                 if order_type == 'DOMICILIO'
                 else None
+            ),
+            **sale_scope,
+            **build_sale_payment_fields(
+                payment_status=Venta.PaymentStatus.PAID,
+                metodo_pago=data.get('metodo_pago', 'EFECTIVO'),
+                referencia_pago=data.get('referencia_pago', ''),
+                valid_payment_statuses=Venta.PaymentStatus.values,
+                payment_methods=Venta.METODOS,
+                legacy_to_v2_map={},
+                v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
+                default_payment_status=Venta.PaymentStatus.PAID,
             ),
         )
 

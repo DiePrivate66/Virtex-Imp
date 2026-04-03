@@ -12,6 +12,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
+from pos.domain.shared.sale_invariants import build_sale_actor_snapshot_fields, build_sale_payment_fields
 from pos.ledger_registry import (
     MIN_SUPPORTED_QUEUE_SCHEMA,
     REGISTRY_VERSION,
@@ -526,69 +527,46 @@ class Venta(models.Model):
         related_name='pedidos_asignados', help_text='Repartidor que tomo el pedido',
     )
 
-    def _resolve_authoritative_payment_status(self) -> str:
-        status = str(self.payment_status or '').strip().upper()
-        if status:
-            if status not in self.PaymentStatus.values:
-                raise ValidationError('payment_status invalido para la venta.')
-            return status
-        legacy_status = str(self.estado_pago or '').strip().upper()
-        return LEGACY_TO_V2_PAYMENT_STATUS.get(legacy_status, self.PaymentStatus.PAID)
-
     def _sync_payment_compatibility_fields(self):
-        # payment_status is the canonical field. Legacy fields are kept in sync
-        # only for compatibility with older reads and prints.
-        self.payment_status = self._resolve_authoritative_payment_status()
-        self.estado_pago = V2_TO_LEGACY_PAYMENT_STATUS.get(self.payment_status, self.estado_pago)
+        payment_fields = build_sale_payment_fields(
+            payment_status=self.payment_status,
+            estado_pago=self.estado_pago,
+            payment_method_type=self.payment_method_type,
+            metodo_pago=self.metodo_pago,
+            payment_reference=self.payment_reference,
+            referencia_pago=self.referencia_pago,
+            valid_payment_statuses=self.PaymentStatus.values,
+            payment_methods=self.METODOS,
+            legacy_to_v2_map=LEGACY_TO_V2_PAYMENT_STATUS,
+            v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
+            default_payment_status=self.PaymentStatus.PAID,
+        )
+        self.payment_status = payment_fields['payment_status']
+        self.estado_pago = payment_fields['estado_pago']
+        self.payment_method_type = payment_fields['payment_method_type']
+        self.metodo_pago = payment_fields['metodo_pago']
+        self.payment_reference = payment_fields['payment_reference']
+        self.referencia_pago = payment_fields['referencia_pago']
 
-        payment_method_type = str(self.payment_method_type or self.metodo_pago or '').strip().upper()
-        if payment_method_type:
-            self.payment_method_type = payment_method_type
-            if payment_method_type in dict(self.METODOS):
-                self.metodo_pago = payment_method_type
-
-        payment_reference = str(self.payment_reference or self.referencia_pago or '').strip()
-        if payment_reference:
-            self.payment_reference = payment_reference[:80]
-            self.referencia_pago = payment_reference[:40]
-
-    def _apply_tenant_defaults(self):
-        if self.turno_id:
-            if not self.location_id and self.turno.location_id:
-                self.location = self.turno.location
-            if not self.organization_id and self.turno.organization_id:
-                self.organization = self.turno.organization
-            if not self.operating_day and self.turno.operating_day:
-                self.operating_day = self.turno.operating_day
-        if self.location_id and not self.organization_id:
-            self.organization = self.location.organization
-        if not self.location_id and self.turno_id is None:
-            self.location = Location.get_or_create_default()
-        if self.location_id and not self.organization_id:
-            self.organization = self.location.organization
+    def _validate_scope_consistency(self):
         if self.location_id and self.organization_id and self.location.organization_id != self.organization_id:
             raise ValidationError('La venta no puede pertenecer a una organizacion distinta a la de la sucursal.')
         if self.turno_id and self.location_id and self.turno.location_id and self.turno.location_id != self.location_id:
             raise ValidationError('La venta no puede apuntar a una sucursal distinta al turno.')
         if self.turno_id and self.organization_id and self.turno.organization_id and self.turno.organization_id != self.organization_id:
             raise ValidationError('La venta no puede apuntar a una organizacion distinta al turno.')
-        if not self.operating_day:
-            if self.turno_id and self.turno.operating_day:
-                self.operating_day = self.turno.operating_day
-            elif self.location_id:
-                self.operating_day = compute_operating_day(
-                    timestamp=self.fecha or timezone.now(),
-                    timezone_name=self.location.timezone,
-                    operating_day_ends_at=self.location.operating_day_ends_at,
-                )
-        self._sync_payment_compatibility_fields()
-        if self.operator_id and not self.operator_display_name_snapshot:
-            self.operator_display_name_snapshot = self.operator.display_name
-        if self.supervisor_id and not self.supervisor_display_name_snapshot:
-            self.supervisor_display_name_snapshot = self.supervisor.display_name
 
     def save(self, *args, **kwargs):
-        self._apply_tenant_defaults()
+        self._sync_payment_compatibility_fields()
+        self._validate_scope_consistency()
+        snapshot_fields = build_sale_actor_snapshot_fields(
+            operator=self.operator,
+            supervisor=self.supervisor,
+            operator_display_name_snapshot=self.operator_display_name_snapshot,
+            supervisor_display_name_snapshot=self.supervisor_display_name_snapshot,
+        )
+        self.operator_display_name_snapshot = snapshot_fields['operator_display_name_snapshot']
+        self.supervisor_display_name_snapshot = snapshot_fields['supervisor_display_name_snapshot']
         super().save(*args, **kwargs)
 
     @property
