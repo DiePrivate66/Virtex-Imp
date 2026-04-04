@@ -236,6 +236,8 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - `Venta` ya expone dos cronologias separadas: `operated_at_normalized` para lectura operativa y `accounting_booked_at` para cierre contable y registro real en servidor
 - cuando una venta replayada cae en un dia operativo distinto del dia contable actual, el backend ya emite `sale.post_close_replay_alert` en `AuditLog`
 - el backend ya aplica admision explicita a trafico `X-POS-Replay: 1` en mutaciones POS, con lanes `normal` / `cold`, `429`, `Retry-After`, `scope` y `reason`
+- `AccountingAdjustment` ya asigna `contingency_shard_id` en servidor y cada organizacion mantiene `OrganizationLedgerState` + `OrganizationLedgerCounterShard` para repartir ajustes abiertos sin fila unica caliente
+- ya existe reconciliacion secuencial por organizacion para shards contables via `application.accounting` y `manage.py reconcile_ledger_shards`
 - `DetalleVenta` ya no calcula precios ni subtotales en `save()`; POS y Web Orders construyen el payload completo del detalle desde capa de aplicacion
 - `Categoria`, `Producto` y `Cliente` ya quedan scopeados por `organization`; catalogo, inventario y lookup de clientes POS/PWA ya no se leen como universo global
 - los movimientos de caja e inventario ya construyen `organization` / `location` desde capa de aplicacion; `MovimientoCaja.save()` y `MovimientoInventario.save()` quedan reducidos a validacion de consistencia local
@@ -355,6 +357,7 @@ La deuda abierta ya no es el formato ni la validacion, sino la integracion opera
 - aun no existe el writer Electron real que use este journal desde worker/proceso separado
 - aun no existe UI de limbo conectada a este sidecar ni journal-only mode real en cliente
 - aun no existe replay gateway dedicado con TTL total, idle timeout y draining cooperativo reales; hoy solo existe admision server-side en Django
+- `shard_count` queda fijo por organizacion en Fase 1; no existe rebalance online ni lectura multi-era de shards
 
 ## Prioridad de Refactor Real
 

@@ -12,6 +12,7 @@ This guide covers the server-side operational foundation already implemented in 
 - operational preflight checks
 - Django-side replay admission for `X-POS-Replay: 1`
 - Python reference primitives for the offline JSONL journal, `.snapshot` sidecar, reseal, and valid-prefix recovery
+- organization-scoped ledger shards for open accounting adjustments
 
 It does **not** cover the future Electron offline runtime integration, LAN sync, or a dedicated replay gateway with idle-timeout/draining semantics. Those are still pending implementation.
 
@@ -115,6 +116,18 @@ Machine-readable output:
 python manage.py ops_preflight --json
 ```
 
+Rebuild accounting shards for one organization:
+
+```powershell
+python manage.py reconcile_ledger_shards --organization-slug legacy-default --json
+```
+
+Rebuild accounting shards for every organization:
+
+```powershell
+python manage.py reconcile_ledger_shards --json
+```
+
 ## Recommended Deploy Sequence
 
 For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:
@@ -146,6 +159,7 @@ If `ops_preflight` reports a lockfile mismatch or activation mismatch, do **not*
 - stale idempotency rows
 - outbox backlog and blocked critical events
 - unresolved payment exceptions and open refund liabilities
+- ledger shard state and counter rows are still repaired through `reconcile_ledger_shards`; they are not yet auto-checked by `ops_preflight`
 - delivery pool availability
 - pending delivery quote backlog
 - print job backlog
@@ -251,6 +265,23 @@ Action:
 1. Open the analytics dashboard.
 2. Resolve the payment exception or accounting adjustment.
 3. Do not close the operational loop by hand without an audit note.
+
+### `reconcile_ledger_shards`
+
+This command recalculates `OrganizationLedgerCounterShard` from open `AccountingAdjustment` rows, organization by organization.
+
+Use it when:
+
+- a direct `QuerySet.update()` bypassed model counter sync
+- an interrupted deploy left shard counters suspicious
+- you need to re-tag historical adjustments after a shard drift incident
+
+Current guarantees:
+
+- deterministic `contingency_shard_id` from `adjustment_uid`
+- sequential reconciliation ordered by `effective_at, id`
+- best-effort advisory lock on PostgreSQL per organization
+- no online shard rebalance in Fase 1
 
 ## Incident Notes
 

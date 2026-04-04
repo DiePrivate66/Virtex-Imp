@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
+import hashlib
 import uuid
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -24,6 +25,8 @@ from pos.ledger_registry import (
 
 DEFAULT_LOCATION_TIMEZONE = 'America/Guayaquil'
 DEFAULT_OPERATING_DAY_ENDS_AT = time(hour=4, minute=0)
+DEFAULT_LEDGER_SHARD_COUNT = 16
+ALLOWED_LEDGER_SHARD_COUNTS = (4, 8, 16, 32)
 
 LEGACY_TO_V2_PAYMENT_STATUS = {
     'PENDIENTE': 'PENDING',
@@ -1146,6 +1149,65 @@ class LedgerAccount(models.Model):
         return f'{self.code} - {self.name}'
 
 
+class OrganizationLedgerState(models.Model):
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='ledger_state',
+    )
+    shard_count = models.PositiveSmallIntegerField(default=DEFAULT_LEDGER_SHARD_COUNT)
+    last_reconciled_at = models.DateTimeField(null=True, blank=True)
+    last_reconciled_adjustment_id = models.BigIntegerField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['organization__name']
+
+    def clean(self):
+        if self.shard_count not in ALLOWED_LEDGER_SHARD_COUNTS:
+            raise ValidationError(
+                {'shard_count': f'shard_count debe estar en {ALLOWED_LEDGER_SHARD_COUNTS}.'}
+            )
+
+        if not self.pk:
+            return
+
+        previous = OrganizationLedgerState.objects.filter(pk=self.pk).only('shard_count').first()
+        if previous and previous.shard_count != self.shard_count:
+            raise ValidationError('No se permite cambiar shard_count de una organizacion ya activada en Fase 1.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.organization.name} / shards={self.shard_count}'
+
+
+class OrganizationLedgerCounterShard(models.Model):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='ledger_counter_shards',
+    )
+    shard_id = models.PositiveSmallIntegerField()
+    open_adjustment_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    open_adjustment_count = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['organization__name', 'shard_id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['organization', 'shard_id'],
+                name='uq_org_ledger_counter_shard',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.organization.name} / shard {self.shard_id}'
+
+
 class AccountingAdjustment(models.Model):
     class AdjustmentType(models.TextChoices):
         ORPHAN_PAYMENT_UNIDENTIFIED = 'ORPHAN_PAYMENT_UNIDENTIFIED', 'Pago huerfano por identificar'
@@ -1167,6 +1229,7 @@ class AccountingAdjustment(models.Model):
     organization = models.ForeignKey(
         Organization, on_delete=models.PROTECT, related_name='accounting_adjustments'
     )
+    adjustment_uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     location = models.ForeignKey(
         Location, on_delete=models.PROTECT, null=True, blank=True, related_name='accounting_adjustments'
     )
@@ -1197,6 +1260,7 @@ class AccountingAdjustment(models.Model):
     external_reference = models.CharField(max_length=80, blank=True)
     note = models.CharField(max_length=255, blank=True)
     correlation_id = models.CharField(max_length=64, blank=True, db_index=True)
+    contingency_shard_id = models.PositiveSmallIntegerField(null=True, blank=True, db_index=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -1209,12 +1273,190 @@ class AccountingAdjustment(models.Model):
 
     class Meta:
         ordering = ['-effective_at', '-created_at']
+        indexes = [
+            models.Index(
+                fields=['organization', 'status', 'contingency_shard_id'],
+                name='idx_adj_org_status_shard',
+            ),
+        ]
+
+    @staticmethod
+    def _expand_counter_update_fields(update_fields):
+        if update_fields is None:
+            return None
+
+        expanded = set(update_fields)
+        counter_related_fields = {
+            'status',
+            'amount',
+            'contingency_shard_id',
+            'adjustment_uid',
+        }
+        if expanded & counter_related_fields:
+            expanded.update(counter_related_fields)
+        return list(expanded)
+
+    def clean(self):
+        if self.location_id and self.organization_id and self.location.organization_id != self.organization_id:
+            raise ValidationError('El ajuste no puede pertenecer a una sucursal de otra organizacion.')
+        if self.sale_id and self.organization_id and self.sale.organization_id != self.organization_id:
+            raise ValidationError('El ajuste no puede apuntar a una venta de otra organizacion.')
+        if self.source_audit_log_id and self.organization_id and self.source_audit_log.organization_id != self.organization_id:
+            raise ValidationError('El ajuste no puede apuntar a un audit log de otra organizacion.')
+        if self.source_account_id and self.organization_id and self.source_account.organization_id != self.organization_id:
+            raise ValidationError('La cuenta origen debe pertenecer a la misma organizacion del ajuste.')
+        if self.destination_account_id and self.organization_id and self.destination_account.organization_id != self.organization_id:
+            raise ValidationError('La cuenta destino debe pertenecer a la misma organizacion del ajuste.')
+        if self.contingency_shard_id is not None and self.organization_id:
+            state = ensure_organization_ledger_state(organization=self.organization)
+            if self.contingency_shard_id < 0 or self.contingency_shard_id >= state.shard_count:
+                raise ValidationError('El contingency_shard_id no es valido para la configuracion actual.')
+
+        if not self.pk:
+            return
+
+        previous = AccountingAdjustment.objects.filter(pk=self.pk).only('organization_id').first()
+        if previous and previous.organization_id != self.organization_id:
+            raise ValidationError('La organizacion del ajuste es inmutable.')
+
+    def save(self, *args, **kwargs):
+        previous = None
+        if self.pk:
+            previous = (
+                AccountingAdjustment.objects.filter(pk=self.pk)
+                .values('status', 'amount', 'contingency_shard_id', 'organization_id')
+                .first()
+            )
+
+        if self.organization_id and self.contingency_shard_id is None:
+            state = ensure_organization_ledger_state(organization=self.organization)
+            self.contingency_shard_id = compute_contingency_shard_id(
+                adjustment_key=self.adjustment_uid.hex,
+                shard_count=state.shard_count,
+            )
+
+        self.clean()
+        kwargs['update_fields'] = self._expand_counter_update_fields(kwargs.get('update_fields'))
+        super().save(*args, **kwargs)
+
+        if self.organization_id and self.contingency_shard_id is not None:
+            sync_accounting_adjustment_shard_counters(
+                organization=self.organization,
+                previous_status=previous['status'] if previous else None,
+                previous_amount=previous['amount'] if previous else None,
+                previous_shard_id=previous['contingency_shard_id'] if previous else None,
+                current_status=self.status,
+                current_amount=self.amount,
+                current_shard_id=self.contingency_shard_id,
+            )
 
     def get_source_account_display(self):
         return self.source_account.name if self.source_account_id else ''
 
     def get_destination_account_display(self):
         return self.destination_account.name if self.destination_account_id else ''
+
+
+def compute_contingency_shard_id(*, adjustment_key: str, shard_count: int) -> int:
+    normalized_shard_count = int(shard_count or DEFAULT_LEDGER_SHARD_COUNT)
+    if normalized_shard_count not in ALLOWED_LEDGER_SHARD_COUNTS:
+        raise ValidationError(f'shard_count debe estar en {ALLOWED_LEDGER_SHARD_COUNTS}.')
+    digest = hashlib.sha256(str(adjustment_key or '').encode('utf-8')).digest()
+    return int.from_bytes(digest[:8], byteorder='big', signed=False) % normalized_shard_count
+
+
+def ensure_organization_ledger_state(*, organization: Organization) -> OrganizationLedgerState:
+    state, _ = OrganizationLedgerState.objects.get_or_create(
+        organization=organization,
+        defaults={'shard_count': DEFAULT_LEDGER_SHARD_COUNT},
+    )
+    state.clean()
+    existing_shard_ids = set(
+        OrganizationLedgerCounterShard.objects.filter(organization=organization).values_list('shard_id', flat=True)
+    )
+    missing_rows = [
+        OrganizationLedgerCounterShard(organization=organization, shard_id=shard_id)
+        for shard_id in range(state.shard_count)
+        if shard_id not in existing_shard_ids
+    ]
+    if missing_rows:
+        OrganizationLedgerCounterShard.objects.bulk_create(missing_rows)
+    return state
+
+
+def sync_accounting_adjustment_shard_counters(
+    *,
+    organization: Organization,
+    previous_status: str | None,
+    previous_amount,
+    previous_shard_id: int | None,
+    current_status: str,
+    current_amount,
+    current_shard_id: int | None,
+) -> None:
+    state = ensure_organization_ledger_state(organization=organization)
+    zero = Decimal('0.00')
+    previous_open_amount = Decimal(previous_amount or zero) if previous_status == AccountingAdjustment.Status.OPEN else zero
+    current_open_amount = Decimal(current_amount or zero) if current_status == AccountingAdjustment.Status.OPEN else zero
+    previous_open_count = 1 if previous_status == AccountingAdjustment.Status.OPEN and previous_shard_id is not None else 0
+    current_open_count = 1 if current_status == AccountingAdjustment.Status.OPEN and current_shard_id is not None else 0
+
+    if previous_shard_id is None and current_shard_id is None:
+        return
+
+    list(
+        OrganizationLedgerCounterShard.objects.select_for_update().filter(
+            organization=organization,
+            shard_id__in=[shard_id for shard_id in (previous_shard_id, current_shard_id) if shard_id is not None],
+        )
+    )
+
+    if previous_shard_id == current_shard_id and previous_shard_id is not None:
+        amount_delta = current_open_amount - previous_open_amount
+        count_delta = current_open_count - previous_open_count
+        if amount_delta == zero and count_delta == 0:
+            return
+        OrganizationLedgerCounterShard.objects.filter(
+            organization=organization,
+            shard_id=previous_shard_id,
+        ).update(
+            open_adjustment_total=models.F('open_adjustment_total') + amount_delta,
+            open_adjustment_count=models.F('open_adjustment_count') + count_delta,
+            updated_at=timezone.now(),
+        )
+        return
+
+    if previous_shard_id is not None and previous_open_count:
+        OrganizationLedgerCounterShard.objects.filter(
+            organization=organization,
+            shard_id=previous_shard_id,
+        ).update(
+            open_adjustment_total=models.F('open_adjustment_total') - previous_open_amount,
+            open_adjustment_count=models.F('open_adjustment_count') - previous_open_count,
+            updated_at=timezone.now(),
+        )
+
+    if current_shard_id is not None and current_open_count:
+        if current_shard_id >= state.shard_count:
+            raise ValidationError('El shard actual no existe para la organizacion indicada.')
+        OrganizationLedgerCounterShard.objects.filter(
+            organization=organization,
+            shard_id=current_shard_id,
+        ).update(
+            open_adjustment_total=models.F('open_adjustment_total') + current_open_amount,
+            open_adjustment_count=models.F('open_adjustment_count') + current_open_count,
+            updated_at=timezone.now(),
+        )
+
+
+def get_open_accounting_adjustment_total(*, organization: Organization) -> Decimal:
+    ensure_organization_ledger_state(organization=organization)
+    total = (
+        OrganizationLedgerCounterShard.objects.filter(organization=organization)
+        .aggregate(total=Sum('open_adjustment_total'))
+        .get('total')
+    )
+    return Decimal(total or '0.00')
 
 
 SYSTEM_LEDGER_ACCOUNT_DEFAULTS = {
