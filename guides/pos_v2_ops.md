@@ -175,6 +175,14 @@ Tune how far back `ops_preflight` scans recent journal origins:
 OPS_PREFLIGHT_OFFLINE_CAPTURE_LOOKBACK_HOURS=24
 ```
 
+Append a canonical envelope to the offline journal using the shared writer harness:
+
+```powershell
+python manage.py offline_writer D:\\bosco-offline --stream sales --envelope-json "{\"event_id\":\"sale-001\",\"journal_event_type\":\"sale\",\"client_transaction_id\":\"sale-001\",\"payload\":{\"sale_total\":\"12.50\",\"payment_status\":\"PAID\",\"journal_capture_source\":\"client_runtime_harness\",\"sale_origin\":\"POS\"}}" --json
+```
+
+The same command also accepts `--envelope-file <path>` or JSON through `stdin`.
+
 ## Recommended Deploy Sequence
 
 For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:

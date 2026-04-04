@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import logging
-import os
 from pathlib import Path
-from typing import Iterator
 
 from django.conf import settings
 from django.utils import timezone
 
-from pos.infrastructure.offline import OfflineJournalRuntimeConfig, SegmentedJournalRuntime
+from pos.infrastructure.offline import (
+    OfflineJournalEnvelope,
+    OfflineJournalRuntimeConfig,
+    append_offline_journal_envelope,
+)
 from pos.models import Venta
 
 
@@ -33,10 +34,11 @@ def capture_paid_sale_to_offline_journal(
         return
 
     try:
-        runtime = _build_runtime()
-        with _journal_runtime_lock(runtime.config.root_dir, runtime.config.stream_name):
-            runtime.append_sale_event(
+        append_offline_journal_envelope(
+            config=_build_runtime_config(),
+            envelope=OfflineJournalEnvelope(
                 event_id=_build_event_id(venta=venta, capture_event_type=capture_event_type),
+                journal_event_type='sale',
                 payload=_build_sale_payload(
                     venta=venta,
                     capture_event_type=capture_event_type,
@@ -47,7 +49,8 @@ def capture_paid_sale_to_offline_journal(
                 session_seq_no=venta.session_seq_no,
                 client_created_at_raw=venta.client_created_at_raw,
                 client_monotonic_ms=venta.client_monotonic_ms,
-            )
+            ),
+        )
     except Exception:
         logger.exception('No se pudo capturar venta pagada #%s en offline journal', venta_id)
 
@@ -70,7 +73,6 @@ def capture_sale_lifecycle_to_offline_journal(
         return
 
     try:
-        runtime = _build_runtime()
         payload = _build_sale_payload(
             venta=venta,
             capture_event_type=capture_event_type,
@@ -78,16 +80,19 @@ def capture_sale_lifecycle_to_offline_journal(
         )
         if reason:
             payload['failure_reason'] = reason[:255]
-        with _journal_runtime_lock(runtime.config.root_dir, runtime.config.stream_name):
-            runtime.append_lifecycle_event(
+        append_offline_journal_envelope(
+            config=_build_runtime_config(),
+            envelope=OfflineJournalEnvelope(
                 event_id=_build_event_id(venta=venta, capture_event_type=capture_event_type),
+                journal_event_type='lifecycle',
                 payload=payload,
                 client_transaction_id=venta.client_transaction_id,
                 queue_session_id=venta.queue_session_id,
                 session_seq_no=venta.session_seq_no,
                 client_created_at_raw=venta.client_created_at_raw,
                 client_monotonic_ms=venta.client_monotonic_ms,
-            )
+            ),
+        )
     except Exception:
         logger.exception('No se pudo capturar lifecycle de venta #%s en offline journal', venta_id)
 
@@ -100,14 +105,12 @@ def _offline_capture_enabled() -> bool:
     )
 
 
-def _build_runtime() -> SegmentedJournalRuntime:
-    return SegmentedJournalRuntime(
-        config=OfflineJournalRuntimeConfig(
-            root_dir=Path(getattr(settings, 'OFFLINE_JOURNAL_ROOT', '')),
-            stream_name=getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales'),
-            segment_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
-            limbo_recent_limit=getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50),
-        )
+def _build_runtime_config() -> OfflineJournalRuntimeConfig:
+    return OfflineJournalRuntimeConfig(
+        root_dir=Path(getattr(settings, 'OFFLINE_JOURNAL_ROOT', '')),
+        stream_name=getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales'),
+        segment_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
+        limbo_recent_limit=getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50),
     )
 
 
@@ -147,45 +150,3 @@ def _build_sale_payload(*, venta: Venta, capture_event_type: str, capture_source
         'operated_at_normalized': venta.operated_at_normalized.isoformat() if venta.operated_at_normalized else '',
         'accounting_booked_at': venta.accounting_booked_at.isoformat() if venta.accounting_booked_at else '',
     }
-
-
-@contextmanager
-def _journal_runtime_lock(root_dir: Path, stream_name: str) -> Iterator[None]:
-    lock_path = root_dir / f'.{stream_name}.capture.lock'
-    root_dir.mkdir(parents=True, exist_ok=True)
-    with lock_path.open('a+b') as handle:
-        handle.seek(0, os.SEEK_END)
-        if handle.tell() == 0:
-            handle.write(b'0')
-            handle.flush()
-        handle.seek(0)
-        _acquire_file_lock(handle)
-        try:
-            yield
-        finally:
-            _release_file_lock(handle)
-
-
-def _acquire_file_lock(handle) -> None:
-    if os.name == 'nt':
-        import msvcrt
-
-        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        return
-
-    import fcntl
-
-    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-
-
-def _release_file_lock(handle) -> None:
-    if os.name == 'nt':
-        import msvcrt
-
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        return
-
-    import fcntl
-
-    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
