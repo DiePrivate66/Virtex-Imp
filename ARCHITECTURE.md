@@ -258,7 +258,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - `pos/services.py`, `pos.views`, `pos.views_integrations`, `whatsapp_service.py`, `telegram_service.py`, `delivery_tokens.py` y `whatsapp_utils.py` ya fueron retirados; las fachadas canonicas viven en `application.notifications`, `presentation.*`, `infrastructure.delivery` y `domain/shared`
 - `pos/tasks.py` ya quedo clasificado como alias operativo de Celery: es delgado, pero no se puede retirar hasta migrar nombres de tareas y beat schedule
 - `pos/legacy.py` ya mantiene el mapa central de import paths legacy -> destino canonico para guiar futuras eliminaciones
-- `ops_preflight` ya cubre no solo WhatsApp/printing sino tambien ledger registry, cuentas de sistema, outbox, pagos pendientes, drift de shards contables y drift operativo de replay
+- `ops_preflight` ya cubre no solo WhatsApp/printing sino tambien ledger registry, replay gateway externo, cuentas de sistema, outbox, pagos pendientes, drift de shards contables y drift operativo de replay
 
 Zonas todavia a seguir limpiando:
 

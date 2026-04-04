@@ -711,6 +711,15 @@ class PosReplayAdmissionApiTests(TestCase):
     CELERY_TASK_ALWAYS_EAGER=True,
     REDIS_URL='redis://fake:6379/0',
     SECURE_SSL_REDIRECT=False,
+    REPLAY_GATEWAY_ENABLED=True,
+    REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS=10,
+    REPLAY_GATEWAY_IDLE_TIMEOUT_SECONDS=5,
+    REPLAY_GATEWAY_UPSTREAM_TIMEOUT_SECONDS=120,
+    REPLAY_GATEWAY_UPSTREAM_PORT=18000,
+    REPLAY_GATEWAY_COLD_LANE_HOURS=48,
+    REPLAY_GATEWAY_COLD_LANE_SLOTS=2,
+    REPLAY_GATEWAY_COLD_SLICE_SECONDS=120,
+    REPLAY_GATEWAY_WAITER_TTL_SECONDS=30,
 )
 class OpsPreflightCommandTests(TestCase):
     @patch('pos.management.commands.ops_preflight.Command._check_redis')
@@ -741,6 +750,7 @@ class OpsPreflightCommandTests(TestCase):
         self.assertIn('system_ledger_accounts', check_names)
         self.assertIn('outbox_backlog', check_names)
         self.assertIn('payment_exceptions_backlog', check_names)
+        self.assertIn('replay_gateway', check_names)
         self.assertIn('ledger_shards', check_names)
         self.assertIn('operational_drift', check_names)
 
@@ -786,6 +796,34 @@ class OpsPreflightCommandTests(TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.level, 'error')
         self.assertIn('fallo chequeando DB', result.detail)
+
+    def test_ops_preflight_replay_gateway_detects_invalid_timeout_ordering(self):
+        from pos.management.commands.ops_preflight import Command
+
+        command = Command()
+        with override_settings(
+            REPLAY_GATEWAY_ENABLED=True,
+            REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS=5,
+            REPLAY_GATEWAY_IDLE_TIMEOUT_SECONDS=7,
+            REPLAY_GATEWAY_UPSTREAM_TIMEOUT_SECONDS=4,
+        ):
+            result = command._check_replay_gateway()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'error')
+        self.assertIn('idle_timeout>total_timeout', result.detail)
+        self.assertIn('upstream_timeout<=gateway_timeout', result.detail)
+
+    @patch('pos.management.commands.ops_preflight.Command._load_procfile_web_command')
+    def test_ops_preflight_replay_gateway_requires_start_web_wrapper(self, mock_load_procfile_web_command):
+        from pos.management.commands.ops_preflight import Command
+
+        mock_load_procfile_web_command.return_value = 'web: gunicorn config.wsgi:application'
+        result = Command()._check_replay_gateway()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'error')
+        self.assertIn('Procfile web no usa scripts/start_web.py', result.detail)
 
     def test_ops_preflight_ledger_shards_detects_counter_drift(self):
         from pos.management.commands.ops_preflight import Command

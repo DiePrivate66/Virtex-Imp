@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import redis
 from django.conf import settings
@@ -71,6 +73,7 @@ class Command(BaseCommand):
         checks.append(self._check_ledger_lockfile())
         checks.append(self._check_ledger_activation())
         checks.append(self._check_ledger_fencing())
+        checks.append(self._check_replay_gateway())
         checks.append(self._check_system_ledger_accounts())
         checks.append(self._check_telegram_admin_alerts())
         checks.append(self._check_whatsapp_env())
@@ -281,6 +284,97 @@ class Command(BaseCommand):
             'info',
             f'enabled para {len(mutation_paths)} ruta(s)',
         )
+
+    def _load_procfile_web_command(self) -> str:
+        procfile_path = Path(settings.BASE_DIR) / 'Procfile'
+        content = procfile_path.read_text(encoding='utf-8')
+        for raw_line in content.splitlines():
+            line = raw_line.strip()
+            if line.startswith('web:'):
+                return line
+        raise RuntimeError('Procfile sin entrada web')
+
+    def _check_replay_gateway(self) -> CheckResult:
+        enabled = bool(getattr(settings, 'REPLAY_GATEWAY_ENABLED', False))
+        if not enabled:
+            if not settings.DEBUG and getattr(settings, 'POS_REPLAY_ADMISSION_ENABLED', False):
+                return CheckResult(
+                    'replay_gateway',
+                    False,
+                    'warning',
+                    'REPLAY_GATEWAY_ENABLED=False; solo queda admision replay interna de Django',
+                )
+            return CheckResult('replay_gateway', True, 'info', 'wrapper externo desactivado')
+
+        errors: list[str] = []
+        warnings: list[str] = []
+        total_timeout = float(getattr(settings, 'REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS', 0))
+        idle_timeout = float(getattr(settings, 'REPLAY_GATEWAY_IDLE_TIMEOUT_SECONDS', 0))
+        upstream_timeout = float(getattr(settings, 'REPLAY_GATEWAY_UPSTREAM_TIMEOUT_SECONDS', 0))
+        upstream_port = int(getattr(settings, 'REPLAY_GATEWAY_UPSTREAM_PORT', 0))
+        cold_lane_hours = int(getattr(settings, 'REPLAY_GATEWAY_COLD_LANE_HOURS', 0))
+        cold_lane_slots = int(getattr(settings, 'REPLAY_GATEWAY_COLD_LANE_SLOTS', 0))
+        cold_slice_seconds = float(getattr(settings, 'REPLAY_GATEWAY_COLD_SLICE_SECONDS', 0))
+        waiter_ttl_seconds = float(getattr(settings, 'REPLAY_GATEWAY_WAITER_TTL_SECONDS', 0))
+        retry_after_seconds = int(getattr(settings, 'POS_REPLAY_RETRY_AFTER_SECONDS', 0))
+        mutation_paths = tuple(getattr(settings, 'LEDGER_FENCED_MUTATION_PATHS', ()))
+
+        if total_timeout <= 0:
+            errors.append('total_timeout<=0')
+        if idle_timeout <= 0:
+            errors.append('idle_timeout<=0')
+        if idle_timeout > total_timeout:
+            errors.append('idle_timeout>total_timeout')
+        if upstream_timeout <= max(total_timeout, idle_timeout):
+            errors.append('upstream_timeout<=gateway_timeout')
+        if upstream_port <= 0:
+            errors.append('upstream_port<=0')
+        port_value = str(os.environ.get('PORT', '')).strip()
+        if port_value.isdigit() and int(port_value) == upstream_port:
+            errors.append('upstream_port=PORT')
+        if cold_lane_hours <= 0:
+            errors.append('cold_lane_hours<=0')
+        if cold_lane_slots <= 0:
+            errors.append('cold_lane_slots<=0')
+        if cold_slice_seconds <= 0:
+            errors.append('cold_slice_seconds<=0')
+        if waiter_ttl_seconds <= 0:
+            errors.append('waiter_ttl_seconds<=0')
+        if not mutation_paths:
+            errors.append('no replay_paths')
+
+        if not getattr(settings, 'POS_REPLAY_ADMISSION_ENABLED', False):
+            warnings.append('POS_REPLAY_ADMISSION_ENABLED=False')
+        if waiter_ttl_seconds < retry_after_seconds:
+            warnings.append('waiter_ttl<retry_after')
+
+        try:
+            procfile_web = self._load_procfile_web_command()
+            if 'python scripts/start_web.py' not in procfile_web:
+                errors.append('Procfile web no usa scripts/start_web.py')
+        except Exception as exc:
+            errors.append(f'Procfile invalido: {exc}')
+
+        detail = (
+            f'enabled timeout={total_timeout:.1f}s idle={idle_timeout:.1f}s '
+            f'upstream_timeout={upstream_timeout:.1f}s cold_slots={cold_lane_slots} '
+            f'cold_slice={cold_slice_seconds:.1f}s'
+        )
+        if errors:
+            return CheckResult(
+                'replay_gateway',
+                False,
+                'error',
+                detail + '; ' + '; '.join(errors),
+            )
+        if warnings:
+            return CheckResult(
+                'replay_gateway',
+                False,
+                'warning',
+                detail + '; ' + '; '.join(warnings),
+            )
+        return CheckResult('replay_gateway', True, 'info', detail)
 
     def _check_system_ledger_accounts(self) -> CheckResult:
         try:

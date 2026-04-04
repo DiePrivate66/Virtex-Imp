@@ -163,6 +163,7 @@ If `ops_preflight` reports a lockfile mismatch or activation mismatch, do **not*
 - ledger registry lockfile integrity
 - active runtime registry activation
 - version-fencing configuration
+- replay gateway wrapper configuration and Procfile wiring
 - required system ledger accounts per organization
 - Telegram admin alert configuration
 - WhatsApp environment settings
@@ -320,6 +321,18 @@ If this check warns, run:
 ```powershell
 python manage.py reconcile_ledger_shards --json
 ```
+
+### `replay_gateway`
+
+This check verifies:
+
+- `REPLAY_GATEWAY_ENABLED`
+- timeout ordering (`idle < total < upstream`)
+- valid upstream port wiring
+- cold-lane config (`hours`, `slots`, `slice`, `waiter_ttl`)
+- `Procfile` still points `web` to `python scripts/start_web.py`
+
+If this check fails, do not trust replay timeout enforcement at the edge even if Django admission is still active.
 
 ### `operational_drift`
 
