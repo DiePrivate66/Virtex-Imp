@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.contrib import messages
 from django.shortcuts import redirect, render
 
-from pos.application.analytics import build_analytics_dashboard_context
+from pos.application.analytics import build_analytics_dashboard_context, build_offline_limbo_context
 from pos.application.sales import (
     PosSaleError,
     resolve_accounting_adjustment,
@@ -13,11 +13,9 @@ from pos.application.sales import (
 
 
 def dashboard_analytics(request):
-    if not request.user.is_authenticated:
-        return redirect('pos_login')
-
-    if hasattr(request.user, 'empleado') and request.user.empleado.rol != 'ADMIN':
-        return redirect('pos_index')
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
 
     return render(
         request,
@@ -30,15 +28,25 @@ def dashboard_analytics(request):
     )
 
 
+def dashboard_offline_limbo(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    return render(
+        request,
+        'pos/offline_limbo.html',
+        build_offline_limbo_context(),
+    )
+
+
 def resolver_excepcion_pago(request):
-    if not request.user.is_authenticated:
-        return redirect('pos_login')
+    access_redirect = _require_admin_dashboard_access(request, allow_get_redirect=True)
+    if access_redirect:
+        return access_redirect
 
     if request.method != 'POST':
         return redirect('dashboard_analytics')
-
-    if hasattr(request.user, 'empleado') and request.user.empleado.rol != 'ADMIN' and not request.user.is_superuser:
-        return redirect('pos_index')
 
     try:
         resolve_payment_exception(
@@ -57,14 +65,12 @@ def resolver_excepcion_pago(request):
 
 
 def resolver_ajuste_contable(request):
-    if not request.user.is_authenticated:
-        return redirect('pos_login')
+    access_redirect = _require_admin_dashboard_access(request, allow_get_redirect=True)
+    if access_redirect:
+        return access_redirect
 
     if request.method != 'POST':
         return redirect('dashboard_analytics')
-
-    if hasattr(request.user, 'empleado') and request.user.empleado.rol != 'ADMIN' and not request.user.is_superuser:
-        return redirect('pos_index')
 
     try:
         resolve_accounting_adjustment(
@@ -86,14 +92,12 @@ def resolver_ajuste_contable(request):
 
 
 def resolver_alerta_replay(request):
-    if not request.user.is_authenticated:
-        return redirect('pos_login')
+    access_redirect = _require_admin_dashboard_access(request, allow_get_redirect=True)
+    if access_redirect:
+        return access_redirect
 
     if request.method != 'POST':
         return redirect('dashboard_analytics')
-
-    if hasattr(request.user, 'empleado') and request.user.empleado.rol != 'ADMIN' and not request.user.is_superuser:
-        return redirect('pos_index')
 
     try:
         resolve_post_close_replay_alert(
@@ -107,3 +111,13 @@ def resolver_alerta_replay(request):
         return redirect('dashboard_analytics')
 
     return redirect('dashboard_analytics')
+
+
+def _require_admin_dashboard_access(request, *, allow_get_redirect: bool = False):
+    if not request.user.is_authenticated:
+        return redirect('pos_login')
+    if request.user.is_superuser:
+        return None
+    if hasattr(request.user, 'empleado') and request.user.empleado.rol == 'ADMIN':
+        return None
+    return redirect('pos_index' if allow_get_redirect or request.method == 'GET' else 'pos_index')

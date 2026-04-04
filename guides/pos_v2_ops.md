@@ -183,6 +183,12 @@ python manage.py offline_writer D:\\bosco-offline --stream sales --envelope-json
 
 The same command also accepts `--envelope-file <path>` or JSON through `stdin`.
 
+Inspect the current limbo directly from the app:
+
+- URL: `/dashboard/limbo-offline/`
+- Access: admin or superuser only
+- Surface: current summary, active segment paths, tail health and recent events
+
 ## Recommended Deploy Sequence
 
 For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:

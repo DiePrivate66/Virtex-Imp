@@ -20,7 +20,7 @@ from django.test.client import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from .application.analytics import build_analytics_dashboard_context
+from .application.analytics import build_analytics_dashboard_context, build_offline_limbo_context
 from .application.printing import build_cash_closing_context
 from .application.sales.replay_admission import admit_replay_request
 from .application.web_orders import WebOrderError, build_web_orders_payload, create_web_order
@@ -1200,6 +1200,81 @@ class AnalyticsReplayTimelineTests(TestCase):
                 correlation_id='replay-resolution-test',
             ).exists()
         )
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class OfflineLimboDashboardTests(TestCase):
+    def setUp(self):
+        self.location = Location.get_or_create_default()
+        self.admin_user = User.objects.create_superuser(
+            username='offline-limbo-admin',
+            password='1234',
+            email='offline-limbo@example.com',
+        )
+        self.user = User.objects.create_user(
+            username='offline-limbo-user',
+            password='1234',
+        )
+
+    def test_build_offline_limbo_context_reports_disabled_runtime(self):
+        with override_settings(
+            OFFLINE_JOURNAL_ENABLED=False,
+            OFFLINE_JOURNAL_ROOT='',
+        ):
+            context = build_offline_limbo_context()
+
+        self.assertEqual(context['status'], 'disabled')
+        self.assertIn('desactivado', context['detail'].lower())
+
+    def test_dashboard_offline_limbo_renders_summary_and_recent_events(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-view-1',
+                payload={
+                    'sale_total': '7.25',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-VIEW-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                    'display_name': 'Cliente Offline',
+                },
+                client_transaction_id='offline-view-001',
+                queue_session_id='offline-view-session',
+                session_seq_no=4,
+            )
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+            ):
+                response = self.client.get(reverse('dashboard_offline_limbo'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['status'], 'ready')
+        self.assertEqual(response.context['limbo']['summary']['total_sales'], 1)
+        self.assertEqual(response.context['limbo']['summary']['amount_total'], '7.25')
+        self.assertEqual(len(response.context['recent_events']), 1)
+        self.assertEqual(response.context['recent_events'][0]['payment_reference'], 'OFFLINE-VIEW-001')
+        self.assertContains(response, 'Limbo Offline')
+        self.assertContains(response, 'OFFLINE-VIEW-001')
+
+    def test_dashboard_offline_limbo_redirects_non_admin_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('dashboard_offline_limbo'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('pos_index'))
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

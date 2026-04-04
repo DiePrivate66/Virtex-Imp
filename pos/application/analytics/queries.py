@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
+from django.conf import settings
 from django.db.models import Avg, Count, F, Sum
 from django.db.models.functions import ExtractHour, TruncDate
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
+from pos.infrastructure.offline import OfflineJournalRuntimeConfig, SegmentedJournalRuntime, recover_segment_prefix
 from pos.models import AccountingAdjustment, Asistencia, AuditLog, DetalleVenta, MovimientoCaja, Venta
 
 
@@ -218,3 +222,118 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
         'refund_adjustments_open_count': refund_adjustments_queryset.count(),
         'refund_adjustments_open_total': refund_adjustments_open_total,
     }
+
+
+def build_offline_limbo_context() -> dict:
+    enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_ENABLED', False))
+    root_value = str(getattr(settings, 'OFFLINE_JOURNAL_ROOT', '') or '').strip()
+    stream_name = getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales')
+    capture_enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS', False))
+    recent_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50)))
+
+    context = {
+        'offline_journal_enabled': enabled,
+        'offline_capture_enabled': capture_enabled,
+        'stream_name': stream_name,
+        'root_dir': root_value,
+        'status': 'disabled' if not enabled else 'ready',
+        'detail': '',
+        'limbo': {
+            'segment_id': '',
+            'segment_path': '',
+            'snapshot_path': '',
+            'record_count': 0,
+            'sealed': False,
+            'summary': {
+                'total_sales': 0,
+                'amount_total': '0.00',
+                'recent_sales': [],
+            },
+        },
+        'segment_health': {
+            'truncated_tail': False,
+            'corrupted_tail': False,
+            'error_message': '',
+        },
+        'recent_events': [],
+    }
+
+    if not enabled:
+        context['detail'] = 'Runtime offline desactivado.'
+        return context
+    if not root_value:
+        context['status'] = 'misconfigured'
+        context['detail'] = 'OFFLINE_JOURNAL_ROOT no esta configurado.'
+        return context
+
+    root_dir = Path(root_value)
+    if not root_dir.exists():
+        context['status'] = 'missing_root'
+        context['detail'] = f'Root offline inexistente: {root_dir}'
+        return context
+    if not root_dir.is_dir():
+        context['status'] = 'invalid_root'
+        context['detail'] = f'Root offline no es un directorio: {root_dir}'
+        return context
+
+    try:
+        runtime = SegmentedJournalRuntime(
+            config=OfflineJournalRuntimeConfig(
+                root_dir=root_dir,
+                stream_name=stream_name,
+                segment_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
+                limbo_recent_limit=recent_limit,
+            )
+        )
+        limbo = runtime.get_limbo_view()
+        context['limbo'] = limbo
+        segment_path_value = str(limbo.get('segment_path') or '').strip()
+        if not segment_path_value:
+            context['status'] = 'empty'
+            context['detail'] = 'No hay segmentos activos para este stream.'
+            return context
+
+        recovery = recover_segment_prefix(Path(segment_path_value))
+        context['segment_health'] = {
+            'truncated_tail': recovery.truncated_tail,
+            'corrupted_tail': recovery.corrupted_tail,
+            'error_message': recovery.error_message,
+        }
+        context['recent_events'] = _build_recent_offline_events(recovery.records, limit=recent_limit)
+        if recovery.truncated_tail or recovery.corrupted_tail:
+            context['status'] = 'integrity_error'
+            context['detail'] = recovery.error_message or 'El segmento activo tiene una cola invalida.'
+            return context
+
+        context['detail'] = 'Limbo cargado desde el runtime offline.'
+        return context
+    except Exception as exc:
+        context['status'] = 'error'
+        context['detail'] = str(exc)
+        return context
+
+
+def _build_recent_offline_events(records, *, limit: int) -> list[dict]:
+    events: list[dict] = []
+    for record in reversed(tuple(records)[-max(1, limit):]):
+        payload = record.get('payload') or {}
+        created_at = parse_datetime(str(record.get('created_at') or ''))
+        events.append(
+            {
+                'event_id': str(record.get('event_id') or ''),
+                'journal_event_type': str(payload.get('journal_event_type') or ''),
+                'capture_event_type': str(payload.get('capture_event_type') or ''),
+                'sale_origin': str(payload.get('sale_origin') or ''),
+                'journal_capture_source': str(payload.get('journal_capture_source') or ''),
+                'payment_status': str(payload.get('payment_status') or ''),
+                'payment_reference': str(payload.get('payment_reference') or ''),
+                'sale_total': str(payload.get('sale_total') or ''),
+                'display_name': str(payload.get('display_name') or ''),
+                'failure_reason': str(payload.get('failure_reason') or ''),
+                'client_transaction_id': str(record.get('client_transaction_id') or ''),
+                'queue_session_id': str(record.get('queue_session_id') or ''),
+                'session_seq_no': record.get('session_seq_no'),
+                'created_at': created_at or record.get('created_at'),
+            }
+        )
+    return events
