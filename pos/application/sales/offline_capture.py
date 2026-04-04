@@ -16,7 +16,12 @@ from pos.models import Venta
 logger = logging.getLogger(__name__)
 
 
-def capture_paid_sale_to_offline_journal(*, venta_id: int, capture_event_type: str) -> None:
+def capture_paid_sale_to_offline_journal(
+    *,
+    venta_id: int,
+    capture_event_type: str,
+    capture_source: str = 'server_django_sales',
+) -> None:
     if not _offline_capture_enabled():
         return
     venta = (
@@ -32,7 +37,11 @@ def capture_paid_sale_to_offline_journal(*, venta_id: int, capture_event_type: s
         with _journal_runtime_lock(runtime.config.root_dir, runtime.config.stream_name):
             runtime.append_sale_event(
                 event_id=_build_event_id(venta=venta, capture_event_type=capture_event_type),
-                payload=_build_sale_payload(venta=venta, capture_event_type=capture_event_type),
+                payload=_build_sale_payload(
+                    venta=venta,
+                    capture_event_type=capture_event_type,
+                    capture_source=capture_source,
+                ),
                 client_transaction_id=venta.client_transaction_id,
                 queue_session_id=venta.queue_session_id,
                 session_seq_no=venta.session_seq_no,
@@ -48,6 +57,7 @@ def capture_sale_lifecycle_to_offline_journal(
     venta_id: int,
     capture_event_type: str,
     reason: str = '',
+    capture_source: str = 'server_django_sales',
 ) -> None:
     if not _offline_capture_enabled():
         return
@@ -61,7 +71,11 @@ def capture_sale_lifecycle_to_offline_journal(
 
     try:
         runtime = _build_runtime()
-        payload = _build_sale_payload(venta=venta, capture_event_type=capture_event_type)
+        payload = _build_sale_payload(
+            venta=venta,
+            capture_event_type=capture_event_type,
+            capture_source=capture_source,
+        )
         if reason:
             payload['failure_reason'] = reason[:255]
         with _journal_runtime_lock(runtime.config.root_dir, runtime.config.stream_name):
@@ -110,11 +124,12 @@ def _build_event_id(*, venta: Venta, capture_event_type: str) -> str:
     )[:120]
 
 
-def _build_sale_payload(*, venta: Venta, capture_event_type: str) -> dict:
+def _build_sale_payload(*, venta: Venta, capture_event_type: str, capture_source: str) -> dict:
     return {
-        'journal_capture_source': 'server_django_sales',
+        'journal_capture_source': capture_source,
         'capture_event_type': capture_event_type,
         'sale_id': venta.id,
+        'sale_origin': venta.origen,
         'organization_id': venta.organization_id,
         'organization_slug': getattr(venta.organization, 'slug', ''),
         'location_id': venta.location_id,

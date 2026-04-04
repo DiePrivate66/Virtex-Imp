@@ -163,6 +163,12 @@ Optional: enable server-side shadow capture so Django mirrors paid and failed sa
 OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True
 ```
 
+With that flag enabled, Bosco now mirrors:
+
+- POS sales confirmed as paid
+- POS sales marked failed or voided
+- web orders created as paid sales
+
 ## Recommended Deploy Sequence
 
 For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:

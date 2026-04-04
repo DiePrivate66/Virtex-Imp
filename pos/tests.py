@@ -58,7 +58,7 @@ from .tasks import (
     set_quote_and_notify,
     sweep_delivery_quote_timeouts,
 )
-from .infrastructure.offline import OfflineJournalRuntimeConfig, SegmentedJournalRuntime
+from .infrastructure.offline import OfflineJournalRuntimeConfig, SegmentedJournalRuntime, recover_segment_prefix
 from .application.web_orders.updates import build_web_order_update_request
 
 
@@ -290,6 +290,55 @@ class WebOrderCreationInvariantsTests(TestCase):
         self.assertIsNotNone(venta.cliente)
         self.assertNotEqual(venta.cliente_id, foreign_customer.id)
         self.assertEqual(venta.cliente.organization, location.organization)
+
+    def test_create_web_order_appends_paid_event_to_offline_journal(self):
+        location = Location.get_or_create_default()
+        categoria = Categoria.objects.create(nombre='Combos Web', organization=location.organization)
+        producto = Producto.objects.create(
+            categoria=categoria,
+            organization=location.organization,
+            nombre='Combo Bosco',
+            precio=Decimal('9.25'),
+            activo=True,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+            ):
+                with patch('pos.application.web_orders.commands.send_delivery_quote_requests.delay'):
+                    with patch('pos.application.web_orders.commands.process_delivery_quote_timeout.apply_async'):
+                        with self.captureOnCommitCallbacks(execute=True):
+                            venta = create_web_order(
+                                {
+                                    'nombre': 'Cliente Web',
+                                    'telefono': '0991234567',
+                                    'direccion': 'Av. Central',
+                                    'metodo_pago': 'EFECTIVO',
+                                    'tipo_pedido': 'SERVIR',
+                                    'payment_reference': 'WEB-CASH-001',
+                                    'carrito': [
+                                        {'id': producto.id, 'cantidad': 2, 'nombre': producto.nombre, 'nota': ''},
+                                    ],
+                                }
+                            )
+
+                runtime = SegmentedJournalRuntime(
+                    config=OfflineJournalRuntimeConfig(root_dir=Path(temp_dir), stream_name='sales')
+                )
+                limbo = runtime.get_limbo_view()
+                recovery = recover_segment_prefix(Path(limbo['segment_path']))
+
+        self.assertEqual(venta.origen, 'WEB')
+        self.assertEqual(limbo['summary']['total_sales'], 1)
+        self.assertEqual(limbo['summary']['amount_total'], '18.50')
+        self.assertEqual(recovery.record_count, 1)
+        self.assertEqual(recovery.records[0]['payload']['capture_event_type'], 'sale.web_order_created')
+        self.assertEqual(recovery.records[0]['payload']['journal_capture_source'], 'server_django_web_orders')
+        self.assertEqual(recovery.records[0]['payload']['sale_origin'], 'WEB')
 
     def test_web_orders_payload_exposes_canonical_payment_fields(self):
         location = Location.get_or_create_default()

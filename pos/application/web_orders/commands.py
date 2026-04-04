@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from pos.application.context import get_default_catalog_organization
+from pos.application.sales.offline_capture import capture_paid_sale_to_offline_journal
 from pos.domain.shared import build_sale_temporal_fields, normalize_phone_to_e164
 from pos.domain.shared.sale_invariants import (
     build_sale_detail_fields,
@@ -232,6 +233,13 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
             )
 
         _link_whatsapp_conversation(sale)
+        transaction.on_commit(
+            lambda venta_id=sale.id: capture_paid_sale_to_offline_journal(
+                venta_id=venta_id,
+                capture_event_type='sale.web_order_created',
+                capture_source='server_django_web_orders',
+            )
+        )
 
     if order_type == 'DOMICILIO':
         send_delivery_quote_requests.delay(sale.id)
