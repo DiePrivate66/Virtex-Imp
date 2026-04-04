@@ -94,7 +94,7 @@ def register_sale(user, data: dict) -> SaleRegistrationResult:
 
     cliente = _resolve_customer(data, organization=location.organization)
     validated_items, total_venta = _validate_and_price_cart(cart, organization=location.organization)
-    referencia_pago = _normalize_reference(data.get('referencia_pago'))
+    referencia_pago = _normalize_reference(data.get('payment_reference') or data.get('referencia_pago'))
     tarjeta_tipo = _normalize_simple_text(data.get('tarjeta_tipo'), 12)
     tarjeta_marca = _normalize_simple_text(data.get('tarjeta_marca'), 20)
 
@@ -1134,7 +1134,9 @@ def _process_payment(*, metodo_pago: str, total_venta: Decimal, referencia_pago:
             'reason': 'Pago de tarjeta rechazado por simulacion',
         }
 
-    _validate_card_payment(total_venta, referencia_pago, tarjeta_tipo)
+    # register_sale() valida tarjeta antes de reservar la venta.
+    # Repetir la validacion aqui haria que la venta pendiente recién creada
+    # se detecte a si misma como duplicada.
     return {
         'status': 'PAID',
         'payment_provider': data.get('payment_provider', 'POS_CARD'),
@@ -1286,7 +1288,7 @@ def _is_valid_identity(value: str) -> bool:
 def _normalize_reference(value: str) -> str:
     ref = (value or '').upper().strip()
     ref = re.sub(r'\s+', '', ref)
-    ref = re.sub(r'[^A-Z0-9\\-_/]', '', ref)
+    ref = re.sub(r'[^A-Z0-9/_-]', '', ref)
     return ref[:40]
 
 

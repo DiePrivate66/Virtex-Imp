@@ -292,6 +292,7 @@ Hoy `payment_status` es el campo autoritativo.
 Eso reduce el riesgo anterior, pero todavia deja trabajo pendiente:
 
 - mantener `payment_status` y `payment_reference` como contrato de lectura en UI/reporting
+- aceptar `estado_pago` y `referencia_pago` solo como compatibilidad de entrada en boundaries legacy
 - eliminar la necesidad de backfill defensivo cuando ya no existan filas legacy
 - simplificar la superficie de compatibilidad que aun queda en admin y vistas historicas legacy
 

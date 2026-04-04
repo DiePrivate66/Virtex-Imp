@@ -23,6 +23,7 @@ def _parse_multipart_web_order_request(request) -> tuple[dict, object | None]:
         'carrito': _parse_cart_payload(request.POST.get('carrito', '[]')),
         'ubicacion_lat': request.POST.get('ubicacion_lat'),
         'ubicacion_lng': request.POST.get('ubicacion_lng'),
+        'payment_reference': request.POST.get('payment_reference') or request.POST.get('referencia_pago', ''),
     }
     return data, request.FILES.get('comprobante')
 
@@ -36,6 +37,7 @@ def _parse_json_web_order_request(request) -> tuple[dict, None]:
     if not isinstance(data, dict):
         raise WebOrderError('Payload JSON invalido', status_code=400)
 
+    data['payment_reference'] = data.get('payment_reference') or data.get('referencia_pago', '')
     return data, None
 
 

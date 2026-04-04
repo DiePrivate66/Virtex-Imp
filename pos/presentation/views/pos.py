@@ -129,7 +129,7 @@ def reconciliar_pago(request):
             venta_id=data.get('venta_id'),
             client_transaction_id=data.get('client_transaction_id'),
             user=request.user,
-            payment_reference=data.get('payment_reference', ''),
+            payment_reference=data.get('payment_reference') or data.get('referencia_pago', ''),
             payment_provider=data.get('payment_provider', ''),
             gateway_payload=data.get('gateway_payload') or {},
         )

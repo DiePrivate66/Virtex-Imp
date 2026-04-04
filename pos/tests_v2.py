@@ -171,6 +171,22 @@ class BoscoV2SalesTests(TestCase):
         self.assertEqual(venta.payment_reference, 'PAGO-REF-002')
         self.assertEqual(venta.referencia_pago, 'PAGO-REF-002')
 
+    def test_register_sale_accepts_canonical_payment_reference_input(self):
+        result = register_sale(
+            self.user,
+            self._payload(
+                client_transaction_id='sale-v2-card-canonical-ref',
+                metodo_pago='TARJETA',
+                payment_reference='PAY-CANONICAL-001',
+                tarjeta_tipo='CREDITO',
+                tarjeta_marca='VISA',
+                monto_recibido='0',
+            ),
+        )
+
+        self.assertEqual(result.venta.payment_reference, 'PAY-CANONICAL-001')
+        self.assertEqual(result.venta.referencia_pago, 'PAY-CANONICAL-001')
+
     def test_failed_card_payment_restores_inventory_and_marks_sale_failed(self):
         with self.assertRaises(PosSaleError):
             register_sale(

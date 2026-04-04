@@ -1121,7 +1121,7 @@
             monto_recibido: metodoSeleccionado === 'EFECTIVO'
                 ? parseFloat(document.getElementById('monto-recibido').value)
                 : totalFloat,
-            referencia_pago: referenciaPago,
+            payment_reference: referenciaPago,
             tarjeta_tipo: tarjetaTipo,
             tarjeta_marca: tarjetaMarca
         };
@@ -1219,7 +1219,7 @@
         const data = {
             total: pagoData.total,
             metodo_pago: pagoData.metodo_pago,
-            referencia_pago: pagoData.referencia_pago || '',
+            payment_reference: pagoData.payment_reference || '',
             tarjeta_tipo: pagoData.tarjeta_tipo || '',
             tarjeta_marca: pagoData.tarjeta_marca || '',
             carrito: carrito,

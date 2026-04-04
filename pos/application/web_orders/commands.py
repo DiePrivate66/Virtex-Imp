@@ -41,6 +41,10 @@ class WebOrderTransitionError(Exception):
         self.status_code = status_code
 
 
+def _extract_payment_reference(data: dict) -> str:
+    return (data.get('payment_reference') or data.get('referencia_pago') or '').strip()
+
+
 def get_web_order(pedido_id) -> Venta:
     if not pedido_id:
         raise WebOrderTransitionError('Pedido no encontrado', status_code=404)
@@ -189,7 +193,7 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
             **build_sale_payment_fields(
                 payment_status=Venta.PaymentStatus.PAID,
                 metodo_pago=data.get('metodo_pago', 'EFECTIVO'),
-                referencia_pago=data.get('referencia_pago', ''),
+                payment_reference=_extract_payment_reference(data),
                 valid_payment_statuses=Venta.PaymentStatus.values,
                 payment_methods=Venta.METODOS,
                 v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,

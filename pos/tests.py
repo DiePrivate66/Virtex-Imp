@@ -1097,6 +1097,30 @@ class WebOrderApiRequestParsingTests(SimpleTestCase):
         with self.assertRaisesMessage(WebOrderError, 'Payload JSON invalido'):
             parse_web_order_request(request)
 
+    def test_parse_web_order_request_promotes_legacy_reference_to_canonical_key(self):
+        request = RequestFactory().post(
+            '/pedido/api/crear/',
+            data=json.dumps({'nombre': 'Cliente', 'referencia_pago': 'LEGACY-WEB-001'}),
+            content_type='application/json',
+        )
+
+        data, comprobante = parse_web_order_request(request)
+
+        self.assertIsNone(comprobante)
+        self.assertEqual(data['payment_reference'], 'LEGACY-WEB-001')
+
+    def test_parse_web_order_request_preserves_canonical_payment_reference(self):
+        request = RequestFactory().post(
+            '/pedido/api/crear/',
+            data=json.dumps({'nombre': 'Cliente', 'payment_reference': 'PAY-WEB-API-001'}),
+            content_type='application/json',
+        )
+
+        data, comprobante = parse_web_order_request(request)
+
+        self.assertIsNone(comprobante)
+        self.assertEqual(data['payment_reference'], 'PAY-WEB-API-001')
+
 
 class LegacyImportRegistryTests(SimpleTestCase):
     def test_legacy_registry_covers_expected_wrappers(self):
