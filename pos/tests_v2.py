@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -113,7 +114,7 @@ class BoscoV2SalesTests(TestCase):
         self.assertEqual(OutboxEvent.objects.filter(event_type='SALE_PAID_PRINT').count(), 1)
         self.assertEqual(first.venta.payment_status, Venta.PaymentStatus.PAID)
 
-    def test_payment_status_backfills_from_legacy_only_when_missing(self):
+    def test_existing_sale_row_can_backfill_from_legacy_when_canonical_missing(self):
         venta = Venta.objects.create(
             turno=self.turno,
             organization=self.turno.organization,
@@ -122,12 +123,43 @@ class BoscoV2SalesTests(TestCase):
             total=Decimal('5.00'),
             metodo_pago='EFECTIVO',
             estado='PENDIENTE',
-            estado_pago='RECHAZADO',
-            payment_status='',
+            payment_status=Venta.PaymentStatus.PAID,
         )
+        Venta.objects.filter(pk=venta.pk).update(payment_status='', estado_pago='RECHAZADO')
+        venta.refresh_from_db()
+        venta.cliente_nombre = 'Cliente Legacy Recuperado'
+        venta.save()
 
         self.assertEqual(venta.payment_status, Venta.PaymentStatus.FAILED)
         self.assertEqual(venta.estado_pago, 'RECHAZADO')
+
+    def test_new_sale_rejects_legacy_only_payment_status_input(self):
+        with self.assertRaises(ValidationError):
+            Venta.objects.create(
+                turno=self.turno,
+                organization=self.turno.organization,
+                location=self.turno.location,
+                cliente_nombre='Cliente Legacy',
+                total=Decimal('5.00'),
+                metodo_pago='EFECTIVO',
+                estado='PENDIENTE',
+                estado_pago='RECHAZADO',
+                payment_status='',
+            )
+
+    def test_new_sale_rejects_legacy_only_payment_reference_input(self):
+        with self.assertRaises(ValidationError):
+            Venta.objects.create(
+                turno=self.turno,
+                organization=self.turno.organization,
+                location=self.turno.location,
+                cliente_nombre='Cliente Legacy',
+                total=Decimal('5.00'),
+                metodo_pago='TARJETA',
+                estado='PENDIENTE',
+                payment_status=Venta.PaymentStatus.PAID,
+                referencia_pago='LEGACY-REF-001',
+            )
 
     def test_payment_status_remains_authoritative_over_legacy_field(self):
         venta = Venta.objects.create(

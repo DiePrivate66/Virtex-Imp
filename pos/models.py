@@ -536,12 +536,29 @@ class Venta(models.Model):
 
     def _sync_payment_compatibility_fields(self):
         if self.payment_status:
+            if self._state.adding and self.referencia_pago and not self.payment_reference:
+                raise ValidationError('Las ventas nuevas deben definir payment_reference canonico.')
             payment_fields = build_sale_payment_fields(
                 payment_status=self.payment_status,
                 payment_method_type=self.payment_method_type,
                 metodo_pago=self.metodo_pago,
                 payment_reference=self.payment_reference,
                 referencia_pago=self.referencia_pago,
+                valid_payment_statuses=self.PaymentStatus.values,
+                payment_methods=self.METODOS,
+                v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
+                default_payment_status=self.PaymentStatus.PAID,
+            )
+        elif self._state.adding:
+            if self.estado_pago and self.estado_pago != 'APROBADO':
+                raise ValidationError('Las ventas nuevas deben definir payment_status canonico.')
+            if self.referencia_pago and not self.payment_reference:
+                raise ValidationError('Las ventas nuevas deben definir payment_reference canonico.')
+            payment_fields = build_sale_payment_fields(
+                payment_status=self.PaymentStatus.PAID,
+                payment_method_type=self.payment_method_type,
+                metodo_pago=self.metodo_pago,
+                payment_reference=self.payment_reference,
                 valid_payment_statuses=self.PaymentStatus.values,
                 payment_methods=self.METODOS,
                 v2_to_legacy_map=V2_TO_LEGACY_PAYMENT_STATUS,
