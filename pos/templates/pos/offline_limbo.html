@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100" data-offline-limbo-root data-json-url="{% url 'dashboard_offline_limbo_json' %}">
     <div class="flex items-start justify-between mb-6 gap-4">
         <div class="flex flex-col gap-3">
             <a href="{% url 'dashboard_analytics' %}" class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
@@ -13,36 +13,38 @@
         </div>
         <div class="text-right">
             <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Stream</p>
-            <p class="text-sm font-black text-sky-300">{{ stream_name }}</p>
-            <p class="text-[10px] text-gray-600 mt-1">{{ root_dir|default:"SIN_ROOT" }}</p>
+            <p class="text-sm font-black text-sky-300" data-field="stream_name">{{ stream_name }}</p>
+            <p class="text-[10px] text-gray-600 mt-1" data-field="root_dir">{{ root_dir|default:"SIN_ROOT" }}</p>
+            <p class="text-[10px] text-gray-500 mt-2">Ultima actualizacion</p>
+            <p class="text-[10px] text-gray-300" data-field="refreshed_at">carga inicial</p>
         </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Runtime</p>
-            <p class="text-2xl font-black mt-2 {% if offline_journal_enabled %}text-green-400{% else %}text-gray-400{% endif %}">
+            <p class="text-2xl font-black mt-2" data-field="offline_journal_enabled_label">
                 {% if offline_journal_enabled %}ON{% else %}OFF{% endif %}
             </p>
         </div>
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Shadow Capture</p>
-            <p class="text-2xl font-black mt-2 {% if offline_capture_enabled %}text-sky-300{% else %}text-gray-400{% endif %}">
+            <p class="text-2xl font-black mt-2" data-field="offline_capture_enabled_label">
                 {% if offline_capture_enabled %}ON{% else %}OFF{% endif %}
             </p>
         </div>
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Ventas En Limbo</p>
-            <p class="text-2xl font-black mt-2 text-white">{{ limbo.summary.total_sales|default:0 }}</p>
+            <p class="text-2xl font-black mt-2 text-white" data-field="total_sales">{{ limbo.summary.total_sales|default:0 }}</p>
         </div>
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Monto Acumulado</p>
-            <p class="text-2xl font-black mt-2 text-bosco-orange">${{ limbo.summary.amount_total|default:"0.00" }}</p>
+            <p class="text-2xl font-black mt-2 text-bosco-orange">$<span data-field="amount_total">{{ limbo.summary.amount_total|default:"0.00" }}</span></p>
         </div>
     </div>
 
-    <div class="rounded-2xl border px-4 py-3 text-sm font-bold mb-6 {% if status == 'ready' %}bg-green-950/30 border-green-700/40 text-green-200{% elif status == 'empty' or status == 'disabled' %}bg-yellow-950/30 border-yellow-700/40 text-yellow-200{% else %}bg-red-950/30 border-red-700/40 text-red-200{% endif %}">
-        Estado: {{ status|upper }}. {{ detail }}
+    <div class="rounded-2xl border px-4 py-3 text-sm font-bold mb-6" data-status-banner data-status="{{ status }}">
+        Estado: <span data-field="status">{{ status|upper }}</span>. <span data-field="detail">{{ detail }}</span>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -51,26 +53,24 @@
             <div class="space-y-3 text-xs">
                 <div>
                     <p class="text-gray-500 font-black uppercase tracking-widest">Segment ID</p>
-                    <p class="text-white break-all">{{ limbo.segment_id|default:"SIN_SEGMENTO" }}</p>
+                    <p class="text-white break-all" data-field="segment_id">{{ limbo.segment_id|default:"SIN_SEGMENTO" }}</p>
                 </div>
                 <div>
                     <p class="text-gray-500 font-black uppercase tracking-widest">Segment Path</p>
-                    <p class="text-gray-300 break-all">{{ limbo.segment_path|default:"N/A" }}</p>
+                    <p class="text-gray-300 break-all" data-field="segment_path">{{ limbo.segment_path|default:"N/A" }}</p>
                 </div>
                 <div>
                     <p class="text-gray-500 font-black uppercase tracking-widest">Snapshot Path</p>
-                    <p class="text-gray-300 break-all">{{ limbo.snapshot_path|default:"N/A" }}</p>
+                    <p class="text-gray-300 break-all" data-field="snapshot_path">{{ limbo.snapshot_path|default:"N/A" }}</p>
                 </div>
                 <div class="grid grid-cols-2 gap-3 pt-2">
                     <div class="bg-gray-900/60 rounded-xl p-3">
                         <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Records</p>
-                        <p class="text-white text-lg font-black mt-1">{{ limbo.record_count|default:0 }}</p>
+                        <p class="text-white text-lg font-black mt-1" data-field="record_count">{{ limbo.record_count|default:0 }}</p>
                     </div>
                     <div class="bg-gray-900/60 rounded-xl p-3">
                         <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Sealed</p>
-                        <p class="text-lg font-black mt-1 {% if limbo.sealed %}text-green-400{% else %}text-yellow-300{% endif %}">
-                            {% if limbo.sealed %}YES{% else %}NO{% endif %}
-                        </p>
+                        <p class="text-lg font-black mt-1" data-field="sealed_label">{% if limbo.sealed %}YES{% else %}NO{% endif %}</p>
                     </div>
                 </div>
             </div>
@@ -81,27 +81,27 @@
             <div class="space-y-3 text-xs">
                 <div class="bg-gray-900/60 rounded-xl p-3">
                     <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Truncated Tail</p>
-                    <p class="text-lg font-black mt-1 {% if segment_health.truncated_tail %}text-red-400{% else %}text-green-400{% endif %}">
-                        {% if segment_health.truncated_tail %}YES{% else %}NO{% endif %}
-                    </p>
+                    <p class="text-lg font-black mt-1" data-field="truncated_tail_label">{% if segment_health.truncated_tail %}YES{% else %}NO{% endif %}</p>
                 </div>
                 <div class="bg-gray-900/60 rounded-xl p-3">
                     <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Corrupted Tail</p>
-                    <p class="text-lg font-black mt-1 {% if segment_health.corrupted_tail %}text-red-400{% else %}text-green-400{% endif %}">
-                        {% if segment_health.corrupted_tail %}YES{% else %}NO{% endif %}
-                    </p>
+                    <p class="text-lg font-black mt-1" data-field="corrupted_tail_label">{% if segment_health.corrupted_tail %}YES{% else %}NO{% endif %}</p>
                 </div>
                 <div class="bg-gray-900/60 rounded-xl p-3">
                     <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Detalle</p>
-                    <p class="text-gray-300 break-words">{{ segment_health.error_message|default:"Sin errores de integridad reportados." }}</p>
+                    <p class="text-gray-300 break-words" data-field="segment_error_message">{{ segment_health.error_message|default:"Sin errores de integridad reportados." }}</p>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6 mb-6">
-        <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">Ultimos Eventos Del Segmento</h2>
-        {% if recent_events %}
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest">Ultimos Eventos Del Segmento</h2>
+            <button type="button" class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition" data-refresh-button>
+                Refrescar ahora
+            </button>
+        </div>
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
                 <thead>
@@ -114,12 +114,10 @@
                         <th class="pb-2 font-black">Tx</th>
                     </tr>
                 </thead>
-                <tbody class="text-sm">
+                <tbody class="text-sm" data-recent-events-body>
                     {% for event in recent_events %}
                     <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
-                        <td class="py-3 text-gray-300 text-xs">
-                            {% if event.created_at %}{{ event.created_at|date:"d/m H:i:s" }}{% else %}SIN_FECHA{% endif %}
-                        </td>
+                        <td class="py-3 text-gray-300 text-xs">{% if event.created_at %}{{ event.created_at|date:"d/m H:i:s" }}{% else %}SIN_FECHA{% endif %}</td>
                         <td class="py-3">
                             <span class="px-2 py-1 rounded-md text-[10px] font-black {% if event.sale_origin == 'WEB' %}bg-sky-900/40 text-sky-300{% else %}bg-orange-900/30 text-bosco-orange{% endif %}">
                                 {{ event.sale_origin|default:"N/A" }}
@@ -135,13 +133,144 @@
                         <td colspan="6" class="pb-3 pl-2 text-[11px] text-red-300">Failure: {{ event.failure_reason }}</td>
                     </tr>
                     {% endif %}
+                    {% empty %}
+                    <tr data-empty-row>
+                        <td colspan="6" class="py-4 text-center text-gray-500 text-sm">No hay eventos recientes que mostrar.</td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        {% else %}
-        <p class="text-gray-500 text-sm">No hay eventos recientes que mostrar.</p>
-        {% endif %}
     </div>
 </div>
+
+<script>
+(() => {
+    const root = document.querySelector('[data-offline-limbo-root]');
+    if (!root) return;
+
+    const jsonUrl = root.dataset.jsonUrl;
+    const statusBanner = root.querySelector('[data-status-banner]');
+    const refreshButton = root.querySelector('[data-refresh-button]');
+    const eventsBody = root.querySelector('[data-recent-events-body]');
+    const refreshIntervalMs = 10000;
+    let refreshTimer = null;
+
+    const setText = (field, value) => {
+        const node = root.querySelector(`[data-field="${field}"]`);
+        if (node) node.textContent = value;
+    };
+
+    const setStatusBanner = (status, detail) => {
+        if (!statusBanner) return;
+        statusBanner.dataset.status = status;
+        statusBanner.className = 'rounded-2xl border px-4 py-3 text-sm font-bold mb-6';
+        if (status === 'ready') {
+            statusBanner.classList.add('bg-green-950/30', 'border-green-700/40', 'text-green-200');
+        } else if (status === 'empty' || status === 'disabled') {
+            statusBanner.classList.add('bg-yellow-950/30', 'border-yellow-700/40', 'text-yellow-200');
+        } else {
+            statusBanner.classList.add('bg-red-950/30', 'border-red-700/40', 'text-red-200');
+        }
+        setText('status', String(status || '').toUpperCase());
+        setText('detail', detail || '');
+    };
+
+    const formatTimestamp = (value) => {
+        if (!value) return 'SIN_FECHA';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString('es-EC', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+        }).replace(',', '');
+    };
+
+    const renderEvents = (events) => {
+        if (!eventsBody) return;
+        if (!Array.isArray(events) || events.length === 0) {
+            eventsBody.innerHTML = '<tr data-empty-row><td colspan="6" class="py-4 text-center text-gray-500 text-sm">No hay eventos recientes que mostrar.</td></tr>';
+            return;
+        }
+        const rows = [];
+        events.forEach((event) => {
+            const origin = String(event.sale_origin || 'N/A');
+            const originClasses = origin === 'WEB'
+                ? 'bg-sky-900/40 text-sky-300'
+                : 'bg-orange-900/30 text-bosco-orange';
+            rows.push(`
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
+                    <td class="py-3 text-gray-300 text-xs">${formatTimestamp(event.created_at)}</td>
+                    <td class="py-3"><span class="px-2 py-1 rounded-md text-[10px] font-black ${originClasses}">${origin}</span></td>
+                    <td class="py-3 text-white text-xs font-bold">${event.capture_event_type || event.journal_event_type || ''}</td>
+                    <td class="py-3 text-gray-200 text-xs">$${event.sale_total || '0.00'}</td>
+                    <td class="py-3 text-gray-300 text-xs">${event.payment_reference || 'SIN_REF'}</td>
+                    <td class="py-3 text-gray-500 text-[10px] break-all">${event.client_transaction_id || 'SIN_TX'}</td>
+                </tr>
+            `);
+            if (event.failure_reason) {
+                rows.push(`
+                    <tr class="border-b border-gray-900">
+                        <td colspan="6" class="pb-3 pl-2 text-[11px] text-red-300">Failure: ${event.failure_reason}</td>
+                    </tr>
+                `);
+            }
+        });
+        eventsBody.innerHTML = rows.join('');
+    };
+
+    const applyPayload = (payload) => {
+        setText('stream_name', payload.stream_name || '');
+        setText('root_dir', payload.root_dir || 'SIN_ROOT');
+        setText('refreshed_at', formatTimestamp(payload.refreshed_at));
+        setText('offline_journal_enabled_label', payload.offline_journal_enabled ? 'ON' : 'OFF');
+        setText('offline_capture_enabled_label', payload.offline_capture_enabled ? 'ON' : 'OFF');
+        setText('total_sales', payload.limbo?.summary?.total_sales ?? 0);
+        setText('amount_total', payload.limbo?.summary?.amount_total ?? '0.00');
+        setText('segment_id', payload.limbo?.segment_id || 'SIN_SEGMENTO');
+        setText('segment_path', payload.limbo?.segment_path || 'N/A');
+        setText('snapshot_path', payload.limbo?.snapshot_path || 'N/A');
+        setText('record_count', payload.limbo?.record_count ?? 0);
+        setText('sealed_label', payload.limbo?.sealed ? 'YES' : 'NO');
+        setText('truncated_tail_label', payload.segment_health?.truncated_tail ? 'YES' : 'NO');
+        setText('corrupted_tail_label', payload.segment_health?.corrupted_tail ? 'YES' : 'NO');
+        setText('segment_error_message', payload.segment_health?.error_message || 'Sin errores de integridad reportados.');
+        setStatusBanner(payload.status || 'error', payload.detail || '');
+        renderEvents(payload.recent_events || []);
+    };
+
+    const refresh = async () => {
+        try {
+            if (refreshButton) refreshButton.disabled = true;
+            const response = await fetch(jsonUrl, {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const payload = await response.json();
+            applyPayload(payload);
+        } catch (error) {
+            setStatusBanner('error', `No se pudo refrescar el limbo: ${error}`);
+        } finally {
+            if (refreshButton) refreshButton.disabled = false;
+        }
+    };
+
+    if (refreshButton) {
+        refreshButton.addEventListener('click', refresh);
+    }
+
+    refreshTimer = window.setInterval(refresh, refreshIntervalMs);
+    window.addEventListener('beforeunload', () => {
+        if (refreshTimer) window.clearInterval(refreshTimer);
+    });
+})();
+</script>
 {% endblock %}

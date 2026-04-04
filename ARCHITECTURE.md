@@ -356,6 +356,7 @@ La base durable local ya no esta en cero:
 - `create_web_order()` tambien ya alimenta ese mismo journal con eventos pagados de origen `WEB`, de modo que el limbo y la cronologia offline no dependan solo del POS presencial
 - `ops_preflight` ya no se limita a verificar que exista un segmento sano; tambien reporta si el shadow capture server-side esta habilitado y si el journal viene recibiendo eventos recientes de `POS` y `WEB`
 - el backoffice ya expone `/dashboard/limbo-offline/` como vista de inspeccion operativa para revisar summary, paths, salud del tail y eventos recientes sin entrar por management commands
+- esa vista ya tiene endpoint JSON (`/dashboard/limbo-offline/json/`) y refresco por `fetch`, asi que la inspeccion no depende de reload manual
 - el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
 - el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
 - `manage.py offline_writer`, `manage.py offline_journal` y `manage.py offline_limbo` ya exponen append canonico, inspeccion, reconciliacion, re-sellado y lectura del summary de limbo sin depender aun del runtime Electron

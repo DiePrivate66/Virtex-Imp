@@ -188,6 +188,8 @@ Inspect the current limbo directly from the app:
 - URL: `/dashboard/limbo-offline/`
 - Access: admin or superuser only
 - Surface: current summary, active segment paths, tail health and recent events
+- JSON refresh endpoint: `/dashboard/limbo-offline/json/`
+- Polling: the page refreshes automatically every 10 seconds and also supports manual refresh
 
 ## Recommended Deploy Sequence
 

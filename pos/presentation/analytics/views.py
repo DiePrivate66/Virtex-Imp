@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
-from pos.application.analytics import build_analytics_dashboard_context, build_offline_limbo_context
+from pos.application.analytics import (
+    build_analytics_dashboard_context,
+    build_offline_limbo_context,
+    build_offline_limbo_payload,
+)
 from pos.application.sales import (
     PosSaleError,
     resolve_accounting_adjustment,
@@ -38,6 +43,13 @@ def dashboard_offline_limbo(request):
         'pos/offline_limbo.html',
         build_offline_limbo_context(),
     )
+
+
+def dashboard_offline_limbo_json(request):
+    api_error = _require_admin_dashboard_api_access(request)
+    if api_error:
+        return api_error
+    return JsonResponse(build_offline_limbo_payload())
 
 
 def resolver_excepcion_pago(request):
@@ -121,3 +133,13 @@ def _require_admin_dashboard_access(request, *, allow_get_redirect: bool = False
     if hasattr(request.user, 'empleado') and request.user.empleado.rol == 'ADMIN':
         return None
     return redirect('pos_index' if allow_get_redirect or request.method == 'GET' else 'pos_index')
+
+
+def _require_admin_dashboard_api_access(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'detail': 'auth required'}, status=401)
+    if request.user.is_superuser:
+        return None
+    if hasattr(request.user, 'empleado') and request.user.empleado.rol == 'ADMIN':
+        return None
+    return JsonResponse({'detail': 'admin required'}, status=403)

@@ -1276,6 +1276,51 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('pos_index'))
 
+    def test_dashboard_offline_limbo_json_returns_payload_for_admin(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-json-1',
+                payload={
+                    'sale_total': '5.50',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-JSON-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-json-001',
+            )
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+            ):
+                response = self.client.get(reverse('dashboard_offline_limbo_json'))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['status'], 'ready')
+        self.assertEqual(payload['limbo']['summary']['total_sales'], 1)
+        self.assertEqual(payload['recent_events'][0]['payment_reference'], 'OFFLINE-JSON-001')
+        self.assertIn('refreshed_at', payload)
+
+    def test_dashboard_offline_limbo_json_rejects_non_admin_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('dashboard_offline_limbo_json'))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['detail'], 'admin required')
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class DeliveryClaimFlowTests(TestCase):

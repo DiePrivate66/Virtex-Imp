@@ -337,3 +337,18 @@ def _build_recent_offline_events(records, *, limit: int) -> list[dict]:
             }
         )
     return events
+
+
+def build_offline_limbo_payload() -> dict:
+    context = build_offline_limbo_context()
+    return {
+        **context,
+        'recent_events': [
+            {
+                **event,
+                'created_at': event['created_at'].isoformat() if hasattr(event.get('created_at'), 'isoformat') else event.get('created_at'),
+            }
+            for event in context.get('recent_events', [])
+        ],
+        'refreshed_at': timezone.now().isoformat(),
+    }
