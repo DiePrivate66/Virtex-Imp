@@ -58,7 +58,12 @@ from .tasks import (
     set_quote_and_notify,
     sweep_delivery_quote_timeouts,
 )
-from .infrastructure.offline import OfflineJournalRuntimeConfig, SegmentedJournalRuntime, recover_segment_prefix
+from .infrastructure.offline import (
+    OfflineJournalRuntimeConfig,
+    SegmentJournal,
+    SegmentedJournalRuntime,
+    recover_segment_prefix,
+)
 from .application.web_orders.updates import build_web_order_update_request
 
 
@@ -1317,6 +1322,109 @@ class OfflineLimboDashboardTests(TestCase):
         self.client.force_login(self.user)
 
         response = self.client.get(reverse('dashboard_offline_limbo_json'))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['detail'], 'admin required')
+
+    def test_dashboard_offline_limbo_reconcile_json_repairs_lagging_snapshot(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-reconcile-1',
+                payload={
+                    'sale_total': '9.10',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-RECON-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-reconcile-001',
+            )
+            limbo = runtime.get_limbo_view()
+            snapshot_path = Path(limbo['snapshot_path'])
+            snapshot = json.loads(snapshot_path.read_text(encoding='utf-8'))
+            snapshot['record_count'] = 0
+            snapshot['last_offset_confirmed'] = 0
+            snapshot['last_event_id'] = ''
+            snapshot['last_record_hash'] = ''
+            snapshot['rolling_crc32'] = '00000000'
+            snapshot_path.write_text(json.dumps(snapshot), encoding='utf-8')
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+            ):
+                response = self.client.post(reverse('dashboard_offline_limbo_reconcile_json'))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'reconcile_sidecar')
+        self.assertTrue(payload['action']['performed'])
+        self.assertEqual(payload['limbo']['record_count'], 1)
+        self.assertEqual(payload['limbo']['summary']['total_sales'], 1)
+        self.assertIn('Sidecar reconciliado', payload['action']['detail'])
+
+    def test_dashboard_offline_limbo_reseal_json_writes_pending_footer(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-reseal-1',
+                payload={
+                    'sale_total': '6.40',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-RESEAL-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-reseal-001',
+            )
+            limbo = runtime.get_limbo_view()
+            segment_path = Path(limbo['segment_path'])
+            snapshot_path = Path(limbo['snapshot_path'])
+            journal = SegmentJournal(
+                segment_path=segment_path,
+                snapshot_path=snapshot_path,
+                segment_id=limbo['segment_id'],
+            )
+            journal.prepare_seal(summary=limbo['summary'])
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+            ):
+                response = self.client.post(reverse('dashboard_offline_limbo_reseal_json'))
+                recovery = recover_segment_prefix(segment_path)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'reseal_segment')
+        self.assertTrue(payload['action']['performed'])
+        self.assertTrue(payload['limbo']['sealed'])
+        self.assertIn('re-sellado', payload['action']['detail'])
+        self.assertIsNotNone(recovery.footer)
+
+    def test_dashboard_offline_limbo_action_rejects_non_admin_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse('dashboard_offline_limbo_reconcile_json'))
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()['detail'], 'admin required')

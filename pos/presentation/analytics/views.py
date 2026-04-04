@@ -5,9 +5,11 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
 from pos.application.analytics import (
+    OfflineLimboActionError,
     build_analytics_dashboard_context,
     build_offline_limbo_context,
     build_offline_limbo_payload,
+    execute_offline_limbo_action,
 )
 from pos.application.sales import (
     PosSaleError,
@@ -50,6 +52,14 @@ def dashboard_offline_limbo_json(request):
     if api_error:
         return api_error
     return JsonResponse(build_offline_limbo_payload())
+
+
+def dashboard_offline_limbo_reconcile_json(request):
+    return _execute_offline_limbo_action_json(request, action='reconcile_sidecar')
+
+
+def dashboard_offline_limbo_reseal_json(request):
+    return _execute_offline_limbo_action_json(request, action='reseal_segment')
 
 
 def resolver_excepcion_pago(request):
@@ -143,3 +153,24 @@ def _require_admin_dashboard_api_access(request):
     if hasattr(request.user, 'empleado') and request.user.empleado.rol == 'ADMIN':
         return None
     return JsonResponse({'detail': 'admin required'}, status=403)
+
+
+def _execute_offline_limbo_action_json(request, *, action: str):
+    api_error = _require_admin_dashboard_api_access(request)
+    if api_error:
+        return api_error
+    if request.method != 'POST':
+        return JsonResponse({'detail': 'method not allowed'}, status=405)
+    try:
+        return JsonResponse(execute_offline_limbo_action(action=action))
+    except OfflineLimboActionError as exc:
+        return JsonResponse(
+            {
+                'detail': str(exc),
+                'action': {
+                    'name': action,
+                    'performed': False,
+                },
+            },
+            status=409,
+        )

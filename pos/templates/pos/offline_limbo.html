@@ -1,6 +1,12 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100" data-offline-limbo-root data-json-url="{% url 'dashboard_offline_limbo_json' %}">
+<div
+    class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100"
+    data-offline-limbo-root
+    data-json-url="{% url 'dashboard_offline_limbo_json' %}"
+    data-reconcile-url="{% url 'dashboard_offline_limbo_reconcile_json' %}"
+    data-reseal-url="{% url 'dashboard_offline_limbo_reseal_json' %}"
+>
     <div class="flex items-start justify-between mb-6 gap-4">
         <div class="flex flex-col gap-3">
             <a href="{% url 'dashboard_analytics' %}" class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
@@ -72,6 +78,26 @@
                         <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Sealed</p>
                         <p class="text-lg font-black mt-1" data-field="sealed_label">{% if limbo.sealed %}YES{% else %}NO{% endif %}</p>
                     </div>
+                </div>
+                <div class="pt-3 border-t border-gray-800">
+                    <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3">Acciones Operativas</p>
+                    <div class="flex flex-wrap gap-3">
+                        <button
+                            type="button"
+                            class="bg-sky-900/40 text-sky-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-sky-800/50 transition"
+                            data-action-button="reconcile"
+                        >
+                            Reconcile Sidecar
+                        </button>
+                        <button
+                            type="button"
+                            class="bg-orange-900/40 text-orange-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-orange-800/50 transition"
+                            data-action-button="reseal"
+                        >
+                            Reseal Segment
+                        </button>
+                    </div>
+                    <p class="mt-3 text-[11px] text-gray-400" data-action-feedback>Sin acciones ejecutadas.</p>
                 </div>
             </div>
         </div>
@@ -150,8 +176,13 @@
     if (!root) return;
 
     const jsonUrl = root.dataset.jsonUrl;
+    const reconcileUrl = root.dataset.reconcileUrl;
+    const resealUrl = root.dataset.resealUrl;
     const statusBanner = root.querySelector('[data-status-banner]');
     const refreshButton = root.querySelector('[data-refresh-button]');
+    const reconcileButton = root.querySelector('[data-action-button="reconcile"]');
+    const resealButton = root.querySelector('[data-action-button="reseal"]');
+    const actionFeedback = root.querySelector('[data-action-feedback]');
     const eventsBody = root.querySelector('[data-recent-events-body]');
     const refreshIntervalMs = 10000;
     let refreshTimer = null;
@@ -174,6 +205,21 @@
         }
         setText('status', String(status || '').toUpperCase());
         setText('detail', detail || '');
+    };
+
+    const setActionFeedback = (detail, tone = 'neutral') => {
+        if (!actionFeedback) return;
+        actionFeedback.textContent = detail || 'Sin acciones ejecutadas.';
+        actionFeedback.className = 'mt-3 text-[11px]';
+        if (tone === 'success') {
+            actionFeedback.classList.add('text-green-300');
+            return;
+        }
+        if (tone === 'error') {
+            actionFeedback.classList.add('text-red-300');
+            return;
+        }
+        actionFeedback.classList.add('text-gray-400');
     };
 
     const formatTimestamp = (value) => {
@@ -263,8 +309,45 @@
         }
     };
 
+    const withButtonsDisabled = (disabled) => {
+        [refreshButton, reconcileButton, resealButton].forEach((button) => {
+            if (button) button.disabled = disabled;
+        });
+    };
+
+    const runAction = async (url, fallbackLabel) => {
+        try {
+            withButtonsDisabled(true);
+            setActionFeedback(`Ejecutando ${fallbackLabel}...`, 'neutral');
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    ...getHeaders(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || `HTTP ${response.status}`);
+            }
+            applyPayload(payload);
+            setActionFeedback(payload.action?.detail || `${fallbackLabel} ejecutado.`, payload.action?.performed === false ? 'neutral' : 'success');
+        } catch (error) {
+            setActionFeedback(`No se pudo ejecutar ${fallbackLabel}: ${error}`, 'error');
+        } finally {
+            withButtonsDisabled(false);
+        }
+    };
+
     if (refreshButton) {
         refreshButton.addEventListener('click', refresh);
+    }
+    if (reconcileButton) {
+        reconcileButton.addEventListener('click', () => runAction(reconcileUrl, 'reconcile sidecar'));
+    }
+    if (resealButton) {
+        resealButton.addEventListener('click', () => runAction(resealUrl, 'reseal segment'));
     }
 
     refreshTimer = window.setInterval(refresh, refreshIntervalMs);
