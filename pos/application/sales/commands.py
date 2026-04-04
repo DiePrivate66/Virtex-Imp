@@ -25,6 +25,10 @@ from pos.application.cash_register import (
 )
 from pos.application.context import ensure_staff_profile_for_user, resolve_location_for_user
 from pos.application.notifications import ResendEmailError, send_resend_email
+from pos.application.sales.offline_capture import (
+    capture_paid_sale_to_offline_journal,
+    capture_sale_lifecycle_to_offline_journal,
+)
 from pos.domain.shared.sale_invariants import (
     build_sale_actor_snapshot_fields,
     build_sale_detail_fields,
@@ -916,6 +920,12 @@ def _finalize_sale_as_paid(*, venta: Venta, user, payment_reference: str, paymen
         response_payload=build_sale_response_payload(venta),
         updated_at=timezone.now(),
     )
+    transaction.on_commit(
+        lambda venta_id=venta.id, capture_event_type=audit_event_type: capture_paid_sale_to_offline_journal(
+            venta_id=venta_id,
+            capture_event_type=capture_event_type,
+        )
+    )
     return venta
 
 
@@ -1060,6 +1070,20 @@ def _mark_sale_payment_failed(
             status=IdempotencyRecord.Status.FAILED_FINAL,
             response_payload=build_sale_response_payload(venta),
             updated_at=timezone.now(),
+        )
+        capture_event_type = (
+            'sale.payment_voided'
+            if failure_status == Venta.PaymentStatus.VOIDED
+            else 'sale.payment_failed'
+        )
+        transaction.on_commit(
+            lambda venta_id=venta.id, event_type=capture_event_type, failure_reason=venta.payment_failure_reason: (
+                capture_sale_lifecycle_to_offline_journal(
+                    venta_id=venta_id,
+                    capture_event_type=event_type,
+                    reason=failure_reason,
+                )
+            )
         )
         return True
 

@@ -157,6 +157,12 @@ OFFLINE_JOURNAL_ROOT=D:\\bosco-offline
 OFFLINE_JOURNAL_STREAM_NAME=sales
 ```
 
+Optional: enable server-side shadow capture so Django mirrors paid and failed sales into the same JSONL contract while Electron is not wired yet:
+
+```powershell
+OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True
+```
+
 ## Recommended Deploy Sequence
 
 For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:
