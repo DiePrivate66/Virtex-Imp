@@ -66,7 +66,7 @@ Incluye:
 
 Con `Procfile`:
 
-- `web`: Django/Gunicorn
+- `web`: wrapper `scripts/start_web.py` que arranca Gunicorn directo o replay gateway + Gunicorn segun env
 - `worker`: Celery worker
 - `beat`: Celery beat
 

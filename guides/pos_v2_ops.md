@@ -11,10 +11,11 @@ This guide covers the server-side operational foundation already implemented in 
 - cash closing safeguards for pending refunds
 - operational preflight checks
 - Django-side replay admission for `X-POS-Replay: 1`
+- a dedicated replay gateway wrapper with total timeout and idle timeout enforcement ahead of Django
 - Python reference primitives for the offline JSONL journal, `.snapshot` sidecar, reseal, and valid-prefix recovery
 - organization-scoped ledger shards for open accounting adjustments
 
-It does **not** cover the future Electron offline runtime integration, LAN sync, or a dedicated replay gateway with idle-timeout/draining semantics. Those are still pending implementation.
+It does **not** cover the future Electron offline runtime integration, LAN sync, or cooperative replay draining/time-slicing outside Django. Those are still pending implementation.
 
 ## Offline Journal Reference
 
@@ -128,6 +129,14 @@ Rebuild accounting shards for every organization:
 python manage.py reconcile_ledger_shards --json
 ```
 
+Enable the replay gateway wrapper in Railway/local env:
+
+```powershell
+REPLAY_GATEWAY_ENABLED=True
+REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS=10
+REPLAY_GATEWAY_IDLE_TIMEOUT_SECONDS=5
+```
+
 ## Recommended Deploy Sequence
 
 For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:
@@ -189,7 +198,21 @@ Current scopes:
 - `organization`
 - `cold_lane`
 
-This is admission control only. It is not yet a full replay gateway with end-to-end TTL or idle timeout enforcement.
+Bosco now has two layers:
+
+- Django-side admission control (`429 replay_backpressure`)
+- an outer replay gateway wrapper that can cut replay requests on total timeout or idle timeout before they pin the web process indefinitely
+
+What is still missing is cooperative draining/time-slicing outside Django.
+
+Gateway timeout responses use:
+
+- HTTP `504`
+- `Retry-After`
+- `X-POS-Replay: 1`
+- `X-Bosco-Replay-Gateway`
+- `X-Bosco-Replay-Scope: gateway`
+- `X-Bosco-Replay-Reason`
 
 ### `sale.post_close_replay_alert`
 
