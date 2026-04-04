@@ -10,7 +10,12 @@ from django.db.models.functions import ExtractHour, TruncDate
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from pos.infrastructure.offline import OfflineJournalRuntimeConfig, SegmentedJournalRuntime, recover_segment_prefix
+from pos.infrastructure.offline import (
+    OfflineJournalRuntimeConfig,
+    SegmentedJournalRuntime,
+    load_snapshot_payload,
+    recover_segment_prefix,
+)
 from pos.models import AccountingAdjustment, Asistencia, AuditLog, DetalleVenta, MovimientoCaja, Venta
 
 
@@ -230,6 +235,7 @@ def build_offline_limbo_context() -> dict:
     stream_name = getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales')
     capture_enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS', False))
     recent_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50)))
+    history_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_HISTORY_LIMIT', 5)))
 
     context = {
         'offline_journal_enabled': enabled,
@@ -256,6 +262,7 @@ def build_offline_limbo_context() -> dict:
             'error_message': '',
         },
         'recent_events': [],
+        'sealed_segments': [],
     }
 
     if not enabled:
@@ -287,6 +294,12 @@ def build_offline_limbo_context() -> dict:
         )
         limbo = runtime.get_limbo_view()
         context['limbo'] = limbo
+        context['sealed_segments'] = _build_sealed_segment_history(
+            root_dir=root_dir,
+            stream_name=stream_name,
+            active_segment_id=str(limbo.get('segment_id') or '').strip(),
+            limit=history_limit,
+        )
         segment_path_value = str(limbo.get('segment_path') or '').strip()
         if not segment_path_value:
             context['status'] = 'empty'
@@ -339,6 +352,70 @@ def _build_recent_offline_events(records, *, limit: int) -> list[dict]:
     return events
 
 
+def _build_sealed_segment_history(
+    *,
+    root_dir: Path,
+    stream_name: str,
+    active_segment_id: str,
+    limit: int,
+) -> list[dict]:
+    history: list[dict] = []
+    snapshot_paths = sorted(
+        root_dir.glob(f'{stream_name}-*.snapshot.json'),
+        key=lambda item: item.name,
+        reverse=True,
+    )
+
+    for snapshot_path in snapshot_paths:
+        snapshot = load_snapshot_payload(snapshot_path)
+        segment_id = str(snapshot.get('segment_id') or snapshot_path.name.replace('.snapshot.json', ''))
+        if not segment_id or segment_id == active_segment_id:
+            continue
+        if not snapshot.get('sealed'):
+            continue
+
+        segment_path = root_dir / f'{segment_id}.jsonl'
+        recovery = recover_segment_prefix(segment_path)
+        last_record = recovery.records[-1] if recovery.records else {}
+        last_created_at = parse_datetime(str(last_record.get('created_at') or ''))
+        summary = snapshot.get('summary') or {}
+
+        if recovery.truncated_tail or recovery.corrupted_tail:
+            status = 'integrity_error'
+            detail = recovery.error_message or 'El segmento sellado tiene una cola invalida.'
+        elif recovery.footer:
+            status = 'sealed'
+            detail = 'Footer presente y validado.'
+        else:
+            status = 'footer_missing'
+            detail = 'Snapshot sellado, pero el footer no esta presente en el segmento.'
+
+        history.append(
+            {
+                'segment_id': segment_id,
+                'segment_path': str(segment_path),
+                'snapshot_path': str(snapshot_path),
+                'record_count': int(snapshot.get('record_count') or recovery.record_count),
+                'summary_total_sales': int(summary.get('total_sales') or 0),
+                'summary_amount_total': str(summary.get('amount_total') or '0.00'),
+                'footer_present': bool(recovery.footer),
+                'status': status,
+                'detail': detail,
+                'last_event_id': str(snapshot.get('last_event_id') or recovery.last_event_id or ''),
+                'last_event_created_at': last_created_at or last_record.get('created_at'),
+                'segment_crc32': str(
+                    (recovery.footer or {}).get('segment_crc32')
+                    or snapshot.get('rolling_crc32')
+                    or '00000000'
+                ),
+            }
+        )
+        if len(history) >= limit:
+            break
+
+    return history
+
+
 def build_offline_limbo_payload() -> dict:
     context = build_offline_limbo_context()
     return {
@@ -349,6 +426,17 @@ def build_offline_limbo_payload() -> dict:
                 'created_at': event['created_at'].isoformat() if hasattr(event.get('created_at'), 'isoformat') else event.get('created_at'),
             }
             for event in context.get('recent_events', [])
+        ],
+        'sealed_segments': [
+            {
+                **segment,
+                'last_event_created_at': (
+                    segment['last_event_created_at'].isoformat()
+                    if hasattr(segment.get('last_event_created_at'), 'isoformat')
+                    else segment.get('last_event_created_at')
+                ),
+            }
+            for segment in context.get('sealed_segments', [])
         ],
         'refreshed_at': timezone.now().isoformat(),
     }

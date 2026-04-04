@@ -168,6 +168,53 @@
             </table>
         </div>
     </div>
+
+    <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6 mb-6">
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest">Historial De Segmentos Sellados</h2>
+            <p class="text-[11px] text-gray-500 font-bold">Ultimos segmentos confirmados del stream.</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                        <th class="pb-2 font-black">Segmento</th>
+                        <th class="pb-2 font-black">Ult. Evento</th>
+                        <th class="pb-2 font-black">Records</th>
+                        <th class="pb-2 font-black">Ventas</th>
+                        <th class="pb-2 font-black">Monto</th>
+                        <th class="pb-2 font-black">Estado</th>
+                    </tr>
+                </thead>
+                <tbody class="text-sm" data-sealed-segments-body>
+                    {% for segment in sealed_segments %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
+                        <td class="py-3 text-xs">
+                            <p class="text-white font-bold break-all">{{ segment.segment_id }}</p>
+                            <p class="text-[10px] text-gray-500 break-all mt-1">{{ segment.segment_path }}</p>
+                        </td>
+                        <td class="py-3 text-gray-300 text-xs">
+                            {% if segment.last_event_created_at %}{{ segment.last_event_created_at|date:"d/m H:i:s" }}{% else %}SIN_FECHA{% endif %}
+                        </td>
+                        <td class="py-3 text-gray-200 text-xs">{{ segment.record_count }}</td>
+                        <td class="py-3 text-gray-200 text-xs">{{ segment.summary_total_sales }}</td>
+                        <td class="py-3 text-gray-200 text-xs">${{ segment.summary_amount_total }}</td>
+                        <td class="py-3 text-xs">
+                            <span class="px-2 py-1 rounded-md text-[10px] font-black {% if segment.status == 'sealed' %}bg-green-900/40 text-green-300{% elif segment.status == 'footer_missing' %}bg-yellow-900/40 text-yellow-300{% else %}bg-red-900/40 text-red-300{% endif %}">
+                                {{ segment.status|upper }}
+                            </span>
+                            <p class="text-[10px] text-gray-400 mt-2">{{ segment.detail }}</p>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr data-empty-sealed-row>
+                        <td colspan="6" class="py-4 text-center text-gray-500 text-sm">No hay segmentos sellados para mostrar.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -184,6 +231,7 @@
     const resealButton = root.querySelector('[data-action-button="reseal"]');
     const actionFeedback = root.querySelector('[data-action-feedback]');
     const eventsBody = root.querySelector('[data-recent-events-body]');
+    const sealedSegmentsBody = root.querySelector('[data-sealed-segments-body]');
     const refreshIntervalMs = 10000;
     let refreshTimer = null;
 
@@ -269,6 +317,40 @@
         eventsBody.innerHTML = rows.join('');
     };
 
+    const renderSealedSegments = (segments) => {
+        if (!sealedSegmentsBody) return;
+        if (!Array.isArray(segments) || segments.length === 0) {
+            sealedSegmentsBody.innerHTML = '<tr data-empty-sealed-row><td colspan="6" class="py-4 text-center text-gray-500 text-sm">No hay segmentos sellados para mostrar.</td></tr>';
+            return;
+        }
+        const rows = [];
+        segments.forEach((segment) => {
+            const status = String(segment.status || 'unknown');
+            const statusClasses = status === 'sealed'
+                ? 'bg-green-900/40 text-green-300'
+                : status === 'footer_missing'
+                    ? 'bg-yellow-900/40 text-yellow-300'
+                    : 'bg-red-900/40 text-red-300';
+            rows.push(`
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
+                    <td class="py-3 text-xs">
+                        <p class="text-white font-bold break-all">${segment.segment_id || 'SIN_SEGMENTO'}</p>
+                        <p class="text-[10px] text-gray-500 break-all mt-1">${segment.segment_path || 'N/A'}</p>
+                    </td>
+                    <td class="py-3 text-gray-300 text-xs">${formatTimestamp(segment.last_event_created_at)}</td>
+                    <td class="py-3 text-gray-200 text-xs">${segment.record_count ?? 0}</td>
+                    <td class="py-3 text-gray-200 text-xs">${segment.summary_total_sales ?? 0}</td>
+                    <td class="py-3 text-gray-200 text-xs">$${segment.summary_amount_total || '0.00'}</td>
+                    <td class="py-3 text-xs">
+                        <span class="px-2 py-1 rounded-md text-[10px] font-black ${statusClasses}">${status.toUpperCase()}</span>
+                        <p class="text-[10px] text-gray-400 mt-2">${segment.detail || ''}</p>
+                    </td>
+                </tr>
+            `);
+        });
+        sealedSegmentsBody.innerHTML = rows.join('');
+    };
+
     const applyPayload = (payload) => {
         setText('stream_name', payload.stream_name || '');
         setText('root_dir', payload.root_dir || 'SIN_ROOT');
@@ -287,6 +369,7 @@
         setText('segment_error_message', payload.segment_health?.error_message || 'Sin errores de integridad reportados.');
         setStatusBanner(payload.status || 'error', payload.detail || '');
         renderEvents(payload.recent_events || []);
+        renderSealedSegments(payload.sealed_segments || []);
     };
 
     const refresh = async () => {

@@ -1273,6 +1273,56 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertContains(response, 'Limbo Offline')
         self.assertContains(response, 'OFFLINE-VIEW-001')
 
+    def test_dashboard_offline_limbo_renders_sealed_segment_history(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-sealed-1',
+                payload={
+                    'sale_total': '4.75',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-SEALED-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-sealed-001',
+            )
+            sealed_snapshot = runtime.seal_active_segment()
+            runtime.append_sale_event(
+                event_id='evt-offline-active-1',
+                payload={
+                    'sale_total': '8.35',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-ACTIVE-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-active-001',
+            )
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+                OFFLINE_JOURNAL_HISTORY_LIMIT=5,
+            ):
+                response = self.client.get(reverse('dashboard_offline_limbo'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Historial De Segmentos Sellados')
+        self.assertContains(response, sealed_snapshot['segment_id'])
+        self.assertEqual(len(response.context['sealed_segments']), 1)
+        self.assertEqual(response.context['sealed_segments'][0]['status'], 'sealed')
+
     def test_dashboard_offline_limbo_redirects_non_admin_user(self):
         self.client.force_login(self.user)
 
@@ -1317,6 +1367,59 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(payload['limbo']['summary']['total_sales'], 1)
         self.assertEqual(payload['recent_events'][0]['payment_reference'], 'OFFLINE-JSON-001')
         self.assertIn('refreshed_at', payload)
+
+    def test_dashboard_offline_limbo_json_includes_sealed_segment_history(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-sealed-json-1',
+                payload={
+                    'sale_total': '3.15',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-HISTORY-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-history-001',
+            )
+            sealed_snapshot = runtime.seal_active_segment()
+            runtime.append_sale_event(
+                event_id='evt-offline-sealed-json-2',
+                payload={
+                    'sale_total': '7.80',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-HISTORY-002',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-history-002',
+            )
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+                OFFLINE_JOURNAL_HISTORY_LIMIT=5,
+            ):
+                response = self.client.get(reverse('dashboard_offline_limbo_json'))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload['sealed_segments']), 1)
+        self.assertEqual(payload['sealed_segments'][0]['segment_id'], sealed_snapshot['segment_id'])
+        self.assertEqual(payload['sealed_segments'][0]['status'], 'sealed')
+        self.assertTrue(payload['sealed_segments'][0]['footer_present'])
+        self.assertEqual(payload['sealed_segments'][0]['summary_total_sales'], 1)
+        self.assertEqual(payload['sealed_segments'][0]['summary_amount_total'], '3.15')
 
     def test_dashboard_offline_limbo_json_rejects_non_admin_user(self):
         self.client.force_login(self.user)

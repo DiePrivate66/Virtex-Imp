@@ -358,6 +358,7 @@ La base durable local ya no esta en cero:
 - el backoffice ya expone `/dashboard/limbo-offline/` como vista de inspeccion operativa para revisar summary, paths, salud del tail y eventos recientes sin entrar por management commands
 - esa vista ya tiene endpoint JSON (`/dashboard/limbo-offline/json/`) y refresco por `fetch`, asi que la inspeccion no depende de reload manual
 - desde esa misma pantalla ya existen acciones admin-only para `reconcile sidecar` y `reseal segment`; ambas corren bajo el mismo file lock del runtime y devuelven el payload operativo refrescado
+- esa misma pantalla ahora tambien expone historial acotado de segmentos sellados (`OFFLINE_JOURNAL_HISTORY_LIMIT`) para inspeccionar records, monto agregado y presencia real de footer sin salir del backoffice
 - el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
 - el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
 - `manage.py offline_writer`, `manage.py offline_journal` y `manage.py offline_limbo` ya exponen append canonico, inspeccion, reconciliacion, re-sellado y lectura del summary de limbo sin depender aun del runtime Electron
