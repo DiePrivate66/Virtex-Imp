@@ -18,6 +18,7 @@ from django.test.client import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
+from .application.analytics import build_analytics_dashboard_context
 from .application.printing import build_cash_closing_context
 from .application.sales.replay_admission import admit_replay_request
 from .application.web_orders import WebOrderError, build_web_orders_payload, create_web_order
@@ -29,6 +30,7 @@ from .infrastructure.delivery import (
     make_delivery_in_transit_token,
 )
 from .models import (
+    AuditLog,
     CajaTurno,
     Categoria,
     Cliente,
@@ -779,6 +781,109 @@ class OpsPreflightCommandTests(TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.level, 'error')
         self.assertIn('fallo chequeando DB', result.detail)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class AnalyticsReplayTimelineTests(TestCase):
+    def setUp(self):
+        self.location = Location.get_or_create_default()
+        self.user = User.objects.create_superuser(
+            username='analytics-admin',
+            password='1234',
+            email='analytics@example.com',
+        )
+
+    def test_dashboard_context_includes_replay_timeline_alerts_and_estimated_sales_count(self):
+        venta = Venta.objects.create(
+            origen='POS',
+            tipo_pedido='SERVIR',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            payment_status=Venta.PaymentStatus.PAID,
+            total=Decimal('9.50'),
+            organization=self.location.organization,
+            location=self.location,
+            chronology_estimated=True,
+            queue_session_id='offline-dashboard-a',
+            session_seq_no=3,
+            operated_at_normalized=timezone.now() - timedelta(days=1),
+            accounting_booked_at=timezone.now(),
+        )
+        alert = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='sale.post_close_replay_alert',
+            target_model='Venta',
+            target_id=str(venta.id),
+            requires_attention=True,
+            payload_json={
+                'queue_session_id': 'offline-dashboard-a',
+                'session_seq_no': 3,
+                'operated_operating_day': '2026-04-01',
+                'accounting_operating_day': '2026-04-02',
+                'chronology_estimated': True,
+            },
+        )
+
+        context = build_analytics_dashboard_context(periodo='semana')
+
+        self.assertEqual(context['chronology_estimated_sales_count'], 1)
+        self.assertEqual(context['replay_timeline_alerts_open_count'], 1)
+        self.assertEqual(context['replay_timeline_alerts_open'][0].id, alert.id)
+
+    def test_resolver_alerta_replay_marks_alert_resolved(self):
+        venta = Venta.objects.create(
+            origen='POS',
+            tipo_pedido='SERVIR',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            payment_status=Venta.PaymentStatus.PAID,
+            total=Decimal('11.00'),
+            organization=self.location.organization,
+            location=self.location,
+            chronology_estimated=True,
+            queue_session_id='offline-dashboard-b',
+            session_seq_no=8,
+            operated_at_normalized=timezone.now() - timedelta(days=2),
+            accounting_booked_at=timezone.now(),
+        )
+        alert = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='sale.post_close_replay_alert',
+            target_model='Venta',
+            target_id=str(venta.id),
+            requires_attention=True,
+            payload_json={
+                'queue_session_id': 'offline-dashboard-b',
+                'session_seq_no': 8,
+                'operated_operating_day': '2026-04-01',
+                'accounting_operating_day': '2026-04-03',
+                'chronology_estimated': True,
+            },
+            correlation_id='replay-resolution-test',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse('resolver_alerta_replay'),
+            data={'audit_log_id': alert.id, 'resolution_note': 'Cierre revisado manualmente por administracion.'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        alert.refresh_from_db()
+        self.assertFalse(alert.requires_attention)
+        self.assertIsNotNone(alert.resolved_at)
+        self.assertEqual(alert.resolved_by, self.user)
+        self.assertTrue(
+            AuditLog.objects.filter(
+                event_type='sale.post_close_replay_alert_resolved',
+                target_id=str(alert.id),
+                correlation_id='replay-resolution-test',
+            ).exists()
+        )
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

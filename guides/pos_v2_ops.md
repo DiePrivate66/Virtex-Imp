@@ -131,6 +131,23 @@ Current scopes:
 
 This is admission control only. It is not yet a full replay gateway with end-to-end TTL or idle timeout enforcement.
 
+### `sale.post_close_replay_alert`
+
+These alerts mean a replayed sale landed in a different accounting day than its operational chronology.
+
+Current operator workflow:
+
+1. Review the alert in the analytics dashboard.
+2. Confirm operational day versus accounting day.
+3. Add a mandatory justification note.
+4. Mark the alert as reviewed.
+
+Important:
+
+- this action does **not** reopen closed cash days
+- this action does **not** rewrite `operated_at_normalized`
+- this action only closes the operational alert trail in `AuditLog`
+
 ### `ledger_lockfile`
 
 The generated lockfile does not match the code registry.

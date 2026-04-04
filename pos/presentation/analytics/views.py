@@ -4,7 +4,12 @@ from django.contrib import messages
 from django.shortcuts import redirect, render
 
 from pos.application.analytics import build_analytics_dashboard_context
-from pos.application.sales import PosSaleError, resolve_accounting_adjustment, resolve_payment_exception
+from pos.application.sales import (
+    PosSaleError,
+    resolve_accounting_adjustment,
+    resolve_payment_exception,
+    resolve_post_close_replay_alert,
+)
 
 
 def dashboard_analytics(request):
@@ -75,6 +80,30 @@ def resolver_ajuste_contable(request):
         return redirect('dashboard_analytics')
     except PosSaleError as exc:
         messages.error(request, exc.message)
+        return redirect('dashboard_analytics')
+
+    return redirect('dashboard_analytics')
+
+
+def resolver_alerta_replay(request):
+    if not request.user.is_authenticated:
+        return redirect('pos_login')
+
+    if request.method != 'POST':
+        return redirect('dashboard_analytics')
+
+    if hasattr(request.user, 'empleado') and request.user.empleado.rol != 'ADMIN' and not request.user.is_superuser:
+        return redirect('pos_index')
+
+    try:
+        resolve_post_close_replay_alert(
+            audit_log_id=int(request.POST.get('audit_log_id', '0') or 0),
+            user=request.user,
+            resolution_note=request.POST.get('resolution_note', ''),
+        )
+        messages.success(request, 'La alerta temporal de replay fue marcada como revisada.')
+    except (ValueError, PosSaleError):
+        messages.error(request, 'No se pudo resolver la alerta temporal con la informacion enviada.')
         return redirect('dashboard_analytics')
 
     return redirect('dashboard_analytics')

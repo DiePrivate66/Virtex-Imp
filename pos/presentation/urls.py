@@ -77,5 +77,6 @@ urlpatterns = [
     # Analytics
     path('dashboard/', analytics_views.dashboard_analytics, name='dashboard_analytics'),
     path('dashboard/resolver-excepcion-pago/', analytics_views.resolver_excepcion_pago, name='resolver_excepcion_pago'),
+    path('dashboard/resolver-alerta-replay/', analytics_views.resolver_alerta_replay, name='resolver_alerta_replay'),
     path('dashboard/resolver-ajuste-contable/', analytics_views.resolver_ajuste_contable, name='resolver_ajuste_contable'),
 ]

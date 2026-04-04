@@ -165,6 +165,15 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
     ).select_related('location', 'actor_user')
     payment_exceptions_open = list(payment_exceptions_queryset.order_by('-created_at')[:10])
 
+    replay_timeline_alerts_queryset = AuditLog.objects.filter(
+        event_type='sale.post_close_replay_alert',
+        requires_attention=True,
+        resolved_at__isnull=True,
+    ).select_related('location', 'actor_user')
+    replay_timeline_alerts_open = list(replay_timeline_alerts_queryset.order_by('-created_at')[:10])
+
+    chronology_estimated_sales_count = ventas.filter(chronology_estimated=True).count()
+
     refund_adjustments_queryset = AccountingAdjustment.objects.filter(
         account_bucket=AccountingAdjustment.AccountBucket.REFUND_LIABILITY,
         status=AccountingAdjustment.Status.OPEN,
@@ -202,6 +211,9 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
         'asistencias': _build_attendance_data(desde, hasta),
         'payment_exceptions_open': payment_exceptions_open,
         'payment_exceptions_open_count': payment_exceptions_queryset.count(),
+        'replay_timeline_alerts_open': replay_timeline_alerts_open,
+        'replay_timeline_alerts_open_count': replay_timeline_alerts_queryset.count(),
+        'chronology_estimated_sales_count': chronology_estimated_sales_count,
         'refund_adjustments_open': refund_adjustments_open,
         'refund_adjustments_open_count': refund_adjustments_queryset.count(),
         'refund_adjustments_open_total': refund_adjustments_open_total,

@@ -346,6 +346,52 @@ class PaymentExceptionResolutionAction:
     }
 
 
+def resolve_post_close_replay_alert(
+    *,
+    audit_log_id: int,
+    user,
+    resolution_note: str = '',
+) -> AuditLog:
+    resolution_note = (resolution_note or '').strip()
+    if not resolution_note:
+        raise PosSaleError('La justificacion de resolucion es obligatoria', status_code=400)
+
+    with transaction.atomic():
+        alert = (
+            AuditLog.objects.select_for_update()
+            .select_related('organization', 'location')
+            .filter(
+                id=audit_log_id,
+                event_type='sale.post_close_replay_alert',
+                requires_attention=True,
+                resolved_at__isnull=True,
+            )
+            .first()
+        )
+        if not alert:
+            raise PosSaleError('La alerta temporal indicada no existe o ya fue resuelta', status_code=404)
+
+        alert.resolved_at = timezone.now()
+        alert.resolved_by = user
+        alert.requires_attention = False
+        alert.save(update_fields=['resolved_at', 'resolved_by', 'requires_attention'])
+
+        AuditLog.objects.create(
+            organization=alert.organization,
+            location=alert.location,
+            actor_user=user,
+            event_type='sale.post_close_replay_alert_resolved',
+            target_model='AuditLog',
+            target_id=str(alert.id),
+            payload_json={
+                'resolution_note': resolution_note[:255],
+                'resolved_alert_event_type': alert.event_type,
+            },
+            correlation_id=alert.correlation_id,
+        )
+        return alert
+
+
 def resolve_payment_exception(
     *,
     audit_log_id: int,

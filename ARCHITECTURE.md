@@ -341,6 +341,7 @@ Tambien existe señalizacion explicita de riesgo:
 
 - `chronology_estimated=True` cuando la rehidratacion temporal supera el umbral operativo
 - `sale.post_close_replay_alert` cuando una venta replayada cae en un dia operativo distinto del periodo contable abierto
+- el dashboard analytics ya expone estas alertas y su resolucion administrativa solo las marca como revisadas; no reabre cierres ni reescribe la venta
 
 La deuda que sigue abierta no esta en el contrato de servidor, sino en la durabilidad local:
 

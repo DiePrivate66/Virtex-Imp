@@ -75,6 +75,60 @@
     </div>
     {% endif %}
 
+    {% if replay_timeline_alerts_open_count or chronology_estimated_sales_count %}
+    <div class="bg-sky-950/40 rounded-2xl border border-sky-700/50 p-6 mb-6">
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-sky-300 font-black text-sm uppercase tracking-widest">CRONOLOGIA REPLAY / POST-CIERRE</h2>
+                <p class="text-sky-200 text-xs mt-1">
+                    {{ replay_timeline_alerts_open_count }} alerta(s) abiertas.
+                    {{ chronology_estimated_sales_count }} venta(s) del periodo quedaron marcadas como cronologia estimada.
+                </p>
+            </div>
+            <div class="bg-sky-500 text-black text-2xl font-black px-4 py-2 rounded-xl">
+                {{ replay_timeline_alerts_open_count }}
+            </div>
+        </div>
+        {% if replay_timeline_alerts_open %}
+        <div class="space-y-3">
+            {% for alert in replay_timeline_alerts_open %}
+            <div class="bg-black/20 border border-sky-800/40 rounded-xl p-4">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                    <div>
+                        <p class="text-white font-black text-sm">Venta #{{ alert.target_id }}{% if alert.location %} · {{ alert.location.name }}{% endif %}</p>
+                        <p class="text-sky-200 text-xs mt-1">
+                            {{ alert.created_at|date:"d/m H:i" }} ·
+                            Operativo: {{ alert.payload_json.operated_operating_day|default:"SIN_DATO" }} ·
+                            Contable: {{ alert.payload_json.accounting_operating_day|default:"SIN_DATO" }}
+                        </p>
+                        <p class="text-gray-300 text-xs mt-1">
+                            Queue: {{ alert.payload_json.queue_session_id|default:"SIN_SESION" }} ·
+                            Seq: {{ alert.payload_json.session_seq_no|default:"SIN_SEQ" }} ·
+                            {% if alert.payload_json.chronology_estimated %}cronologia estimada{% else %}cronologia estable{% endif %}
+                        </p>
+                    </div>
+                    <form method="post" action="{% url 'resolver_alerta_replay' %}" class="flex flex-col gap-2 lg:items-end">
+                        {% csrf_token %}
+                        <input type="hidden" name="audit_log_id" value="{{ alert.id }}">
+                        <input
+                            type="text"
+                            name="resolution_note"
+                            placeholder="Justificacion de revision obligatoria"
+                            required
+                            class="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white w-72"
+                        >
+                        <button type="submit" class="bg-sky-500 hover:bg-sky-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
+                            Marcar revisada
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {% if payment_exceptions_open_count %}
     <div class="bg-red-950/40 rounded-2xl border border-red-700/50 p-6 mb-6">
         <div class="flex items-center justify-between gap-4 mb-4">
