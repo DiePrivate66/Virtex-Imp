@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from io import StringIO
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase
 
 from pos.infrastructure.offline import (
@@ -171,3 +174,110 @@ class SegmentJournalTests(SimpleTestCase):
         self.assertEqual(recovery.record_count, 1)
         self.assertTrue(recovery.corrupted_tail)
         self.assertIn('prev_record_hash mismatch', recovery.error_message)
+
+
+class OfflineJournalCommandTests(SimpleTestCase):
+    def setUp(self):
+        self.temp_dir = TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.base_dir = Path(self.temp_dir.name)
+        self.segment_path = self.base_dir / 'sales-20260404-002.jsonl'
+        self.snapshot_path = self.base_dir / 'sales-20260404-002.snapshot.json'
+        self.journal = SegmentJournal(
+            segment_path=self.segment_path,
+            snapshot_path=self.snapshot_path,
+            segment_id='sales-20260404-002',
+        )
+
+    def test_command_outputs_json_status(self):
+        self.journal.append_event(
+            event_id='evt-command-1',
+            payload={'sale_total': '9.99'},
+        )
+
+        out = StringIO()
+        call_command(
+            'offline_journal',
+            str(self.segment_path),
+            str(self.snapshot_path),
+            '--json',
+            stdout=out,
+        )
+        payload = json.loads(out.getvalue())
+
+        self.assertEqual(payload['record_count'], 1)
+        self.assertFalse(payload['footer_present'])
+        self.assertFalse(payload['truncated_tail'])
+        self.assertEqual(payload['last_event_id'], 'evt-command-1')
+
+    def test_command_reconcile_repairs_snapshot(self):
+        self.journal.append_event(
+            event_id='evt-command-1',
+            payload={'sale_total': '9.99'},
+        )
+        self.journal.append_event(
+            event_id='evt-command-2',
+            payload={'sale_total': '4.25'},
+        )
+
+        snapshot = json.loads(self.snapshot_path.read_text(encoding='utf-8'))
+        snapshot['record_count'] = 0
+        snapshot['last_offset_confirmed'] = 0
+        snapshot['last_event_id'] = ''
+        snapshot['last_record_hash'] = ''
+        snapshot['rolling_crc32'] = '00000000'
+        self.snapshot_path.write_text(json.dumps(snapshot), encoding='utf-8')
+
+        out = StringIO()
+        call_command(
+            'offline_journal',
+            str(self.segment_path),
+            str(self.snapshot_path),
+            '--reconcile',
+            '--json',
+            stdout=out,
+        )
+        payload = json.loads(out.getvalue())
+
+        self.assertTrue(payload['reconciled'])
+        self.assertEqual(payload['record_count'], 2)
+        self.assertEqual(payload['last_event_id'], 'evt-command-2')
+
+    def test_command_reseal_writes_pending_footer(self):
+        self.journal.append_event(
+            event_id='evt-command-1',
+            payload={'sale_total': '9.99'},
+        )
+        self.journal.prepare_seal()
+
+        out = StringIO()
+        call_command(
+            'offline_journal',
+            str(self.segment_path),
+            str(self.snapshot_path),
+            '--reseal',
+            '--json',
+            stdout=out,
+        )
+        payload = json.loads(out.getvalue())
+
+        self.assertTrue(payload['resealed'])
+        self.assertTrue(payload['sealed'])
+        self.assertTrue(payload['footer_present'])
+
+    def test_command_strict_fails_on_truncated_tail(self):
+        self.journal.append_event(
+            event_id='evt-command-1',
+            payload={'sale_total': '9.99'},
+        )
+        with self.segment_path.open('ab') as handle:
+            handle.write(b'{"kind":"event"')
+
+        with self.assertRaises(CommandError):
+            call_command(
+                'offline_journal',
+                str(self.segment_path),
+                str(self.snapshot_path),
+                '--strict',
+                stdout=StringIO(),
+            )

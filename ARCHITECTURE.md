@@ -348,6 +348,7 @@ La base durable local ya no esta en cero:
 - `pos.infrastructure.offline.journal` ya implementa journal JSONL segmentado, sidecar `.snapshot`, rolling hash por registro, footer sellado y recuperacion por prefijo valido
 - el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
 - el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
+- `manage.py offline_journal` ya expone inspeccion, reconciliacion y re-sellado operativo del segmento sin depender aun del runtime Electron
 
 La deuda abierta ya no es el formato ni la validacion, sino la integracion operativa:
 

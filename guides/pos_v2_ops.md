@@ -35,6 +35,30 @@ What is still missing:
 - limbo UI driven by the `.snapshot` file
 - disk-space enforcement and client read-only transitions
 
+Operational command available now:
+
+```powershell
+python manage.py offline_journal path\\to\\segment.jsonl path\\to\\segment.snapshot.json --json
+```
+
+Reconcile the sidecar from the journal:
+
+```powershell
+python manage.py offline_journal path\\to\\segment.jsonl path\\to\\segment.snapshot.json --reconcile --json
+```
+
+Attempt footer reseal after an interrupted segment rotation:
+
+```powershell
+python manage.py offline_journal path\\to\\segment.jsonl path\\to\\segment.snapshot.json --reseal --json
+```
+
+Fail closed if the active segment has a truncated or corrupted tail:
+
+```powershell
+python manage.py offline_journal path\\to\\segment.jsonl path\\to\\segment.snapshot.json --strict
+```
+
 ## Daily Commands
 
 Build the registry manifest:
