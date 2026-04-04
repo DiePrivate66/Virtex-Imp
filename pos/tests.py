@@ -8,6 +8,7 @@ from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
+from django.contrib import admin
 from django.contrib.auth.models import Group
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -19,6 +20,7 @@ from django.utils import timezone
 
 from .application.printing import build_cash_closing_context
 from .application.web_orders import WebOrderError, build_web_orders_payload, create_web_order
+from .admin import VentaAdmin
 from .application.sales.commands import send_sale_receipt_email
 from .infrastructure.delivery import (
     make_delivery_claim_token,
@@ -1120,6 +1122,25 @@ class WebOrderApiRequestParsingTests(SimpleTestCase):
 
         self.assertIsNone(comprobante)
         self.assertEqual(data['payment_reference'], 'PAY-WEB-API-001')
+
+
+class VentaAdminConfigurationTests(SimpleTestCase):
+    def test_admin_uses_canonical_payment_readonly_fields(self):
+        venta_admin = VentaAdmin(Venta, admin.site)
+
+        readonly_fields = venta_admin.get_readonly_fields(request=None)
+
+        self.assertIn('payment_status_display', readonly_fields)
+        self.assertIn('payment_method_type', readonly_fields)
+        self.assertIn('payment_reference', readonly_fields)
+        self.assertNotIn('legacy_estado_pago_display', readonly_fields)
+        self.assertNotIn('legacy_payment_reference_display', readonly_fields)
+
+    def test_admin_excludes_legacy_payment_fields(self):
+        venta_admin = VentaAdmin(Venta, admin.site)
+
+        self.assertIn('estado_pago', venta_admin.exclude)
+        self.assertIn('referencia_pago', venta_admin.exclude)
 
 
 class LegacyImportRegistryTests(SimpleTestCase):

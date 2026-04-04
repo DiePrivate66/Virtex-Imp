@@ -81,13 +81,9 @@ class VentaAdmin(admin.ModelAdmin):
     def payment_status_display(self, obj):
         return obj.get_payment_status_display()
 
-    @admin.display(description="Estado pago legacy")
-    def legacy_estado_pago_display(self, obj):
-        return obj.get_estado_pago_display()
-
-    @admin.display(description="Referencia legacy")
-    def legacy_payment_reference_display(self, obj):
-        return obj.referencia_pago or "-"
+    @admin.display(ordering="payment_reference", description="Referencia pago")
+    def payment_reference_display(self, obj):
+        return obj.payment_reference or "-"
 
     list_display = (
         "id",
@@ -98,6 +94,7 @@ class VentaAdmin(admin.ModelAdmin):
         "estado",
         "payment_status_display",
         "payment_method_type",
+        "payment_reference_display",
         "total",
     )
     list_filter = ("origen", "tipo_pedido", "estado", "payment_status", "payment_method_type", "fecha")
@@ -109,7 +106,7 @@ class VentaAdmin(admin.ModelAdmin):
         "direccion_envio",
         "payment_reference",
     )
-    readonly_fields = ("fecha", "legacy_estado_pago_display", "legacy_payment_reference_display")
+    readonly_fields = ("fecha", "payment_status_display", "payment_method_type", "payment_reference")
     exclude = ("estado_pago", "referencia_pago")
     inlines = [DetalleVentaInline]
 
