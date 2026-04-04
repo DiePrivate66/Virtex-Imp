@@ -120,6 +120,14 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temp_name, path)
 
 
+def load_snapshot_payload(snapshot_path: str | Path) -> dict[str, Any]:
+    return _read_json_file(Path(snapshot_path)) or {}
+
+
+def persist_snapshot_payload(snapshot_path: str | Path, payload: Mapping[str, Any]) -> None:
+    _atomic_write_json(Path(snapshot_path), dict(payload))
+
+
 def _read_tail(path: Path, length: int) -> bytes:
     with path.open('rb') as handle:
         handle.seek(max(0, path.stat().st_size - length))

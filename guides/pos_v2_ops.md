@@ -13,6 +13,7 @@ This guide covers the server-side operational foundation already implemented in 
 - Django-side replay admission for `X-POS-Replay: 1`
 - a dedicated replay gateway wrapper with total timeout, idle timeout, cold-lane slicing, and cooperative draining ahead of Django
 - Python reference primitives for the offline JSONL journal, `.snapshot` sidecar, reseal, and valid-prefix recovery
+- a local segmented journal runtime with limbo summary repair and size-based rotation
 - organization-scoped ledger shards for open accounting adjustments
 
 It does **not** cover the future Electron offline runtime integration or LAN sync. The replay gateway already enforces cold-lane slicing and cooperative draining, but only per gateway process, not via a distributed coordinator across multiple instances.
@@ -22,6 +23,7 @@ It does **not** cover the future Electron offline runtime integration or LAN syn
 Bosco now includes a Python reference implementation of the durable offline journal in:
 
 - `pos/infrastructure/offline/journal.py`
+- `pos/infrastructure/offline/runtime.py`
 
 What is implemented there:
 
@@ -30,6 +32,8 @@ What is implemented there:
 - footer sealing with cumulative `segment_crc32`
 - valid-prefix recovery for the active segment
 - segment reseal from pending sidecar state after an interrupted footer write
+- a segmented runtime that rolls to the next segment after the current one reaches the configured size threshold
+- limbo summary repair from the journal when the `.snapshot` sidecar falls behind or loses its aggregates
 
 What is still missing:
 
@@ -59,6 +63,12 @@ Fail closed if the active segment has a truncated or corrupted tail:
 
 ```powershell
 python manage.py offline_journal path\\to\\segment.jsonl path\\to\\segment.snapshot.json --strict
+```
+
+Inspect the current limbo summary for a journal directory:
+
+```powershell
+python manage.py offline_limbo path\\to\\offline-root --stream sales --json
 ```
 
 ## Daily Commands
