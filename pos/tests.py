@@ -19,6 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .application.printing import build_cash_closing_context
+from .application.sales.replay_admission import admit_replay_request
 from .application.web_orders import WebOrderError, build_web_orders_payload, create_web_order
 from .admin import VentaAdmin
 from .application.sales.commands import send_sale_receipt_email
@@ -33,6 +34,7 @@ from .models import (
     Cliente,
     DeliveryQuote,
     Empleado,
+    Inventario,
     Location,
     Organization,
     PrintJob,
@@ -600,6 +602,103 @@ class WebOrderActionApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'PENDIENTE')
+
+
+@override_settings(
+    SECURE_SSL_REDIRECT=False,
+    LEDGER_VERSION_FENCING_ENABLED=False,
+    POS_REPLAY_ADMISSION_ENABLED=True,
+    POS_REPLAY_GLOBAL_SLOTS=1,
+    POS_REPLAY_ORGANIZATION_SLOTS=1,
+    POS_REPLAY_COLD_LANE_SLOTS=1,
+    POS_REPLAY_SLOT_TTL_SECONDS=30,
+    POS_REPLAY_RETRY_AFTER_SECONDS=7,
+    POS_REPLAY_COLD_LANE_HOURS=48,
+)
+class PosReplayAdmissionApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username='replay-cajero', password='1234')
+        self.empleado = Empleado.objects.create(
+            nombre='Replay Cajero',
+            pin='7788',
+            rol='CAJERO',
+            activo=True,
+            usuario=self.user,
+        )
+        self.user.groups.add(Group.objects.get_or_create(name='Cajero')[0])
+        self.turno = CajaTurno.objects.create(usuario=self.user, base_inicial=Decimal('20.00'))
+        self.categoria = Categoria.objects.create(nombre='Replay', organization=self.turno.organization)
+        self.producto = Producto.objects.create(
+            categoria=self.categoria,
+            organization=self.turno.organization,
+            nombre='Replay Cola',
+            precio=Decimal('3.50'),
+            activo=True,
+        )
+        Inventario.objects.create(producto=self.producto, stock_actual=10, stock_minimo=2)
+        self.client.force_login(self.user)
+
+    def _payload(self, **overrides):
+        data = {
+            'client_transaction_id': 'sale-replay-001',
+            'metodo_pago': 'EFECTIVO',
+            'tipo_pedido': 'SERVIR',
+            'monto_recibido': '10.00',
+            'carrito': [
+                {'id': self.producto.id, 'cantidad': 1, 'nombre': self.producto.nombre, 'nota': ''},
+            ],
+        }
+        data.update(overrides)
+        return data
+
+    def test_replay_admission_classifies_old_sale_as_cold_lane(self):
+        ticket = admit_replay_request(
+            replay_header='1',
+            payload={
+                'client_created_at_raw': (timezone.now() - timedelta(hours=72)).isoformat(),
+            },
+            location=self.turno.location,
+        )
+
+        self.assertTrue(ticket.is_replay)
+        self.assertEqual(ticket.lane, 'cold')
+        ticket.release()
+
+    def test_register_sale_returns_429_when_replay_capacity_is_exhausted(self):
+        occupied = admit_replay_request(
+            replay_header='1',
+            payload=self._payload(client_created_at_raw=timezone.now().isoformat()),
+            location=self.turno.location,
+        )
+        try:
+            response = self.client.post(
+                reverse('registrar_venta'),
+                data=json.dumps(self._payload(client_transaction_id='sale-replay-002')),
+                content_type='application/json',
+                HTTP_X_POS_REPLAY='1',
+            )
+        finally:
+            occupied.release()
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response['Retry-After'], '7')
+        self.assertEqual(response['X-Bosco-Replay-Scope'], 'global')
+        self.assertEqual(response['X-Bosco-Replay-Reason'], 'replay_global_capacity_exhausted')
+        self.assertEqual(response['X-Bosco-Replay-Lane'], 'normal')
+        self.assertEqual(response.json()['code'], 'replay_backpressure')
+
+    def test_register_sale_attaches_replay_headers_when_request_is_admitted(self):
+        response = self.client.post(
+            reverse('registrar_venta'),
+            data=json.dumps(self._payload(client_transaction_id='sale-replay-003')),
+            content_type='application/json',
+            HTTP_X_POS_REPLAY='1',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['X-POS-Replay'], '1')
+        self.assertEqual(response['X-Bosco-Replay-Lane'], 'normal')
 
 
 @override_settings(

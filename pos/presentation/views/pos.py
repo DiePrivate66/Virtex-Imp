@@ -16,6 +16,7 @@ from pos.application.sales import (
     reconcile_payment_confirmation,
     register_sale,
 )
+from pos.application.sales.replay_admission import ReplayAdmissionError, admit_replay_request
 from pos.application.staff import user_is_pos_operator
 from pos.models import IdempotencyRecord
 
@@ -31,6 +32,16 @@ def _user_can_reconcile_payments(user) -> bool:
         return True
     empleado = getattr(user, 'empleado', None)
     return bool(empleado and empleado.rol == 'ADMIN')
+
+
+def _resolve_replay_location(request):
+    caja_abierta = get_user_open_cash_register(request.user)
+    if caja_abierta and caja_abierta.location_id:
+        return caja_abierta.location
+    try:
+        return resolve_location_for_user(request.user)
+    except Exception:
+        return None
 
 
 def pos_index(request):
@@ -50,9 +61,14 @@ def registrar_venta(request):
         return JsonResponse({'status': 'error', 'mensaje': 'Metodo no permitido'}, status=405)
     if not user_is_pos_operator(request.user):
         return JsonResponse({'status': 'error', 'mensaje': 'No autorizado'}, status=403)
-
+    admission = None
     try:
         data = json.loads(request.body)
+        admission = admit_replay_request(
+            replay_header=request.headers.get('X-POS-Replay'),
+            payload=data,
+            location=_resolve_replay_location(request),
+        )
         data.setdefault('correlation_id', getattr(request, 'correlation_id', ''))
         data.setdefault('audit_ip', request.META.get('REMOTE_ADDR', ''))
         data.setdefault('audit_user_agent', request.META.get('HTTP_USER_AGENT', ''))
@@ -66,9 +82,11 @@ def registrar_venta(request):
             ),
             **result.payload,
         }
-        return JsonResponse(payload)
+        return admission.attach_headers(JsonResponse(payload)) if admission else JsonResponse(payload)
+    except ReplayAdmissionError as exc:
+        return exc.as_response()
     except PosSaleError as exc:
-        return JsonResponse(
+        response = JsonResponse(
             {
                 'status': 'error',
                 'mensaje': exc.message,
@@ -76,12 +94,17 @@ def registrar_venta(request):
             },
             status=exc.status_code,
         )
+        return admission.attach_headers(response) if admission else response
     except Exception:
         logger.exception('Error inesperado registrando venta POS')
-        return JsonResponse(
+        response = JsonResponse(
             {'status': 'error', 'mensaje': 'No se pudo registrar la venta. Intenta nuevamente.'},
             status=500,
         )
+        return admission.attach_headers(response) if admission else response
+    finally:
+        if admission:
+            admission.release()
 
 
 @login_required(login_url='pos_login')
@@ -122,9 +145,14 @@ def reconciliar_pago(request):
         return JsonResponse({'status': 'error', 'mensaje': 'Metodo no permitido'}, status=405)
     if not _user_can_reconcile_payments(request.user):
         return JsonResponse({'status': 'error', 'mensaje': 'No autorizado para reconciliar pagos'}, status=403)
-
+    admission = None
     try:
         data = json.loads(request.body)
+        admission = admit_replay_request(
+            replay_header=request.headers.get('X-POS-Replay'),
+            payload=data,
+            location=_resolve_replay_location(request),
+        )
         result = reconcile_payment_confirmation(
             venta_id=data.get('venta_id'),
             client_transaction_id=data.get('client_transaction_id'),
@@ -133,9 +161,11 @@ def reconciliar_pago(request):
             payment_provider=data.get('payment_provider', ''),
             gateway_payload=data.get('gateway_payload') or {},
         )
-        return JsonResponse({'status': 'ok', **result})
+        return admission.attach_headers(JsonResponse({'status': 'ok', **result})) if admission else JsonResponse({'status': 'ok', **result})
+    except ReplayAdmissionError as exc:
+        return exc.as_response()
     except PosSaleError as exc:
-        return JsonResponse(
+        response = JsonResponse(
             {
                 'status': 'error',
                 'mensaje': exc.message,
@@ -143,9 +173,14 @@ def reconciliar_pago(request):
             },
             status=exc.status_code,
         )
+        return admission.attach_headers(response) if admission else response
     except Exception:
         logger.exception('Error inesperado reconciliando pago POS')
-        return JsonResponse(
+        response = JsonResponse(
             {'status': 'error', 'mensaje': 'No se pudo reconciliar el pago.'},
             status=500,
         )
+        return admission.attach_headers(response) if admission else response
+    finally:
+        if admission:
+            admission.release()

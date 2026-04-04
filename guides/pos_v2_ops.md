@@ -10,8 +10,9 @@ This guide covers the server-side operational foundation already implemented in 
 - outbox processing and admin payment alerts
 - cash closing safeguards for pending refunds
 - operational preflight checks
+- Django-side replay admission for `X-POS-Replay: 1`
 
-It does **not** cover the future Electron offline runtime, JSONL journal, LAN sync, or replay gateway. Those are still pending implementation.
+It does **not** cover the future Electron offline runtime, JSONL journal, LAN sync, or a dedicated replay gateway with idle-timeout/draining semantics. Those are still pending implementation.
 
 ## Daily Commands
 
@@ -105,6 +106,30 @@ If `ops_preflight` reports a lockfile mismatch or activation mismatch, do **not*
 - print job backlog
 
 ## Interpreting Important Warnings
+
+### Replay backpressure (`429 replay_backpressure`)
+
+If a POS mutation arrives with `X-POS-Replay: 1`, Bosco may reject it with `429` when replay capacity is saturated.
+
+Current response contract:
+
+- `Retry-After`
+- `X-Bosco-Replay-Lane`
+- `X-Bosco-Replay-Scope`
+- `X-Bosco-Replay-Reason`
+
+Current lanes:
+
+- `normal`
+- `cold`
+
+Current scopes:
+
+- `global`
+- `organization`
+- `cold_lane`
+
+This is admission control only. It is not yet a full replay gateway with end-to-end TTL or idle timeout enforcement.
 
 ### `ledger_lockfile`
 

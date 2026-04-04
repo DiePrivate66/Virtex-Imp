@@ -248,6 +248,16 @@ LEDGER_FENCED_MUTATION_PATHS = tuple(
     )
 )
 LEDGER_WEB_CLIENT_APP_VERSION = os.environ.get('LEDGER_WEB_CLIENT_APP_VERSION', 'pos-web')
+POS_REPLAY_ADMISSION_ENABLED = os.environ.get(
+    'POS_REPLAY_ADMISSION_ENABLED',
+    'False' if DEBUG else 'True',
+) == 'True'
+POS_REPLAY_GLOBAL_SLOTS = int(os.environ.get('POS_REPLAY_GLOBAL_SLOTS', '8'))
+POS_REPLAY_ORGANIZATION_SLOTS = int(os.environ.get('POS_REPLAY_ORGANIZATION_SLOTS', '1'))
+POS_REPLAY_COLD_LANE_SLOTS = int(os.environ.get('POS_REPLAY_COLD_LANE_SLOTS', '2'))
+POS_REPLAY_COLD_LANE_HOURS = int(os.environ.get('POS_REPLAY_COLD_LANE_HOURS', '48'))
+POS_REPLAY_SLOT_TTL_SECONDS = int(os.environ.get('POS_REPLAY_SLOT_TTL_SECONDS', '15'))
+POS_REPLAY_RETRY_AFTER_SECONDS = int(os.environ.get('POS_REPLAY_RETRY_AFTER_SECONDS', '5'))
 
 # --- OPERACION / HORARIO ---
 # En desarrollo se desactiva por defecto para facilitar pruebas.

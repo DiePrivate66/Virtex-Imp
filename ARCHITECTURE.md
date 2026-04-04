@@ -235,6 +235,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - las ventas nuevas POS y Web Orders ya persisten metadata temporal de replay (`queue_session_id`, `session_seq_no`, `client_created_at_raw`, `client_monotonic_ms`) desde capa de aplicacion
 - `Venta` ya expone dos cronologias separadas: `operated_at_normalized` para lectura operativa y `accounting_booked_at` para cierre contable y registro real en servidor
 - cuando una venta replayada cae en un dia operativo distinto del dia contable actual, el backend ya emite `sale.post_close_replay_alert` en `AuditLog`
+- el backend ya aplica admision explicita a trafico `X-POS-Replay: 1` en mutaciones POS, con lanes `normal` / `cold`, `429`, `Retry-After`, `scope` y `reason`
 - `DetalleVenta` ya no calcula precios ni subtotales en `save()`; POS y Web Orders construyen el payload completo del detalle desde capa de aplicacion
 - `Categoria`, `Producto` y `Cliente` ya quedan scopeados por `organization`; catalogo, inventario y lookup de clientes POS/PWA ya no se leen como universo global
 - los movimientos de caja e inventario ya construyen `organization` / `location` desde capa de aplicacion; `MovimientoCaja.save()` y `MovimientoInventario.save()` quedan reducidos a validacion de consistencia local
@@ -345,7 +346,7 @@ La deuda que sigue abierta no esta en el contrato de servidor, sino en la durabi
 
 - aun no existe el writer Electron con journal JSONL segmentado
 - aun no existe sidecar `.snapshot` ni recuperacion por prefijo valido
-- aun no existe replay gateway dedicado con carril frio, TTL e idle timeout reales
+- aun no existe replay gateway dedicado con TTL total, idle timeout y draining cooperativo reales; hoy solo existe admision server-side en Django
 
 ## Prioridad de Refactor Real
 
