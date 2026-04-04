@@ -159,7 +159,8 @@ If `ops_preflight` reports a lockfile mismatch or activation mismatch, do **not*
 - stale idempotency rows
 - outbox backlog and blocked critical events
 - unresolved payment exceptions and open refund liabilities
-- ledger shard state and counter rows are still repaired through `reconcile_ledger_shards`; they are not yet auto-checked by `ops_preflight`
+- ledger shard state, missing shard rows, and counter drift against open accounting adjustments
+- chronology-estimated replay sales and stale unresolved `sale.post_close_replay_alert`
 - delivery pool availability
 - pending delivery quote backlog
 - print job backlog
@@ -265,6 +266,31 @@ Action:
 1. Open the analytics dashboard.
 2. Resolve the payment exception or accounting adjustment.
 3. Do not close the operational loop by hand without an audit note.
+
+### `ledger_shards`
+
+This check verifies:
+
+- every organization has `OrganizationLedgerState`
+- shard rows match `shard_count`
+- open `AccountingAdjustment` totals/counts match shard counters
+- no open adjustment remains with null or out-of-range `contingency_shard_id`
+
+If this check warns, run:
+
+```powershell
+python manage.py reconcile_ledger_shards --json
+```
+
+### `operational_drift`
+
+This check tracks replay chronology risk:
+
+- recent sales with `chronology_estimated=True`
+- open `sale.post_close_replay_alert`
+- stale unresolved replay alerts beyond `OPS_PREFLIGHT_REPLAY_ALERT_STALE_HOURS`
+
+Stale replay alerts now fail preflight as errors because they imply unresolved accounting-day drift.
 
 ### `reconcile_ledger_shards`
 

@@ -30,6 +30,7 @@ from .infrastructure.delivery import (
     make_delivery_in_transit_token,
 )
 from .models import (
+    AccountingAdjustment,
     AuditLog,
     CajaTurno,
     Categoria,
@@ -39,11 +40,13 @@ from .models import (
     Inventario,
     Location,
     Organization,
+    OrganizationLedgerCounterShard,
     PrintJob,
     Producto,
     Venta,
     WhatsAppConversation,
     WhatsAppMessageLog,
+    ensure_system_ledger_account,
 )
 from .presentation.api.web_order_requests import parse_web_order_request
 from .tasks import (
@@ -738,6 +741,8 @@ class OpsPreflightCommandTests(TestCase):
         self.assertIn('system_ledger_accounts', check_names)
         self.assertIn('outbox_backlog', check_names)
         self.assertIn('payment_exceptions_backlog', check_names)
+        self.assertIn('ledger_shards', check_names)
+        self.assertIn('operational_drift', check_names)
 
     @patch('pos.management.commands.ops_preflight.Command._check_redis')
     def test_ops_preflight_strict_fails_on_warning(self, mock_check_redis):
@@ -781,6 +786,101 @@ class OpsPreflightCommandTests(TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.level, 'error')
         self.assertIn('fallo chequeando DB', result.detail)
+
+    def test_ops_preflight_ledger_shards_detects_counter_drift(self):
+        from pos.management.commands.ops_preflight import Command
+
+        location = Location.get_or_create_default()
+        user = User.objects.create_user(username='ops-shards', password='1234')
+        source_account = ensure_system_ledger_account(
+            organization=location.organization,
+            system_code=AccountingAdjustment.SystemLedgerCode.PAYMENT_GATEWAY_CLEARING,
+        )
+        destination_account = ensure_system_ledger_account(
+            organization=location.organization,
+            system_code=AccountingAdjustment.SystemLedgerCode.UNIDENTIFIED_RECEIPTS,
+        )
+        alert = AuditLog.objects.create(
+            organization=location.organization,
+            location=location,
+            actor_user=user,
+            event_type='sale.orphan_payment_detected',
+            target_model='Venta',
+            target_id='ops-ledger-shards',
+            payload_json={'payment_reference': 'OPS-SHARD-001'},
+            correlation_id='ops-ledger-shards',
+        )
+        adjustment = AccountingAdjustment.objects.create(
+            organization=location.organization,
+            location=location,
+            source_audit_log=alert,
+            adjustment_type=AccountingAdjustment.AdjustmentType.ORPHAN_PAYMENT_UNIDENTIFIED,
+            account_bucket=AccountingAdjustment.AccountBucket.PENDING_IDENTIFICATION,
+            source_account=source_account,
+            destination_account=destination_account,
+            status=AccountingAdjustment.Status.OPEN,
+            amount=Decimal('12.50'),
+            operating_day=timezone.localdate(),
+            payment_reference='OPS-SHARD-001',
+            payment_provider='TEST',
+            correlation_id='ops-ledger-shards',
+            created_by=user,
+        )
+        OrganizationLedgerCounterShard.objects.filter(
+            organization=location.organization,
+            shard_id=adjustment.contingency_shard_id,
+        ).update(
+            open_adjustment_total=Decimal('0.00'),
+            open_adjustment_count=0,
+        )
+
+        result = Command()._check_ledger_shards()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'warning')
+        self.assertIn('drift_orgs=1', result.detail)
+
+    @override_settings(
+        OPS_PREFLIGHT_OPERATIONAL_DRIFT_LOOKBACK_HOURS=72,
+        OPS_PREFLIGHT_REPLAY_ALERT_STALE_HOURS=1,
+    )
+    def test_ops_preflight_operational_drift_detects_stale_replay_alerts(self):
+        from pos.management.commands.ops_preflight import Command
+
+        location = Location.get_or_create_default()
+        user = User.objects.create_user(username='ops-drift', password='1234')
+        venta = Venta.objects.create(
+            origen='POS',
+            tipo_pedido='SERVIR',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            payment_status=Venta.PaymentStatus.PAID,
+            total=Decimal('8.00'),
+            organization=location.organization,
+            location=location,
+            chronology_estimated=True,
+            queue_session_id='ops-drift-a',
+            session_seq_no=1,
+            accounting_booked_at=timezone.now(),
+        )
+        alert = AuditLog.objects.create(
+            organization=location.organization,
+            location=location,
+            actor_user=user,
+            event_type='sale.post_close_replay_alert',
+            target_model='Venta',
+            target_id=str(venta.id),
+            requires_attention=True,
+            payload_json={'queue_session_id': 'ops-drift-a'},
+        )
+        AuditLog.objects.filter(pk=alert.pk).update(created_at=timezone.now() - timedelta(hours=2))
+
+        result = Command()._check_operational_drift()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'error')
+        self.assertIn('chronology_estimated_recent=1', result.detail)
+        self.assertIn('replay_alerts_stale=1', result.detail)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

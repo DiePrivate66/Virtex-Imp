@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import timedelta
+from decimal import Decimal
 
 import redis
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import connection
+from django.db.models import Count, Sum
 from django.utils import timezone
 
 from pos.ledger_registry import (
@@ -27,6 +29,8 @@ from pos.models import (
     LedgerRegistryActivation,
     OutboxEvent,
     Organization,
+    OrganizationLedgerCounterShard,
+    OrganizationLedgerState,
     PrintJob,
     Venta,
 )
@@ -74,6 +78,8 @@ class Command(BaseCommand):
         checks.append(self._check_idempotency_backlog())
         checks.append(self._check_outbox_backlog())
         checks.append(self._check_payment_exceptions_backlog())
+        checks.append(self._check_ledger_shards())
+        checks.append(self._check_operational_drift())
         checks.append(self._check_delivery_pool())
         checks.append(self._check_delivery_quotes_backlog())
         checks.append(self._check_print_jobs_backlog())
@@ -449,6 +455,169 @@ class Command(BaseCommand):
             )
         except Exception as exc:
             return self._db_check_failure('payment_exceptions_backlog', exc)
+
+    def _check_ledger_shards(self) -> CheckResult:
+        try:
+            organization_count = Organization.objects.count()
+            if organization_count == 0:
+                return CheckResult('ledger_shards', False, 'warning', 'sin organizaciones creadas')
+
+            missing_states = 0
+            invalid_states = 0
+            counter_drift_orgs = 0
+            missing_rows_orgs = 0
+            invalid_adjustment_shards = 0
+            examples: list[str] = []
+
+            for organization in Organization.objects.only('id', 'slug', 'name').iterator():
+                state = OrganizationLedgerState.objects.filter(organization_id=organization.id).only('shard_count').first()
+                if not state:
+                    missing_states += 1
+                    if len(examples) < 3:
+                        examples.append(f'{organization.slug}: missing ledger state')
+                    continue
+
+                if state.shard_count not in (4, 8, 16, 32):
+                    invalid_states += 1
+                    if len(examples) < 3:
+                        examples.append(f'{organization.slug}: invalid shard_count={state.shard_count}')
+                    continue
+
+                shard_rows = list(
+                    OrganizationLedgerCounterShard.objects.filter(organization_id=organization.id)
+                    .values('shard_id', 'open_adjustment_total', 'open_adjustment_count')
+                    .order_by('shard_id')
+                )
+                shard_ids = {row['shard_id'] for row in shard_rows}
+                expected_ids = set(range(state.shard_count))
+                if shard_ids != expected_ids:
+                    missing_rows_orgs += 1
+                    if len(examples) < 3:
+                        examples.append(
+                            f'{organization.slug}: shard rows {len(shard_rows)}/{state.shard_count}'
+                        )
+
+                aggregate = AccountingAdjustment.objects.filter(
+                    organization_id=organization.id,
+                    status=AccountingAdjustment.Status.OPEN,
+                ).aggregate(
+                    total=Sum('amount'),
+                    count=Count('id'),
+                )
+                expected_total = Decimal(aggregate.get('total') or '0.00')
+                expected_count = int(aggregate.get('count') or 0)
+                actual_total = sum((row['open_adjustment_total'] or Decimal('0.00')) for row in shard_rows)
+                actual_count = sum(int(row['open_adjustment_count'] or 0) for row in shard_rows)
+                invalid_for_org = AccountingAdjustment.objects.filter(
+                    organization_id=organization.id,
+                    status=AccountingAdjustment.Status.OPEN,
+                ).filter(
+                    contingency_shard_id__isnull=True,
+                ).count()
+                invalid_for_org += AccountingAdjustment.objects.filter(
+                    organization_id=organization.id,
+                    status=AccountingAdjustment.Status.OPEN,
+                    contingency_shard_id__gte=state.shard_count,
+                ).count()
+                invalid_adjustment_shards += invalid_for_org
+
+                if expected_total != actual_total or expected_count != actual_count or invalid_for_org:
+                    counter_drift_orgs += 1
+                    if len(examples) < 3:
+                        examples.append(
+                            f'{organization.slug}: expected={expected_count}/{expected_total:.2f} '
+                            f'actual={actual_count}/{actual_total:.2f} invalid_adjustments={invalid_for_org}'
+                        )
+
+            if missing_states or invalid_states:
+                return CheckResult(
+                    'ledger_shards',
+                    False,
+                    'error',
+                    (
+                        f'missing_states={missing_states}, invalid_states={invalid_states}, '
+                        f'missing_row_orgs={missing_rows_orgs}, drift_orgs={counter_drift_orgs}; '
+                        f'ejemplos: {" | ".join(examples) if examples else "n/a"}'
+                    ),
+                )
+
+            if missing_rows_orgs or counter_drift_orgs or invalid_adjustment_shards:
+                return CheckResult(
+                    'ledger_shards',
+                    False,
+                    'warning',
+                    (
+                        f'missing_row_orgs={missing_rows_orgs}, drift_orgs={counter_drift_orgs}, '
+                        f'invalid_adjustment_shards={invalid_adjustment_shards}; '
+                        f'ejemplos: {" | ".join(examples) if examples else "n/a"}'
+                    ),
+                )
+
+            return CheckResult(
+                'ledger_shards',
+                True,
+                'info',
+                f'organizaciones verificadas={organization_count}',
+            )
+        except Exception as exc:
+            return self._db_check_failure('ledger_shards', exc)
+
+    def _check_operational_drift(self) -> CheckResult:
+        try:
+            lookback_hours = max(1, int(getattr(settings, 'OPS_PREFLIGHT_OPERATIONAL_DRIFT_LOOKBACK_HOURS', 72)))
+            stale_alert_hours = max(1, int(getattr(settings, 'OPS_PREFLIGHT_REPLAY_ALERT_STALE_HOURS', 24)))
+            now = timezone.now()
+            lookback_cutoff = now - timedelta(hours=lookback_hours)
+            stale_cutoff = now - timedelta(hours=stale_alert_hours)
+
+            chronology_estimated_sales = Venta.objects.filter(
+                chronology_estimated=True,
+                accounting_booked_at__gte=lookback_cutoff,
+            ).count()
+            unresolved_replay_alerts = AuditLog.objects.filter(
+                event_type='sale.post_close_replay_alert',
+                requires_attention=True,
+                resolved_at__isnull=True,
+            ).count()
+            stale_unresolved_replay_alerts = AuditLog.objects.filter(
+                event_type='sale.post_close_replay_alert',
+                requires_attention=True,
+                resolved_at__isnull=True,
+                created_at__lte=stale_cutoff,
+            ).count()
+
+            if stale_unresolved_replay_alerts > 0:
+                return CheckResult(
+                    'operational_drift',
+                    False,
+                    'error',
+                    (
+                        f'chronology_estimated_recent={chronology_estimated_sales}, '
+                        f'replay_alerts_open={unresolved_replay_alerts}, '
+                        f'replay_alerts_stale={stale_unresolved_replay_alerts}'
+                    ),
+                )
+
+            if chronology_estimated_sales > 0 or unresolved_replay_alerts > 0:
+                return CheckResult(
+                    'operational_drift',
+                    False,
+                    'warning',
+                    (
+                        f'chronology_estimated_recent={chronology_estimated_sales}, '
+                        f'replay_alerts_open={unresolved_replay_alerts}, '
+                        f'lookback_hours={lookback_hours}'
+                    ),
+                )
+
+            return CheckResult(
+                'operational_drift',
+                True,
+                'info',
+                f'chronology_estimated_recent=0, replay_alerts_open=0, lookback_hours={lookback_hours}',
+            )
+        except Exception as exc:
+            return self._db_check_failure('operational_drift', exc)
 
     def _check_delivery_pool(self) -> CheckResult:
         try:
