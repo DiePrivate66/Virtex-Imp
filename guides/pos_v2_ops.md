@@ -11,8 +11,29 @@ This guide covers the server-side operational foundation already implemented in 
 - cash closing safeguards for pending refunds
 - operational preflight checks
 - Django-side replay admission for `X-POS-Replay: 1`
+- Python reference primitives for the offline JSONL journal, `.snapshot` sidecar, reseal, and valid-prefix recovery
 
-It does **not** cover the future Electron offline runtime, JSONL journal, LAN sync, or a dedicated replay gateway with idle-timeout/draining semantics. Those are still pending implementation.
+It does **not** cover the future Electron offline runtime integration, LAN sync, or a dedicated replay gateway with idle-timeout/draining semantics. Those are still pending implementation.
+
+## Offline Journal Reference
+
+Bosco now includes a Python reference implementation of the durable offline journal in:
+
+- `pos/infrastructure/offline/journal.py`
+
+What is implemented there:
+
+- JSONL append records with `payload_hash`, `record_crc32`, `prev_record_hash`, and `record_hash`
+- `.snapshot` sidecar repair logic where the journal remains authoritative
+- footer sealing with cumulative `segment_crc32`
+- valid-prefix recovery for the active segment
+- segment reseal from pending sidecar state after an interrupted footer write
+
+What is still missing:
+
+- Electron worker/process integration
+- limbo UI driven by the `.snapshot` file
+- disk-space enforcement and client read-only transitions
 
 ## Daily Commands
 

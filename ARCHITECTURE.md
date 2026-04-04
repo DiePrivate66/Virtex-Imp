@@ -330,7 +330,7 @@ Direccion de salida:
 - mover invariantes complejos a `application/` o servicios de dominio
 - dejar en modelos solo validaciones minimas, compatibilidad indispensable y consistencia local
 
-### 5. La cronologia offline ya tiene contrato, pero todavia no existe el journal durable completo
+### 5. La cronologia offline ya tiene contrato y ya existe un nucleo durable de journal
 
 El backend ya acepta metadata temporal por venta y resuelve dos lineas de tiempo:
 
@@ -343,10 +343,16 @@ Tambien existe señalizacion explicita de riesgo:
 - `sale.post_close_replay_alert` cuando una venta replayada cae en un dia operativo distinto del periodo contable abierto
 - el dashboard analytics ya expone estas alertas y su resolucion administrativa solo las marca como revisadas; no reabre cierres ni reescribe la venta
 
-La deuda que sigue abierta no esta en el contrato de servidor, sino en la durabilidad local:
+La base durable local ya no esta en cero:
 
-- aun no existe el writer Electron con journal JSONL segmentado
-- aun no existe sidecar `.snapshot` ni recuperacion por prefijo valido
+- `pos.infrastructure.offline.journal` ya implementa journal JSONL segmentado, sidecar `.snapshot`, rolling hash por registro, footer sellado y recuperacion por prefijo valido
+- el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
+- el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
+
+La deuda abierta ya no es el formato ni la validacion, sino la integracion operativa:
+
+- aun no existe el writer Electron real que use este journal desde worker/proceso separado
+- aun no existe UI de limbo conectada a este sidecar ni journal-only mode real en cliente
 - aun no existe replay gateway dedicado con TTL total, idle timeout y draining cooperativo reales; hoy solo existe admision server-side en Django
 
 ## Prioridad de Refactor Real
