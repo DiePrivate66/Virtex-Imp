@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import connection
 from django.db.models import Count, Sum
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
 from pos.ledger_registry import (
@@ -443,22 +444,106 @@ class Command(BaseCommand):
                 )
 
             summary = limbo_view.get('summary') or {}
+            capture_enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS', False))
+            lookback_hours = max(1, int(getattr(settings, 'OPS_PREFLIGHT_OFFLINE_CAPTURE_LOOKBACK_HOURS', 24)))
+            recent_sources, recent_record_count, source_scan_warnings = self._collect_recent_offline_capture_sources(
+                root_dir=root_dir,
+                stream_name=getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales'),
+                lookback_hours=lookback_hours,
+            )
+            detail = (
+                f'segment_id={limbo_view.get("segment_id")} '
+                f'records={limbo_view.get("record_count")} '
+                f'sealed={limbo_view.get("sealed")} '
+                f'total_sales={summary.get("total_sales", 0)} '
+                f'amount_total={summary.get("amount_total", "0.00")} '
+                f'capture_enabled={capture_enabled} '
+                f'recent_capture_records={recent_record_count} '
+                f'recent_origins={",".join(sorted(recent_sources)) or "none"} '
+                f'lookback={lookback_hours}h'
+            )
+            if source_scan_warnings:
+                return CheckResult(
+                    'offline_journal',
+                    False,
+                    'warning',
+                    detail + '; ' + '; '.join(source_scan_warnings),
+                )
+            if capture_enabled:
+                missing_sources = [source for source in ('POS', 'WEB') if source not in recent_sources]
+                if recent_record_count == 0:
+                    return CheckResult(
+                        'offline_journal',
+                        False,
+                        'warning',
+                        detail + '; sin eventos recientes de shadow capture',
+                    )
+                if missing_sources:
+                    return CheckResult(
+                        'offline_journal',
+                        False,
+                        'warning',
+                        detail + f'; missing_recent_origins={",".join(missing_sources)}',
+                    )
             return CheckResult(
                 'offline_journal',
                 True,
                 'info',
-                (
-                    f'segment_id={limbo_view.get("segment_id")} '
-                    f'records={limbo_view.get("record_count")} '
-                    f'sealed={limbo_view.get("sealed")} '
-                    f'total_sales={summary.get("total_sales", 0)} '
-                    f'amount_total={summary.get("amount_total", "0.00")}'
-                ),
+                detail,
             )
         except JournalIntegrityError as exc:
             return CheckResult('offline_journal', False, 'error', f'integrity_error: {exc}')
         except Exception as exc:
             return CheckResult('offline_journal', False, 'error', f'fallo runtime offline: {exc}')
+
+    def _collect_recent_offline_capture_sources(
+        self,
+        *,
+        root_dir: Path,
+        stream_name: str,
+        lookback_hours: int,
+    ) -> tuple[set[str], int, list[str]]:
+        cutoff = timezone.now() - timedelta(hours=max(1, int(lookback_hours)))
+        recent_sources: set[str] = set()
+        recent_record_count = 0
+        warnings: list[str] = []
+
+        segment_paths = sorted(
+            root_dir.glob(f'{stream_name}-*.jsonl'),
+            key=lambda path: path.stat().st_mtime if path.exists() else 0,
+            reverse=True,
+        )
+        for segment_path in segment_paths:
+            try:
+                recovery = recover_segment_prefix(segment_path)
+            except Exception as exc:
+                warnings.append(f'scan_failed={segment_path.name}:{exc}')
+                continue
+            if recovery.truncated_tail or recovery.corrupted_tail:
+                warnings.append(
+                    f'scan_invalid={segment_path.name}:{recovery.error_message or "tail inválido"}'
+                )
+                continue
+            for record in recovery.records:
+                created_at = parse_datetime(str(record.get('created_at') or ''))
+                if not created_at:
+                    continue
+                if timezone.is_naive(created_at):
+                    created_at = timezone.make_aware(created_at, timezone.get_current_timezone())
+                if created_at < cutoff:
+                    continue
+                recent_record_count += 1
+                payload = record.get('payload') or {}
+                sale_origin = str(payload.get('sale_origin') or '').upper().strip()
+                if sale_origin in {'POS', 'WEB'}:
+                    recent_sources.add(sale_origin)
+                    continue
+                capture_source = str(payload.get('journal_capture_source') or '').lower()
+                if 'web' in capture_source:
+                    recent_sources.add('WEB')
+                elif 'sales' in capture_source or 'pos' in capture_source:
+                    recent_sources.add('POS')
+        return recent_sources, recent_record_count, warnings
 
     def _check_system_ledger_accounts(self) -> CheckResult:
         try:

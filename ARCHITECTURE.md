@@ -353,6 +353,7 @@ La base durable local ya no esta en cero:
 - `pos.infrastructure.offline.runtime` ya agrega un runtime local segmentado encima del journal: rota por tamano, mantiene summary de limbo y repara agregados desde el journal cuando el sidecar queda atras
 - `pos.application.sales.offline_capture` ya puede espejar ventas pagadas y fallidas desde Django hacia ese journal como shadow capture opt-in (`OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True`) mientras el writer Electron real todavia no existe
 - `create_web_order()` tambien ya alimenta ese mismo journal con eventos pagados de origen `WEB`, de modo que el limbo y la cronologia offline no dependan solo del POS presencial
+- `ops_preflight` ya no se limita a verificar que exista un segmento sano; tambien reporta si el shadow capture server-side esta habilitado y si el journal viene recibiendo eventos recientes de `POS` y `WEB`
 - el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
 - el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
 - `manage.py offline_journal` y `manage.py offline_limbo` ya exponen inspeccion, reconciliacion, re-sellado y lectura del summary de limbo sin depender aun del runtime Electron

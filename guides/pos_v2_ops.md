@@ -169,6 +169,12 @@ With that flag enabled, Bosco now mirrors:
 - POS sales marked failed or voided
 - web orders created as paid sales
 
+Tune how far back `ops_preflight` scans recent journal origins:
+
+```powershell
+OPS_PREFLIGHT_OFFLINE_CAPTURE_LOOKBACK_HOURS=24
+```
+
 ## Recommended Deploy Sequence
 
 For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:
@@ -195,6 +201,7 @@ If `ops_preflight` reports a lockfile mismatch or activation mismatch, do **not*
 - version-fencing configuration
 - replay gateway wrapper configuration and Procfile wiring
 - offline journal root and current limbo summary health when the runtime is enabled
+- server-side shadow capture status and recent offline journal origins (`POS` / `WEB`) when shadow capture is enabled
 - required system ledger accounts per organization
 - Telegram admin alert configuration
 - WhatsApp environment settings

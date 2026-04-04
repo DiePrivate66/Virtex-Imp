@@ -919,6 +919,89 @@ class OpsPreflightCommandTests(TestCase):
         self.assertEqual(result.level, 'info')
         self.assertIn('total_sales=1', result.detail)
         self.assertIn('amount_total=13.25', result.detail)
+        self.assertIn('capture_enabled=False', result.detail)
+
+    def test_ops_preflight_offline_journal_reports_recent_pos_and_web_capture_sources(self):
+        from pos.management.commands.ops_preflight import Command
+
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-ops-capture-pos-1',
+                payload={
+                    'sale_total': '9.50',
+                    'payment_status': 'PAID',
+                    'journal_capture_source': 'server_django_sales',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='ops-capture-pos-1',
+            )
+            runtime.append_sale_event(
+                event_id='evt-ops-capture-web-1',
+                payload={
+                    'sale_total': '4.00',
+                    'payment_status': 'PAID',
+                    'journal_capture_source': 'server_django_web_orders',
+                    'sale_origin': 'WEB',
+                },
+                client_transaction_id='ops-capture-web-1',
+            )
+
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+                OPS_PREFLIGHT_OFFLINE_CAPTURE_LOOKBACK_HOURS=24,
+            ):
+                result = Command()._check_offline_journal()
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.level, 'info')
+        self.assertIn('capture_enabled=True', result.detail)
+        self.assertIn('recent_capture_records=2', result.detail)
+        self.assertIn('recent_origins=POS,WEB', result.detail)
+
+    def test_ops_preflight_offline_journal_warns_when_shadow_capture_misses_origin(self):
+        from pos.management.commands.ops_preflight import Command
+
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-ops-capture-pos-only',
+                payload={
+                    'sale_total': '8.00',
+                    'payment_status': 'PAID',
+                    'journal_capture_source': 'server_django_sales',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='ops-capture-pos-only',
+            )
+
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+                OPS_PREFLIGHT_OFFLINE_CAPTURE_LOOKBACK_HOURS=24,
+            ):
+                result = Command()._check_offline_journal()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'warning')
+        self.assertIn('capture_enabled=True', result.detail)
+        self.assertIn('recent_origins=POS', result.detail)
+        self.assertIn('missing_recent_origins=WEB', result.detail)
 
     def test_ops_preflight_ledger_shards_detects_counter_drift(self):
         from pos.management.commands.ops_preflight import Command
