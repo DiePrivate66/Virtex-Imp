@@ -237,6 +237,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - cuando una venta replayada cae en un dia operativo distinto del dia contable actual, el backend ya emite `sale.post_close_replay_alert` en `AuditLog`
 - el backend ya aplica admision explicita a trafico `X-POS-Replay: 1` en mutaciones POS, con lanes `normal` / `cold`, `429`, `Retry-After`, `scope` y `reason`
 - el proceso `web` ya puede arrancar un replay gateway dedicado delante de Django via `scripts/start_web.py`; ese borde externo aplica TTL total e idle timeout reales para mutaciones replay antes de entrar a Gunicorn/Django
+- el replay gateway externo ya clasifica `cold lane`, aplica presupuesto propio por carril, limita un batch cold concurrente por organizacion y hace draining cooperativo por slice antes de ceder turno
 - `AccountingAdjustment` ya asigna `contingency_shard_id` en servidor y cada organizacion mantiene `OrganizationLedgerState` + `OrganizationLedgerCounterShard` para repartir ajustes abiertos sin fila unica caliente
 - ya existe reconciliacion secuencial por organizacion para shards contables via `application.accounting` y `manage.py reconcile_ledger_shards`
 - `DetalleVenta` ya no calcula precios ni subtotales en `save()`; POS y Web Orders construyen el payload completo del detalle desde capa de aplicacion
@@ -357,7 +358,7 @@ La deuda abierta ya no es el formato ni la validacion, sino la integracion opera
 
 - aun no existe el writer Electron real que use este journal desde worker/proceso separado
 - aun no existe UI de limbo conectada a este sidecar ni journal-only mode real en cliente
-- ya existe replay gateway dedicado con TTL total e idle timeout reales fuera de Django; aun no existe draining cooperativo ni time-slicing fuera del admission layer server-side
+- ya existe replay gateway dedicado con TTL total, idle timeout, cold lane y draining cooperativo fuera de Django; el limite actual es que la coordinacion vive en memoria por proceso gateway y no como scheduler distribuido entre multiples instancias
 - `shard_count` queda fijo por organizacion en Fase 1; no existe rebalance online ni lectura multi-era de shards
 
 ## Prioridad de Refactor Real

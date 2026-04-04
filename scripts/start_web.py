@@ -61,6 +61,7 @@ def _wait_for_upstream(*, host: str, port: int, timeout_seconds: float = 20.0) -
 
 
 def _build_gateway_config(*, external_port: int, upstream_port: int) -> ReplayGatewayConfig:
+    retry_after_seconds = int(os.environ.get('POS_REPLAY_RETRY_AFTER_SECONDS', '5'))
     return ReplayGatewayConfig(
         bind_host='0.0.0.0',
         bind_port=external_port,
@@ -73,7 +74,26 @@ def _build_gateway_config(*, external_port: int, upstream_port: int) -> ReplayGa
         replay_total_timeout_seconds=float(os.environ.get('REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS', '10')),
         replay_idle_timeout_seconds=float(os.environ.get('REPLAY_GATEWAY_IDLE_TIMEOUT_SECONDS', '5')),
         upstream_timeout_seconds=float(os.environ.get('REPLAY_GATEWAY_UPSTREAM_TIMEOUT_SECONDS', '120')),
-        retry_after_seconds=int(os.environ.get('POS_REPLAY_RETRY_AFTER_SECONDS', '5')),
+        retry_after_seconds=retry_after_seconds,
+        replay_cold_lane_hours=int(
+            os.environ.get(
+                'REPLAY_GATEWAY_COLD_LANE_HOURS',
+                os.environ.get('POS_REPLAY_COLD_LANE_HOURS', '48'),
+            )
+        ),
+        replay_cold_lane_slots=int(
+            os.environ.get(
+                'REPLAY_GATEWAY_COLD_LANE_SLOTS',
+                os.environ.get('POS_REPLAY_COLD_LANE_SLOTS', '2'),
+            )
+        ),
+        replay_cold_slice_seconds=float(os.environ.get('REPLAY_GATEWAY_COLD_SLICE_SECONDS', '120')),
+        replay_waiter_ttl_seconds=float(
+            os.environ.get(
+                'REPLAY_GATEWAY_WAITER_TTL_SECONDS',
+                str(max(retry_after_seconds * 3, 30)),
+            )
+        ),
     )
 
 

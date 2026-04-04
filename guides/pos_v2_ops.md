@@ -11,11 +11,11 @@ This guide covers the server-side operational foundation already implemented in 
 - cash closing safeguards for pending refunds
 - operational preflight checks
 - Django-side replay admission for `X-POS-Replay: 1`
-- a dedicated replay gateway wrapper with total timeout and idle timeout enforcement ahead of Django
+- a dedicated replay gateway wrapper with total timeout, idle timeout, cold-lane slicing, and cooperative draining ahead of Django
 - Python reference primitives for the offline JSONL journal, `.snapshot` sidecar, reseal, and valid-prefix recovery
 - organization-scoped ledger shards for open accounting adjustments
 
-It does **not** cover the future Electron offline runtime integration, LAN sync, or cooperative replay draining/time-slicing outside Django. Those are still pending implementation.
+It does **not** cover the future Electron offline runtime integration or LAN sync. The replay gateway already enforces cold-lane slicing and cooperative draining, but only per gateway process, not via a distributed coordinator across multiple instances.
 
 ## Offline Journal Reference
 
@@ -135,6 +135,8 @@ Enable the replay gateway wrapper in Railway/local env:
 REPLAY_GATEWAY_ENABLED=True
 REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS=10
 REPLAY_GATEWAY_IDLE_TIMEOUT_SECONDS=5
+REPLAY_GATEWAY_COLD_LANE_SLOTS=2
+REPLAY_GATEWAY_COLD_SLICE_SECONDS=120
 ```
 
 ## Recommended Deploy Sequence
@@ -201,9 +203,13 @@ Current scopes:
 Bosco now has two layers:
 
 - Django-side admission control (`429 replay_backpressure`)
-- an outer replay gateway wrapper that can cut replay requests on total timeout or idle timeout before they pin the web process indefinitely
+- an outer replay gateway wrapper that can cut replay requests on total timeout or idle timeout before they pin the web process indefinitely, classify cold replay, and drain a hot organization after its slice when another organization is already waiting
 
-What is still missing is cooperative draining/time-slicing outside Django.
+Gateway-level replay backpressure now also uses:
+
+- `X-Bosco-Replay-Gateway: backpressure` for cold-lane capacity rejection
+- `X-Bosco-Replay-Gateway: draining` when an organization already exhausted its cold slice and must yield after the current batch
+- `X-Bosco-Replay-Lane`
 
 Gateway timeout responses use:
 
@@ -213,6 +219,16 @@ Gateway timeout responses use:
 - `X-Bosco-Replay-Gateway`
 - `X-Bosco-Replay-Scope: gateway`
 - `X-Bosco-Replay-Reason`
+
+Cold-lane fairness in the gateway relies on a stable organization hint. Current precedence is:
+
+1. `X-Bosco-Replay-Organization`
+2. `organization_id`
+3. `organization_slug`
+4. `location_uuid`
+5. `queue_session_id`
+
+If none are present, the gateway falls back to the client IP, which is acceptable only as a last resort.
 
 ### `sale.post_close_replay_alert`
 
