@@ -6,6 +6,8 @@ from decimal import Decimal
 from importlib import import_module
 from datetime import timedelta
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.contrib import admin
@@ -56,6 +58,7 @@ from .tasks import (
     set_quote_and_notify,
     sweep_delivery_quote_timeouts,
 )
+from .infrastructure.offline import OfflineJournalRuntimeConfig, SegmentedJournalRuntime
 from .application.web_orders.updates import build_web_order_update_request
 
 
@@ -824,6 +827,49 @@ class OpsPreflightCommandTests(TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.level, 'error')
         self.assertIn('Procfile web no usa scripts/start_web.py', result.detail)
+
+    def test_ops_preflight_offline_journal_requires_root_when_enabled(self):
+        from pos.management.commands.ops_preflight import Command
+
+        with override_settings(
+            OFFLINE_JOURNAL_ENABLED=True,
+            OFFLINE_JOURNAL_ROOT='',
+        ):
+            result = Command()._check_offline_journal()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'error')
+        self.assertIn('OFFLINE_JOURNAL_ROOT', result.detail)
+
+    def test_ops_preflight_offline_journal_reports_limbo_summary(self):
+        from pos.management.commands.ops_preflight import Command
+
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-ops-offline-1',
+                payload={'sale_total': '13.25', 'payment_status': 'PAID'},
+                client_transaction_id='ops-offline-1',
+            )
+
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_SEGMENT_MAX_BYTES=104857600,
+                OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT=50,
+            ):
+                result = Command()._check_offline_journal()
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.level, 'info')
+        self.assertIn('total_sales=1', result.detail)
+        self.assertIn('amount_total=13.25', result.detail)
 
     def test_ops_preflight_ledger_shards_detects_counter_drift(self):
         from pos.management.commands.ops_preflight import Command

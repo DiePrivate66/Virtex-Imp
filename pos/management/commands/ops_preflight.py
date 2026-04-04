@@ -22,6 +22,8 @@ from pos.ledger_registry import (
     get_system_account_defaults_map,
     load_registry_lockfile,
 )
+from pos.infrastructure.offline import OfflineJournalRuntimeConfig, SegmentedJournalRuntime
+from pos.infrastructure.offline.journal import JournalIntegrityError, recover_segment_prefix
 from pos.models import (
     AccountingAdjustment,
     AuditLog,
@@ -74,6 +76,7 @@ class Command(BaseCommand):
         checks.append(self._check_ledger_activation())
         checks.append(self._check_ledger_fencing())
         checks.append(self._check_replay_gateway())
+        checks.append(self._check_offline_journal())
         checks.append(self._check_system_ledger_accounts())
         checks.append(self._check_telegram_admin_alerts())
         checks.append(self._check_whatsapp_env())
@@ -375,6 +378,87 @@ class Command(BaseCommand):
                 detail + '; ' + '; '.join(warnings),
             )
         return CheckResult('replay_gateway', True, 'info', detail)
+
+    def _check_offline_journal(self) -> CheckResult:
+        enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_ENABLED', False))
+        if not enabled:
+            return CheckResult('offline_journal', True, 'info', 'runtime offline desactivado')
+
+        root_value = str(getattr(settings, 'OFFLINE_JOURNAL_ROOT', '') or '').strip()
+        if not root_value:
+            return CheckResult(
+                'offline_journal',
+                False,
+                'error',
+                'OFFLINE_JOURNAL_ENABLED=True pero OFFLINE_JOURNAL_ROOT no esta configurado',
+            )
+
+        root_dir = Path(root_value)
+        if not root_dir.exists():
+            return CheckResult(
+                'offline_journal',
+                False,
+                'error',
+                f'root offline inexistente: {root_dir}',
+            )
+        if not root_dir.is_dir():
+            return CheckResult(
+                'offline_journal',
+                False,
+                'error',
+                f'root offline no es directorio: {root_dir}',
+            )
+
+        try:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=root_dir,
+                    stream_name=getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales'),
+                    segment_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
+                    limbo_recent_limit=getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50),
+                )
+            )
+            limbo_view = runtime.get_limbo_view()
+            segment_path_value = str(limbo_view.get('segment_path') or '')
+            if not segment_path_value:
+                return CheckResult(
+                    'offline_journal',
+                    False,
+                    'warning',
+                    f'root offline configurado sin segmentos activos: {root_dir}',
+                )
+
+            recovery = recover_segment_prefix(Path(segment_path_value))
+            if recovery.truncated_tail or recovery.corrupted_tail:
+                return CheckResult(
+                    'offline_journal',
+                    False,
+                    'error',
+                    (
+                        f'segment_id={limbo_view.get("segment_id")} '
+                        f'truncated_tail={recovery.truncated_tail} '
+                        f'corrupted_tail={recovery.corrupted_tail} '
+                        f'detail={recovery.error_message or "n/a"}'
+                    ),
+                )
+
+            summary = limbo_view.get('summary') or {}
+            return CheckResult(
+                'offline_journal',
+                True,
+                'info',
+                (
+                    f'segment_id={limbo_view.get("segment_id")} '
+                    f'records={limbo_view.get("record_count")} '
+                    f'sealed={limbo_view.get("sealed")} '
+                    f'total_sales={summary.get("total_sales", 0)} '
+                    f'amount_total={summary.get("amount_total", "0.00")}'
+                ),
+            )
+        except JournalIntegrityError as exc:
+            return CheckResult('offline_journal', False, 'error', f'integrity_error: {exc}')
+        except Exception as exc:
+            return CheckResult('offline_journal', False, 'error', f'fallo runtime offline: {exc}')
 
     def _check_system_ledger_accounts(self) -> CheckResult:
         try:

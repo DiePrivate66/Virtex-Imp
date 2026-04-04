@@ -149,6 +149,14 @@ REPLAY_GATEWAY_COLD_LANE_SLOTS=2
 REPLAY_GATEWAY_COLD_SLICE_SECONDS=120
 ```
 
+Enable offline journal runtime checks:
+
+```powershell
+OFFLINE_JOURNAL_ENABLED=True
+OFFLINE_JOURNAL_ROOT=D:\\bosco-offline
+OFFLINE_JOURNAL_STREAM_NAME=sales
+```
+
 ## Recommended Deploy Sequence
 
 For deploys that touch ledger, accounting, idempotency, or POS mutation behavior:
@@ -174,6 +182,7 @@ If `ops_preflight` reports a lockfile mismatch or activation mismatch, do **not*
 - active runtime registry activation
 - version-fencing configuration
 - replay gateway wrapper configuration and Procfile wiring
+- offline journal root and current limbo summary health when the runtime is enabled
 - required system ledger accounts per organization
 - Telegram admin alert configuration
 - WhatsApp environment settings
@@ -240,6 +249,17 @@ Cold-lane fairness in the gateway relies on a stable organization hint. Current 
 5. `queue_session_id`
 
 If none are present, the gateway falls back to the client IP, which is acceptable only as a last resort.
+
+### `offline_journal`
+
+This check verifies:
+
+- `OFFLINE_JOURNAL_ENABLED`
+- `OFFLINE_JOURNAL_ROOT`
+- current active segment recovery without truncated/corrupted tail
+- limbo summary visibility (`total_sales`, `amount_total`) from the repaired sidecar/runtime view
+
+If enabled but the root does not exist or the tail is corrupted, preflight fails closed.
 
 ### `sale.post_close_replay_alert`
 
