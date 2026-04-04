@@ -235,6 +235,9 @@ class WebOrderCreationInvariantsTests(TestCase):
         self.assertEqual(venta.location, location)
         self.assertEqual(venta.organization, location.organization)
         self.assertIsNotNone(venta.operating_day)
+        self.assertIsNotNone(venta.operated_at_normalized)
+        self.assertIsNotNone(venta.accounting_booked_at)
+        self.assertFalse(venta.chronology_estimated)
         self.assertEqual(venta.payment_status, Venta.PaymentStatus.PAID)
         self.assertEqual(venta.estado_pago, 'APROBADO')
 

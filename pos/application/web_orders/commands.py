@@ -8,7 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from pos.application.context import get_default_catalog_organization
-from pos.domain.shared import normalize_phone_to_e164
+from pos.domain.shared import build_sale_temporal_fields, normalize_phone_to_e164
 from pos.domain.shared.sale_invariants import (
     build_sale_detail_fields,
     build_sale_payment_fields,
@@ -165,6 +165,19 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
     lat = data.get('ubicacion_lat')
     lng = data.get('ubicacion_lng')
     raw_phone = data.get('telefono', '')
+    received_at = timezone.now()
+    location_for_timeline = sale_scope.get('location')
+    temporal_fields = build_sale_temporal_fields(
+        received_at=received_at,
+        queue_session_id=data.get('queue_session_id', ''),
+        session_seq_no=data.get('session_seq_no'),
+        client_created_at_raw=data.get('client_created_at_raw'),
+        client_monotonic_ms=data.get('client_monotonic_ms'),
+        timezone_name=location_for_timeline.timezone if location_for_timeline else None,
+        chronology_threshold_minutes=int(
+            getattr(settings, 'SALE_CHRONOLOGY_ESTIMATED_THRESHOLD_MINUTES', 15)
+        ),
+    )
 
     with transaction.atomic():
         sale = Venta.objects.create(
@@ -190,6 +203,7 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
                 else None
             ),
             **sale_scope,
+            **temporal_fields,
             **build_sale_payment_fields(
                 payment_status=Venta.PaymentStatus.PAID,
                 metodo_pago=data.get('metodo_pago', 'EFECTIVO'),

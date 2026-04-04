@@ -469,6 +469,13 @@ class Venta(models.Model):
     supervisor_display_name_snapshot = models.CharField(max_length=200, blank=True)
     operating_day = models.DateField(null=True, blank=True, db_index=True)
     client_transaction_id = models.CharField(max_length=64, blank=True, db_index=True)
+    queue_session_id = models.CharField(max_length=64, blank=True, db_index=True)
+    session_seq_no = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+    client_created_at_raw = models.CharField(max_length=64, blank=True)
+    client_monotonic_ms = models.BigIntegerField(null=True, blank=True)
+    operated_at_normalized = models.DateTimeField(null=True, blank=True, db_index=True)
+    accounting_booked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    chronology_estimated = models.BooleanField(default=False, db_index=True)
 
     cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True)
     fecha = models.DateTimeField(auto_now_add=True)

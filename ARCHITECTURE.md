@@ -232,6 +232,9 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - `cash_register` y `analytics` ya incorporan flujo operativo para reembolsos pendientes, ajustes contables y alertas administrativas
 - el cierre de caja ya se calcula y persiste desde `application.cash_register`; `CajaTurno` ya no concentra el cuadre dentro del modelo
 - las ventas nuevas POS y Web Orders ya construyen tenant, dia operativo, snapshots y pago canonico desde capa de aplicacion; `Venta.save()` queda reducido a validacion y a espejar compatibilidad legacy controlada
+- las ventas nuevas POS y Web Orders ya persisten metadata temporal de replay (`queue_session_id`, `session_seq_no`, `client_created_at_raw`, `client_monotonic_ms`) desde capa de aplicacion
+- `Venta` ya expone dos cronologias separadas: `operated_at_normalized` para lectura operativa y `accounting_booked_at` para cierre contable y registro real en servidor
+- cuando una venta replayada cae en un dia operativo distinto del dia contable actual, el backend ya emite `sale.post_close_replay_alert` en `AuditLog`
 - `DetalleVenta` ya no calcula precios ni subtotales en `save()`; POS y Web Orders construyen el payload completo del detalle desde capa de aplicacion
 - `Categoria`, `Producto` y `Cliente` ya quedan scopeados por `organization`; catalogo, inventario y lookup de clientes POS/PWA ya no se leen como universo global
 - los movimientos de caja e inventario ya construyen `organization` / `location` desde capa de aplicacion; `MovimientoCaja.save()` y `MovimientoInventario.save()` quedan reducidos a validacion de consistencia local
@@ -326,14 +329,33 @@ Direccion de salida:
 - mover invariantes complejos a `application/` o servicios de dominio
 - dejar en modelos solo validaciones minimas, compatibilidad indispensable y consistencia local
 
+### 5. La cronologia offline ya tiene contrato, pero todavia no existe el journal durable completo
+
+El backend ya acepta metadata temporal por venta y resuelve dos lineas de tiempo:
+
+- `operated_at_normalized` como cronologia operativa estimada o reanclada por sesion offline
+- `accounting_booked_at` como momento contable real de registro en servidor
+
+Tambien existe señalizacion explicita de riesgo:
+
+- `chronology_estimated=True` cuando la rehidratacion temporal supera el umbral operativo
+- `sale.post_close_replay_alert` cuando una venta replayada cae en un dia operativo distinto del periodo contable abierto
+
+La deuda que sigue abierta no esta en el contrato de servidor, sino en la durabilidad local:
+
+- aun no existe el writer Electron con journal JSONL segmentado
+- aun no existe sidecar `.snapshot` ni recuperacion por prefijo valido
+- aun no existe replay gateway dedicado con carril frio, TTL e idle timeout reales
+
 ## Prioridad de Refactor Real
 
 El orden pragmatico actual no es "reescribir todo". Es este:
 
 1. congelar `payment_status` como fuente autoritativa
 2. sacar comportamiento nuevo de `save()` y de helpers de modelo
-3. dividir gradualmente `Venta` en fronteras mas limpias de pago y delivery
-4. evitar que vuelvan a aparecer maestros globales por conveniencia
+3. mantener el contrato temporal de `Venta` en capa de aplicacion y no reintroducir cronologia implicita en modelos
+4. dividir gradualmente `Venta` en fronteras mas limpias de pago y delivery
+5. evitar que vuelvan a aparecer maestros globales por conveniencia
 
 ## Mapa de Wrappers Legacy Vigentes
 

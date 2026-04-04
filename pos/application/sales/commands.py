@@ -31,7 +31,11 @@ from pos.domain.shared.sale_invariants import (
     build_sale_payment_fields,
     build_sale_scope_fields,
 )
-from pos.domain.shared import build_cash_movement_scope_fields, build_inventory_movement_scope_fields
+from pos.domain.shared import (
+    build_cash_movement_scope_fields,
+    build_inventory_movement_scope_fields,
+    build_sale_temporal_fields,
+)
 from pos.infrastructure.tasks import process_outbox_event
 from pos.models import (
     AccountingAdjustment,
@@ -596,9 +600,90 @@ def build_sale_response_payload(venta: Venta) -> dict:
         'payment_status': venta.payment_status,
         'estado': venta.estado,
         'client_transaction_id': venta.client_transaction_id,
+        'queue_session_id': venta.queue_session_id,
+        'session_seq_no': venta.session_seq_no,
+        'operated_at_normalized': venta.operated_at_normalized.isoformat() if venta.operated_at_normalized else '',
+        'accounting_booked_at': venta.accounting_booked_at.isoformat() if venta.accounting_booked_at else '',
+        'chronology_estimated': venta.chronology_estimated,
         'outbox_status': outbox_status,
         'requires_new_transaction_id': venta.payment_status in {Venta.PaymentStatus.FAILED, Venta.PaymentStatus.VOIDED},
     }
+
+
+def _get_sale_temporal_anchor(*, location, queue_session_id: str):
+    if not queue_session_id:
+        return None
+    return (
+        Venta.objects.filter(location=location, queue_session_id=queue_session_id)
+        .exclude(operated_at_normalized__isnull=True)
+        .order_by('id')
+        .first()
+    )
+
+
+def _build_sale_temporal_fields_from_request(*, data: dict, turno, location) -> dict:
+    received_at = timezone.now()
+    queue_session_id = str(data.get('queue_session_id', '') or '')
+    anchor = _get_sale_temporal_anchor(location=location, queue_session_id=queue_session_id)
+    timezone_name = turno.timezone_snapshot or (location.timezone if location else None)
+    return build_sale_temporal_fields(
+        received_at=received_at,
+        queue_session_id=queue_session_id,
+        session_seq_no=data.get('session_seq_no'),
+        client_created_at_raw=data.get('client_created_at_raw'),
+        client_monotonic_ms=data.get('client_monotonic_ms'),
+        anchor_operated_at=getattr(anchor, 'operated_at_normalized', None),
+        anchor_client_monotonic_ms=getattr(anchor, 'client_monotonic_ms', None),
+        timezone_name=timezone_name,
+        chronology_threshold_minutes=int(
+            getattr(settings, 'SALE_CHRONOLOGY_ESTIMATED_THRESHOLD_MINUTES', 15)
+        ),
+    )
+
+
+def _emit_post_close_replay_alert_if_needed(*, venta: Venta, user) -> None:
+    if not venta.operated_at_normalized or not venta.accounting_booked_at or not venta.location_id:
+        return
+
+    timezone_name = venta.turno.timezone_snapshot if venta.turno_id and venta.turno.timezone_snapshot else venta.location.timezone
+    operating_day_ends_at = (
+        venta.turno.operating_day_ends_at_snapshot
+        if venta.turno_id and venta.turno.operating_day_ends_at_snapshot
+        else venta.location.operating_day_ends_at
+    )
+    operated_operating_day = compute_operating_day(
+        timestamp=venta.operated_at_normalized,
+        timezone_name=timezone_name,
+        operating_day_ends_at=operating_day_ends_at,
+    )
+    accounting_operating_day = compute_operating_day(
+        timestamp=venta.accounting_booked_at,
+        timezone_name=timezone_name,
+        operating_day_ends_at=operating_day_ends_at,
+    )
+    if operated_operating_day == accounting_operating_day:
+        return
+
+    AuditLog.objects.create(
+        organization=venta.organization,
+        location=venta.location,
+        actor_user=user,
+        actor_staff=venta.operator,
+        event_type='sale.post_close_replay_alert',
+        target_model='Venta',
+        target_id=str(venta.id),
+        requires_attention=True,
+        payload_json={
+            'queue_session_id': venta.queue_session_id,
+            'session_seq_no': venta.session_seq_no,
+            'operated_at_normalized': venta.operated_at_normalized.isoformat(),
+            'accounting_booked_at': venta.accounting_booked_at.isoformat(),
+            'operated_operating_day': operated_operating_day.isoformat(),
+            'accounting_operating_day': accounting_operating_day.isoformat(),
+            'chronology_estimated': venta.chronology_estimated,
+        },
+        correlation_id=venta.client_transaction_id,
+    )
 
 
 def _reserve_sale(
@@ -645,6 +730,12 @@ def _reserve_sale(
                 )
             raise PosSaleError('La venta ya se esta procesando, verifica el estado antes de reenviar', status_code=409)
 
+        temporal_fields = _build_sale_temporal_fields_from_request(
+            data=data,
+            turno=turno,
+            location=location,
+        )
+
         venta = Venta.objects.create(
             cliente_nombre=data.get('cliente_nombre', 'CONSUMIDOR FINAL'),
             cliente=cliente,
@@ -676,6 +767,7 @@ def _reserve_sale(
                 default_payment_status=Venta.PaymentStatus.PAID,
             ),
             **build_sale_actor_snapshot_fields(operator=operator),
+            **temporal_fields,
         )
 
         for item in validated_items:
@@ -697,6 +789,7 @@ def _reserve_sale(
             )
 
         _reserve_inventory(location=location, venta=venta, items=validated_items, registrado_por=user)
+        _emit_post_close_replay_alert_if_needed(venta=venta, user=user)
 
         record.venta = venta
         record.response_payload = build_sale_response_payload(venta)

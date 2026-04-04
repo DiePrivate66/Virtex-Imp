@@ -10,6 +10,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
+from django.utils.dateparse import parse_datetime
 from django.urls import reverse
 from django.utils import timezone
 
@@ -218,6 +219,76 @@ class BoscoV2SalesTests(TestCase):
 
         self.assertEqual(result.venta.payment_reference, 'PAY-CANONICAL-001')
         self.assertEqual(result.venta.referencia_pago, 'PAY-CANONICAL-001')
+
+    def test_register_sale_persists_temporal_client_metadata(self):
+        raw_client_created_at = '2026-04-01T12:00:00-05:00'
+        result = register_sale(
+            self.user,
+            self._payload(
+                client_transaction_id='sale-v2-temporal-meta',
+                queue_session_id='offline-session-a',
+                session_seq_no=1,
+                client_created_at_raw=raw_client_created_at,
+                client_monotonic_ms=1000,
+            ),
+        )
+
+        self.assertEqual(result.venta.queue_session_id, 'offline-session-a')
+        self.assertEqual(result.venta.session_seq_no, 1)
+        self.assertEqual(result.venta.client_created_at_raw, raw_client_created_at)
+        self.assertEqual(result.venta.client_monotonic_ms, 1000)
+        self.assertEqual(result.venta.operated_at_normalized, parse_datetime(raw_client_created_at))
+        self.assertIsNotNone(result.venta.accounting_booked_at)
+        self.assertFalse(result.venta.chronology_estimated)
+
+    def test_register_sale_reuses_queue_session_anchor_for_fragmented_batches(self):
+        first = register_sale(
+            self.user,
+            self._payload(
+                client_transaction_id='sale-v2-session-anchor-1',
+                queue_session_id='offline-session-b',
+                session_seq_no=1,
+                client_created_at_raw='2026-04-01T12:00:00-05:00',
+                client_monotonic_ms=1000,
+            ),
+        )
+        second = register_sale(
+            self.user,
+            self._payload(
+                client_transaction_id='sale-v2-session-anchor-2',
+                queue_session_id='offline-session-b',
+                session_seq_no=2,
+                client_created_at_raw='2026-04-03T18:00:00-05:00',
+                client_monotonic_ms=4000,
+            ),
+        )
+
+        self.assertEqual(
+            second.venta.operated_at_normalized - first.venta.operated_at_normalized,
+            timedelta(seconds=3),
+        )
+        self.assertTrue(second.venta.chronology_estimated)
+
+    def test_register_sale_emits_post_close_replay_alert_when_operating_day_differs(self):
+        result = register_sale(
+            self.user,
+            self._payload(
+                client_transaction_id='sale-v2-post-close-replay',
+                queue_session_id='offline-session-c',
+                session_seq_no=1,
+                client_created_at_raw='2026-03-30T23:55:00-05:00',
+                client_monotonic_ms=1000,
+            ),
+        )
+
+        alert = AuditLog.objects.filter(
+            event_type='sale.post_close_replay_alert',
+            target_id=str(result.venta.id),
+        ).first()
+
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert.payload_json['queue_session_id'], 'offline-session-c')
+        self.assertTrue(alert.payload_json['operated_operating_day'] < alert.payload_json['accounting_operating_day'])
 
     def test_failed_card_payment_restores_inventory_and_marks_sale_failed(self):
         with self.assertRaises(PosSaleError):
