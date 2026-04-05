@@ -775,6 +775,51 @@ def build_offline_bulk_runs_export_payload(
     }
 
 
+def build_offline_bulk_run_detail_payload(audit_log_id) -> dict:
+    try:
+        normalized_audit_log_id = int(str(audit_log_id or '').strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError('audit_log_id invalido') from exc
+
+    if normalized_audit_log_id <= 0:
+        raise ValueError('audit_log_id invalido')
+
+    item = (
+        AuditLog.objects.filter(
+            id=normalized_audit_log_id,
+            event_type__in=list(OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP.values()),
+        )
+        .select_related('organization', 'location', 'actor_user')
+        .first()
+    )
+    if not item:
+        raise ValueError('No existe un AuditLog batch offline con ese id.')
+
+    payload = dict(item.payload_json or {})
+    item.bulk_processed = int(payload.get('processed') or 0)
+    item.bulk_succeeded = int(payload.get('succeeded') or 0)
+    item.bulk_failed = int(payload.get('failed') or 0)
+    item.bulk_failed_details = payload.get('failed_details') or []
+    item.bulk_action_label = {
+        'offline.segment_bulk_revalidated': 'REVALIDACION_MASIVA',
+        'offline.segment_bulk_review_marked': 'REVISION_MASIVA',
+    }.get(item.event_type, item.event_type)
+    item.bulk_is_selected = True
+
+    serialized = _serialize_offline_bulk_run(item)
+    serialized.update(
+        {
+            'correlation_id': str(item.correlation_id or '').strip(),
+            'target_model': str(item.target_model or '').strip(),
+            'organization_id': item.organization_id,
+            'location_id': item.location_id,
+            'actor_user_id': item.actor_user_id,
+            'payload_json': payload,
+        }
+    )
+    return serialized
+
+
 def _build_offline_bulk_audit_runs(
     desde,
     hasta,

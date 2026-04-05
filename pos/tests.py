@@ -1753,6 +1753,43 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, reverse('dashboard_offline_incidents'))
         self.assertContains(response, reverse('dashboard_offline_incident_batches_export_json'))
         self.assertContains(response, reverse('dashboard_offline_incident_batches_export_csv'))
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
+            count=2,
+        )
+
+    def test_offline_incident_batch_json_returns_single_run_payload(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-detail-001',
+            payload_json={
+                'processed': 9,
+                'succeeded': 8,
+                'failed': 1,
+                'failed_details': [{'segment_id': 'sales-001', 'detail': 'footer missing'}],
+            },
+            correlation_id='revalidate-batch-detail-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batch_json'),
+            {'audit_log_id': str(selected_batch.id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['audit_log_id'], selected_batch.id)
+        self.assertEqual(payload['batch_id'], 'revalidate-batch-detail-001')
+        self.assertEqual(payload['processed'], 9)
+        self.assertEqual(payload['failed'], 1)
+        self.assertEqual(payload['correlation_id'], 'revalidate-batch-detail-001')
+        self.assertEqual(payload['payload_json']['processed'], 9)
 
     def test_offline_incident_batches_json_export_returns_filtered_rows(self):
         selected_batch = AuditLog.objects.create(
@@ -1793,9 +1830,17 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(payload['items'][0]['processed'], 5)
         self.assertEqual(payload['selected_run']['audit_log_id'], selected_batch.id)
         self.assertEqual(payload['filters']['action_type'], 'offline.segment_bulk_revalidated')
+        self.assertEqual(
+            payload['items'][0]['detail_json_url'],
+            f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
+        )
+        self.assertEqual(
+            payload['selected_run']['detail_json_url'],
+            f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
+        )
 
     def test_offline_incident_batches_csv_export_returns_filtered_rows(self):
-        AuditLog.objects.create(
+        batch = AuditLog.objects.create(
             organization=self.location.organization,
             location=self.location,
             actor_user=self.user,
@@ -1818,9 +1863,13 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
         self.assertIn('attachment; filename="offline-batch-runs.csv"', response['Content-Disposition'])
         content = response.content.decode('utf-8')
-        self.assertIn('audit_log_id,created_at,event_type,action_label,batch_id,processed,succeeded,failed,organization_name,location_name,actor_username,selected', content)
+        self.assertIn('audit_log_id,created_at,event_type,action_label,batch_id,processed,succeeded,failed,organization_name,location_name,actor_username,selected,detail_json_url', content)
         self.assertIn('revalidate-batch-csv-001', content)
         self.assertIn('REVALIDACION_MASIVA', content)
+        self.assertIn(
+            f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={batch.id}',
+            content,
+        )
 
     def test_offline_critical_incidents_json_export_returns_filtered_rows(self):
         AuditLog.objects.create(

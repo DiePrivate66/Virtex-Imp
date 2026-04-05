@@ -13,6 +13,7 @@ from django.urls import reverse
 from pos.application.analytics import (
     OfflineLimboActionError,
     build_analytics_dashboard_context,
+    build_offline_bulk_run_detail_payload,
     build_offline_bulk_runs_export_payload,
     build_offline_bulk_runs_context,
     build_offline_critical_incidents_context,
@@ -138,6 +139,11 @@ def dashboard_offline_incident_batches(request):
     context['offline_bulk_export_csv_href'] = (
         f"{reverse('dashboard_offline_incident_batches_export_csv')}?{export_query}"
     )
+    context['offline_bulk_selected_run_json_href'] = (
+        _build_offline_batch_json_href(context['offline_bulk_selected_run'].id)
+        if context.get('offline_bulk_selected_run')
+        else ''
+    )
     return render(request, 'pos/offline_incident_batches.html', context)
 
 
@@ -170,6 +176,7 @@ def dashboard_offline_incident_batches_export_csv(request):
             'location_name',
             'actor_username',
             'selected',
+            'detail_json_url',
         ]
     )
     for item in payload['items']:
@@ -187,11 +194,24 @@ def dashboard_offline_incident_batches_export_csv(request):
                 item['location_name'],
                 item['actor_username'],
                 'YES' if item['selected'] else 'NO',
+                item['detail_json_url'],
             ]
         )
     response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename=\"offline-batch-runs.csv\"'
     return response
+
+
+def dashboard_offline_incident_batch_json(request):
+    api_error = _require_admin_dashboard_api_access(request)
+    if api_error:
+        return api_error
+    try:
+        return JsonResponse(
+            build_offline_bulk_run_detail_payload(request.GET.get('audit_log_id', ''))
+        )
+    except ValueError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
 
 
 def dashboard_offline_incidents_export_json(request):
@@ -569,7 +589,7 @@ def _build_offline_critical_incidents_export_payload_from_request(request):
 
 
 def _build_offline_bulk_runs_export_payload_from_request(request):
-    return build_offline_bulk_runs_export_payload(
+    payload = build_offline_bulk_runs_export_payload(
         periodo=request.GET.get('periodo', 'semana'),
         desde_param=request.GET.get('desde'),
         hasta_param=request.GET.get('hasta'),
@@ -580,6 +600,13 @@ def _build_offline_bulk_runs_export_payload_from_request(request):
         offline_bulk_action_type=request.GET.get('offline_bulk_action_type', ''),
         offline_bulk_audit_log=request.GET.get('offline_bulk_audit_log', ''),
     )
+    for item in payload['items']:
+        item['detail_json_url'] = _build_offline_batch_json_href(item['audit_log_id'])
+    if payload.get('selected_run'):
+        payload['selected_run']['detail_json_url'] = _build_offline_batch_json_href(
+            payload['selected_run']['audit_log_id']
+        )
+    return payload
 
 
 def _build_offline_bulk_export_query_params_from_context(context):
@@ -597,6 +624,10 @@ def _build_offline_bulk_export_query_params_from_context(context):
         if value:
             params[query_name] = value
     return params
+
+
+def _build_offline_batch_json_href(audit_log_id) -> str:
+    return f"{reverse('dashboard_offline_incident_batch_json')}?audit_log_id={audit_log_id}"
 
 
 def _execute_offline_segment_bulk_action_json(request, *, action: str):

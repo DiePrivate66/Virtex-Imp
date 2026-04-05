@@ -91,6 +91,24 @@
                 <p class="text-white font-black mt-1">{{ offline_bulk_selected_run.bulk_succeeded }}/{{ offline_bulk_selected_run.bulk_processed }} OK</p>
             </div>
         </div>
+        <div class="flex justify-end gap-2 mt-4">
+            <a
+                href="{{ offline_bulk_selected_run_json_href }}"
+                target="_blank"
+                rel="noopener"
+                class="bg-indigo-900/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+            >
+                JSON
+            </a>
+            <a
+                href="{% url 'admin:pos_auditlog_change' offline_bulk_selected_run.id %}"
+                target="_blank"
+                rel="noopener"
+                class="bg-emerald-900/50 text-emerald-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-emerald-800/50 transition"
+            >
+                AuditLog
+            </a>
+        </div>
     </div>
     {% endif %}
 
@@ -216,6 +234,14 @@
                                 class="bg-emerald-900/50 text-emerald-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-emerald-800/50 transition"
                             >
                                 AuditLog
+                            </a>
+                            <a
+                                href="{% url 'dashboard_offline_incident_batch_json' %}?audit_log_id={{ batch.id }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-indigo-900/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                            >
+                                JSON
                             </a>
                         </div>
                     </td>
