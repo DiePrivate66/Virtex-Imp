@@ -720,6 +720,61 @@ def build_offline_bulk_runs_context(
     return context
 
 
+def build_offline_bulk_runs_export_payload(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_action_time_window: str = '',
+    offline_action_organization: str = '',
+    offline_action_location: str = '',
+    offline_action_actor: str = '',
+    offline_bulk_action_type: str = '',
+    offline_bulk_audit_log: str = '',
+):
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    bulk_bundle = _build_offline_bulk_audit_runs(
+        desde,
+        hasta,
+        time_window=offline_action_time_window,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+        action_type=offline_bulk_action_type,
+        selected_audit_log=offline_bulk_audit_log,
+    )
+    items = [_serialize_offline_bulk_run(item) for item in bulk_bundle['items']]
+    selected_run = (
+        _serialize_offline_bulk_run(bulk_bundle['selected_run'])
+        if bulk_bundle['selected_run']
+        else None
+    )
+    return {
+        'periodo': periodo,
+        'desde': str(desde),
+        'hasta': str(hasta),
+        'count': len(items),
+        'selected_audit_log': bulk_bundle['selected_audit_log'],
+        'selected_run': selected_run,
+        'filters': {
+            'time_window': bulk_bundle['selected_time_window'],
+            'organization_id': bulk_bundle['selected_organization_id'],
+            'location_id': bulk_bundle['selected_location_id'],
+            'actor_id': bulk_bundle['selected_actor_id'],
+            'action_type': bulk_bundle['selected_action_type'],
+        },
+        'metrics': _build_offline_bulk_action_metrics(
+            desde,
+            hasta,
+            time_window=offline_action_time_window,
+            organization_id=offline_action_organization,
+            location_id=offline_action_location,
+            actor_id=offline_action_actor,
+        ),
+        'items': items,
+    }
+
+
 def _build_offline_bulk_audit_runs(
     desde,
     hasta,
@@ -915,6 +970,26 @@ def _build_offline_bulk_action_metrics(
         'processed_reference': _build_bulk_reference(largest_processed_run or last_run),
         'failed_reference': _build_bulk_reference(latest_failed_run),
         'last_run_reference': _build_bulk_reference(last_run),
+    }
+
+
+def _serialize_offline_bulk_run(item):
+    if not item:
+        return None
+    return {
+        'audit_log_id': item.id,
+        'created_at': timezone.localtime(item.created_at).isoformat(),
+        'event_type': item.event_type,
+        'action_label': getattr(item, 'bulk_action_label', item.event_type),
+        'batch_id': str(item.target_id or '').strip(),
+        'processed': int(getattr(item, 'bulk_processed', 0) or 0),
+        'succeeded': int(getattr(item, 'bulk_succeeded', 0) or 0),
+        'failed': int(getattr(item, 'bulk_failed', 0) or 0),
+        'failed_details': list(getattr(item, 'bulk_failed_details', []) or []),
+        'organization_name': item.organization.name if item.organization_id and item.organization else '',
+        'location_name': item.location.name if item.location_id and item.location else '',
+        'actor_username': item.actor_user.username if item.actor_user_id and item.actor_user else '',
+        'selected': bool(getattr(item, 'bulk_is_selected', False)),
     }
 
 

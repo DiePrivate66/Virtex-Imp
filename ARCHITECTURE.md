@@ -377,6 +377,7 @@ La base durable local ya no esta en cero:
 - esas acciones masivas ahora tambien registran `AuditLog` agregados por lote y la vista critica expone metricas resumidas (`lotes`, `procesados`, `fallos`, `ultima ejecucion`) para auditoria operativa directa en analytics
 - cada tarjeta agregada de esas metricas enlaza al `AuditLog` batch mas relevante para drill-down inmediato: ultimo lote observado, lote de mayor volumen procesado, ultimo lote con fallos y ultima ejecucion registrada
 - ademas ya existe `/dashboard/incidentes-offline/lotes/`, una vista batch dedicada que reutiliza periodo y filtros operativos (`ventana`, `organizacion`, `sucursal`, `actor`) para revisar lotes agregados fuera del admin, con foco opcional por `AuditLog ID`
+- esa vista batch ya expone exportacion `CSV` y `JSON` con el mismo subconjunto visible y la misma metadata de foco (`AuditLog ID`) para analisis externo o intercambio durante incident response
 - la vista `Limbo Offline` ya incorpora un buscador GET por `segment_id` para abrir o autoexpandir un segmento historico sin depender de venir desde analytics
 - ese mismo buscador ya vive tambien en el polling JSON del limbo: la UI reenvia `segment_id` al endpoint `/dashboard/limbo-offline/json/`, conserva la URL con `history.replaceState` y reexpande coincidencias sin recargar la pagina
 - la misma caja de busqueda ya permite abrir el detalle JSON historico exacto desde teclado (`Ctrl+Enter`) o con boton explicito, sin pasar antes por la tabla de segmentos sellados

@@ -14,8 +14,22 @@
                 <p class="text-gray-500 text-xs font-bold mt-1">Revision de lotes agregados registrados por acciones masivas sobre segmentos offline.</p>
             </div>
         </div>
-        <div class="bg-indigo-500 text-black text-2xl font-black px-4 py-2 rounded-xl">
-            {{ offline_bulk_runs_count }}
+        <div class="flex items-center gap-3">
+            <a
+                href="{{ offline_bulk_export_json_href }}"
+                class="bg-indigo-900/50 hover:bg-indigo-800/50 text-indigo-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Export JSON
+            </a>
+            <a
+                href="{{ offline_bulk_export_csv_href }}"
+                class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Export CSV
+            </a>
+            <div class="bg-indigo-500 text-black text-2xl font-black px-4 py-2 rounded-xl">
+                {{ offline_bulk_runs_count }}
+            </div>
         </div>
     </div>
 

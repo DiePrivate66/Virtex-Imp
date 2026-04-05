@@ -1751,6 +1751,76 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'Lote Seleccionado')
         self.assertContains(response, reverse('admin:pos_auditlog_change', args=[selected_batch.id]))
         self.assertContains(response, reverse('dashboard_offline_incidents'))
+        self.assertContains(response, reverse('dashboard_offline_incident_batches_export_json'))
+        self.assertContains(response, reverse('dashboard_offline_incident_batches_export_csv'))
+
+    def test_offline_incident_batches_json_export_returns_filtered_rows(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-export-001',
+            payload_json={'processed': 5, 'succeeded': 4, 'failed': 1},
+            correlation_id='revalidate-batch-export-001',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-export-001',
+            payload_json={'processed': 2, 'succeeded': 2, 'failed': 0},
+            correlation_id='review-batch-export-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batches_export_json'),
+            {
+                'periodo': 'semana',
+                'offline_bulk_action_type': 'offline.segment_bulk_revalidated',
+                'offline_bulk_audit_log': str(selected_batch.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['count'], 1)
+        self.assertEqual(payload['items'][0]['batch_id'], 'revalidate-batch-export-001')
+        self.assertEqual(payload['items'][0]['processed'], 5)
+        self.assertEqual(payload['selected_run']['audit_log_id'], selected_batch.id)
+        self.assertEqual(payload['filters']['action_type'], 'offline.segment_bulk_revalidated')
+
+    def test_offline_incident_batches_csv_export_returns_filtered_rows(self):
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-csv-001',
+            payload_json={'processed': 8, 'succeeded': 7, 'failed': 1},
+            correlation_id='revalidate-batch-csv-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batches_export_csv'),
+            {
+                'offline_bulk_action_type': 'offline.segment_bulk_revalidated',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn('attachment; filename="offline-batch-runs.csv"', response['Content-Disposition'])
+        content = response.content.decode('utf-8')
+        self.assertIn('audit_log_id,created_at,event_type,action_label,batch_id,processed,succeeded,failed,organization_name,location_name,actor_username,selected', content)
+        self.assertIn('revalidate-batch-csv-001', content)
+        self.assertIn('REVALIDACION_MASIVA', content)
 
     def test_offline_critical_incidents_json_export_returns_filtered_rows(self):
         AuditLog.objects.create(

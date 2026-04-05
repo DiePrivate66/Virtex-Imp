@@ -13,6 +13,7 @@ from django.urls import reverse
 from pos.application.analytics import (
     OfflineLimboActionError,
     build_analytics_dashboard_context,
+    build_offline_bulk_runs_export_payload,
     build_offline_bulk_runs_context,
     build_offline_critical_incidents_context,
     build_offline_critical_incidents_export_payload,
@@ -130,7 +131,67 @@ def dashboard_offline_incident_batches(request):
         f"{reverse('dashboard_offline_incidents')}?"
         f"{urlencode(_build_offline_bulk_back_to_incidents_query_params(context))}"
     )
+    export_query = urlencode(_build_offline_bulk_export_query_params_from_context(context))
+    context['offline_bulk_export_json_href'] = (
+        f"{reverse('dashboard_offline_incident_batches_export_json')}?{export_query}"
+    )
+    context['offline_bulk_export_csv_href'] = (
+        f"{reverse('dashboard_offline_incident_batches_export_csv')}?{export_query}"
+    )
     return render(request, 'pos/offline_incident_batches.html', context)
+
+
+def dashboard_offline_incident_batches_export_json(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+    return JsonResponse(_build_offline_bulk_runs_export_payload_from_request(request))
+
+
+def dashboard_offline_incident_batches_export_csv(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    payload = _build_offline_bulk_runs_export_payload_from_request(request)
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            'audit_log_id',
+            'created_at',
+            'event_type',
+            'action_label',
+            'batch_id',
+            'processed',
+            'succeeded',
+            'failed',
+            'organization_name',
+            'location_name',
+            'actor_username',
+            'selected',
+        ]
+    )
+    for item in payload['items']:
+        writer.writerow(
+            [
+                item['audit_log_id'],
+                item['created_at'],
+                item['event_type'],
+                item['action_label'],
+                item['batch_id'],
+                item['processed'],
+                item['succeeded'],
+                item['failed'],
+                item['organization_name'],
+                item['location_name'],
+                item['actor_username'],
+                'YES' if item['selected'] else 'NO',
+            ]
+        )
+    response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename=\"offline-batch-runs.csv\"'
+    return response
 
 
 def dashboard_offline_incidents_export_json(request):
@@ -505,6 +566,37 @@ def _build_offline_critical_incidents_export_payload_from_request(request):
         offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
         offline_action_sort=request.GET.get('offline_action_sort', 'footer_missing'),
     )
+
+
+def _build_offline_bulk_runs_export_payload_from_request(request):
+    return build_offline_bulk_runs_export_payload(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_action_time_window=request.GET.get('offline_action_time_window', ''),
+        offline_action_organization=request.GET.get('offline_action_organization', ''),
+        offline_action_location=request.GET.get('offline_action_location', ''),
+        offline_action_actor=request.GET.get('offline_action_actor', ''),
+        offline_bulk_action_type=request.GET.get('offline_bulk_action_type', ''),
+        offline_bulk_audit_log=request.GET.get('offline_bulk_audit_log', ''),
+    )
+
+
+def _build_offline_bulk_export_query_params_from_context(context):
+    params = _build_period_query_params(context['periodo'], context['desde'], context['hasta'])
+    mapping = {
+        'offline_bulk_action_filter_time_window': 'offline_action_time_window',
+        'offline_bulk_action_filter_organization': 'offline_action_organization',
+        'offline_bulk_action_filter_location': 'offline_action_location',
+        'offline_bulk_action_filter_actor': 'offline_action_actor',
+        'offline_bulk_action_filter_type': 'offline_bulk_action_type',
+        'offline_bulk_action_filter_audit_log': 'offline_bulk_audit_log',
+    }
+    for context_field, query_name in mapping.items():
+        value = str(context.get(context_field, '') or '').strip()
+        if value:
+            params[query_name] = value
+    return params
 
 
 def _execute_offline_segment_bulk_action_json(request, *, action: str):

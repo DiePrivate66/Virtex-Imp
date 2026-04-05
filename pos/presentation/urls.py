@@ -83,6 +83,16 @@ urlpatterns = [
         name='dashboard_offline_incident_batches',
     ),
     path(
+        'dashboard/incidentes-offline/lotes/export.json',
+        analytics_views.dashboard_offline_incident_batches_export_json,
+        name='dashboard_offline_incident_batches_export_json',
+    ),
+    path(
+        'dashboard/incidentes-offline/lotes/export.csv',
+        analytics_views.dashboard_offline_incident_batches_export_csv,
+        name='dashboard_offline_incident_batches_export_csv',
+    ),
+    path(
         'dashboard/incidentes-offline/export.json',
         analytics_views.dashboard_offline_incidents_export_json,
         name='dashboard_offline_incidents_export_json',
