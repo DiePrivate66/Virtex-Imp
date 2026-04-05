@@ -135,7 +135,15 @@ def _build_attendance_data(desde, hasta):
     return data
 
 
-def _build_offline_audited_actions(desde, hasta, *, action_type: str = '', location_id: str = ''):
+def _build_offline_audited_actions(
+    desde,
+    hasta,
+    *,
+    action_type: str = '',
+    organization_id: str = '',
+    location_id: str = '',
+    actor_id: str = '',
+):
     base_queryset = (
         AuditLog.objects.filter(
             event_type__in=[
@@ -148,11 +156,23 @@ def _build_offline_audited_actions(desde, hasta, *, action_type: str = '', locat
         .select_related('organization', 'location', 'actor_user')
         .order_by('-created_at')
     )
+    organization_options = list(
+        base_queryset.exclude(organization__isnull=True)
+        .values('organization_id', 'organization__name')
+        .distinct()
+        .order_by('organization__name')
+    )
     location_options = list(
         base_queryset.exclude(location__isnull=True)
         .values('location_id', 'location__name')
         .distinct()
         .order_by('location__name')
+    )
+    actor_options = list(
+        base_queryset.exclude(actor_user__isnull=True)
+        .values('actor_user_id', 'actor_user__username')
+        .distinct()
+        .order_by('actor_user__username')
     )
 
     queryset = base_queryset
@@ -160,19 +180,35 @@ def _build_offline_audited_actions(desde, hasta, *, action_type: str = '', locat
     if normalized_action_type:
         queryset = queryset.filter(event_type=normalized_action_type)
 
+    normalized_organization_id = str(organization_id or '').strip()
+    if normalized_organization_id.isdigit():
+        queryset = queryset.filter(organization_id=int(normalized_organization_id))
+    else:
+        normalized_organization_id = ''
+
     normalized_location_id = str(location_id or '').strip()
     if normalized_location_id.isdigit():
         queryset = queryset.filter(location_id=int(normalized_location_id))
     else:
         normalized_location_id = ''
 
+    normalized_actor_id = str(actor_id or '').strip()
+    if normalized_actor_id.isdigit():
+        queryset = queryset.filter(actor_user_id=int(normalized_actor_id))
+    else:
+        normalized_actor_id = ''
+
     return {
         'queryset': queryset,
         'items': list(queryset[:10]),
         'selected_action_type': normalized_action_type,
+        'selected_organization_id': normalized_organization_id,
         'selected_location_id': normalized_location_id,
+        'selected_actor_id': normalized_actor_id,
         'action_type_options': OFFLINE_AUDIT_EVENT_TYPE_OPTIONS,
+        'organization_options': organization_options,
         'location_options': location_options,
+        'actor_options': actor_options,
     }
 
 
@@ -181,7 +217,9 @@ def build_analytics_dashboard_context(
     desde_param=None,
     hasta_param=None,
     offline_action_type: str = '',
+    offline_action_organization: str = '',
     offline_action_location: str = '',
+    offline_action_actor: str = '',
 ):
     hoy = timezone.localdate()
     desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
@@ -249,7 +287,9 @@ def build_analytics_dashboard_context(
         desde,
         hasta,
         action_type=offline_action_type,
+        organization_id=offline_action_organization,
         location_id=offline_action_location,
+        actor_id=offline_action_actor,
     )
 
     return {
@@ -289,9 +329,13 @@ def build_analytics_dashboard_context(
         'offline_audited_actions': offline_audit_bundle['items'],
         'offline_audited_actions_count': offline_audit_bundle['queryset'].count(),
         'offline_audited_action_filter_type': offline_audit_bundle['selected_action_type'],
+        'offline_audited_action_filter_organization': offline_audit_bundle['selected_organization_id'],
         'offline_audited_action_filter_location': offline_audit_bundle['selected_location_id'],
+        'offline_audited_action_filter_actor': offline_audit_bundle['selected_actor_id'],
         'offline_audited_action_type_options': offline_audit_bundle['action_type_options'],
+        'offline_audited_action_organization_options': offline_audit_bundle['organization_options'],
         'offline_audited_action_location_options': offline_audit_bundle['location_options'],
+        'offline_audited_action_actor_options': offline_audit_bundle['actor_options'],
     }
 
 

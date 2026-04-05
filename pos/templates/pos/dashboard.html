@@ -268,7 +268,7 @@
             <input type="hidden" name="periodo" value="{{ periodo }}">
             {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
             {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div>
                     <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Tipo De Accion</label>
                     <select
@@ -278,6 +278,23 @@
                         {% for value, label in offline_audited_action_type_options %}
                         <option value="{{ value }}" {% if offline_audited_action_filter_type == value %}selected{% endif %}>
                             {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Organizacion</label>
+                    <select
+                        name="offline_action_organization"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                    >
+                        <option value="">Todas</option>
+                        {% for option in offline_audited_action_organization_options %}
+                        <option
+                            value="{{ option.organization_id }}"
+                            {% if offline_audited_action_filter_organization == option.organization_id|stringformat:"s" %}selected{% endif %}
+                        >
+                            {{ option.organization__name }}
                         </option>
                         {% endfor %}
                     </select>
@@ -295,6 +312,23 @@
                             {% if offline_audited_action_filter_location == option.location_id|stringformat:"s" %}selected{% endif %}
                         >
                             {{ option.location__name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Actor</label>
+                    <select
+                        name="offline_action_actor"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                    >
+                        <option value="">Todos</option>
+                        {% for option in offline_audited_action_actor_options %}
+                        <option
+                            value="{{ option.actor_user_id }}"
+                            {% if offline_audited_action_filter_actor == option.actor_user_id|stringformat:"s" %}selected{% endif %}
+                        >
+                            {{ option.actor_user__username }}
                         </option>
                         {% endfor %}
                     </select>
