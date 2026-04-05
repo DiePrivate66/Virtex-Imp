@@ -366,9 +366,11 @@ La base durable local ya no esta en cero:
 - el resultado del registro central (`recorded`, `audit_log_id`, `event_type` u omision explicita) ya se persiste dentro de `ops_metadata` para que el detalle expandido del segmento lo siga mostrando despues de cualquier refresh
 - el dashboard principal de analytics ya expone una tabla de `ACCIONES OFFLINE AUDITADAS` filtrada por el periodo activo, usando `AuditLog` como fuente central para revisar operaciones offline sin abrir segmento por segmento
 - esa tabla ahora soporta filtros operativos por tipo de accion, organizacion, sucursal, actor, estado del segmento y resultado operativo registrado en `AuditLog`, preservando el periodo activo del dashboard para que la revision siga siendo contextual
+- esa misma tabla ya permite busqueda rapida por `segment_id` usando coincidencia parcial, para entrar a un incidente aunque solo se tenga un fragmento del identificador
 - cada fila de esa tabla ya enlaza tanto al dashboard de limbo offline con `segment_id` precargado como al endpoint JSON del detalle del segmento para inspeccion directa
 - esa misma fila ya enlaza tambien al change view administrativo de `AuditLog`, cerrando la navegacion entre analytics, limbo offline, JSON diagnostico y trazabilidad central
 - el `AuditLogAdmin` ya muestra enlaces inversos a `Limbo` y `JSON` cuando el `target_model` es `OfflineJournalSegment`, cerrando la navegacion en ambos sentidos
+- la vista `Limbo Offline` ya incorpora un buscador GET por `segment_id` para abrir o autoexpandir un segmento historico sin depender de venir desde analytics
 - el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
 - el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
 - `manage.py offline_writer`, `manage.py offline_journal` y `manage.py offline_limbo` ya exponen append canonico, inspeccion, reconciliacion, re-sellado y lectura del summary de limbo sin depender aun del runtime Electron

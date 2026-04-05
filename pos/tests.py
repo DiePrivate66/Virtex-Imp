@@ -1266,6 +1266,7 @@ class AnalyticsReplayTimelineTests(TestCase):
 
         context = build_analytics_dashboard_context(
             periodo='semana',
+            offline_action_segment_id='20260404-021',
             offline_action_type='offline.segment_footer_revalidated',
             offline_action_organization=str(self.location.organization.id),
             offline_action_location=str(self.location.id),
@@ -1276,6 +1277,7 @@ class AnalyticsReplayTimelineTests(TestCase):
 
         self.assertEqual(context['offline_audited_actions_count'], 1)
         self.assertEqual(context['offline_audited_actions'][0].id, matching.id)
+        self.assertEqual(context['offline_audited_action_filter_segment_id'], '20260404-021')
         self.assertEqual(context['offline_audited_action_filter_type'], 'offline.segment_footer_revalidated')
         self.assertEqual(
             context['offline_audited_action_filter_organization'],
@@ -1359,6 +1361,7 @@ class AnalyticsReplayTimelineTests(TestCase):
             reverse('dashboard_analytics'),
             {
                 'periodo': 'semana',
+                'offline_action_segment_id': '20260404-031',
                 'offline_action_type': 'offline.segment_footer_revalidated',
                 'offline_action_organization': str(self.location.organization.id),
                 'offline_action_location': str(self.location.id),
@@ -1369,6 +1372,7 @@ class AnalyticsReplayTimelineTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Segment ID')
         self.assertContains(response, 'Tipo De Accion')
         self.assertContains(response, 'Organizacion')
         self.assertContains(response, 'Sucursal')
@@ -1376,6 +1380,7 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'Estado Del Segmento')
         self.assertContains(response, 'Resultado AuditLog')
         self.assertContains(response, 'Limpiar')
+        self.assertContains(response, 'value="20260404-031"')
         self.assertContains(response, 'offline.segment_footer_revalidated')
         self.assertContains(response, f'value="{self.location.organization.id}"')
         self.assertContains(response, f'value="{self.location.id}"')
@@ -1558,10 +1563,12 @@ class OfflineLimboDashboardTests(TestCase):
             response = self.client.get(
                 reverse('dashboard_offline_limbo'),
                 {'segment_id': 'sales-20260404-011'},
-            )
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['initial_segment_id'], 'sales-20260404-011')
+        self.assertContains(response, 'Buscar Segment ID')
+        self.assertContains(response, 'value="sales-20260404-011"')
         self.assertContains(response, 'data-initial-segment-id="sales-20260404-011"')
 
     def test_dashboard_offline_limbo_renders_sealed_segment_history(self):

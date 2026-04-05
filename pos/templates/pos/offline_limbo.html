@@ -58,6 +58,30 @@
         Estado: <span data-field="status">{{ status|upper }}</span>. <span data-field="detail">{{ detail }}</span>
     </div>
 
+    <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto] gap-3 items-end">
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Buscar Segment ID</label>
+                <input
+                    type="text"
+                    name="segment_id"
+                    value="{{ initial_segment_id|default:'' }}"
+                    placeholder="sales-20260404-001"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+            </div>
+            <button type="submit" class="bg-indigo-500 hover:bg-indigo-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
+                Buscar
+            </button>
+            <a
+                href="{% url 'dashboard_offline_limbo' %}"
+                class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-black px-4 py-2 rounded-lg transition text-center"
+            >
+                Limpiar
+            </a>
+        </div>
+    </form>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6">
             <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">Segmento Activo</h2>

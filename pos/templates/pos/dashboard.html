@@ -268,7 +268,17 @@
             <input type="hidden" name="periodo" value="{{ periodo }}">
             {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
             {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
-            <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-8 gap-3">
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Segment ID</label>
+                    <input
+                        type="text"
+                        name="offline_action_segment_id"
+                        value="{{ offline_audited_action_filter_segment_id|default:'' }}"
+                        placeholder="sales-20260404"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                    >
+                </div>
                 <div>
                     <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Tipo De Accion</label>
                     <select

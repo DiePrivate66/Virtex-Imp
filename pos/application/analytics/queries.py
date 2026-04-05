@@ -164,6 +164,7 @@ def _build_offline_audited_actions(
     desde,
     hasta,
     *,
+    segment_id: str = '',
     action_type: str = '',
     organization_id: str = '',
     location_id: str = '',
@@ -209,6 +210,10 @@ def _build_offline_audited_actions(
     segment_status_options.sort()
 
     queryset = base_queryset
+    normalized_segment_id = str(segment_id or '').strip()
+    if normalized_segment_id:
+        queryset = queryset.filter(target_id__icontains=normalized_segment_id)
+
     normalized_action_type = str(action_type or '').strip()
     if normalized_action_type:
         queryset = queryset.filter(event_type=normalized_action_type)
@@ -259,6 +264,7 @@ def _build_offline_audited_actions(
     return {
         'queryset': queryset,
         'items': items,
+        'selected_segment_id': normalized_segment_id,
         'selected_action_type': normalized_action_type,
         'selected_organization_id': normalized_organization_id,
         'selected_location_id': normalized_location_id,
@@ -278,6 +284,7 @@ def build_analytics_dashboard_context(
     periodo: str = 'semana',
     desde_param=None,
     hasta_param=None,
+    offline_action_segment_id: str = '',
     offline_action_type: str = '',
     offline_action_organization: str = '',
     offline_action_location: str = '',
@@ -350,6 +357,7 @@ def build_analytics_dashboard_context(
     offline_audit_bundle = _build_offline_audited_actions(
         desde,
         hasta,
+        segment_id=offline_action_segment_id,
         action_type=offline_action_type,
         organization_id=offline_action_organization,
         location_id=offline_action_location,
@@ -394,6 +402,7 @@ def build_analytics_dashboard_context(
         'refund_adjustments_open_total': refund_adjustments_open_total,
         'offline_audited_actions': offline_audit_bundle['items'],
         'offline_audited_actions_count': offline_audit_bundle['queryset'].count(),
+        'offline_audited_action_filter_segment_id': offline_audit_bundle['selected_segment_id'],
         'offline_audited_action_filter_type': offline_audit_bundle['selected_action_type'],
         'offline_audited_action_filter_organization': offline_audit_bundle['selected_organization_id'],
         'offline_audited_action_filter_location': offline_audit_bundle['selected_location_id'],
