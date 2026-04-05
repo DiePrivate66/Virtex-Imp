@@ -1196,6 +1196,14 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'ACCIONES OFFLINE AUDITADAS')
         self.assertContains(response, 'sales-20260404-011')
         self.assertContains(response, f'#{audit.id}')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo")}?segment_id=sales-20260404-011',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-011',
+        )
 
     def test_resolver_alerta_replay_marks_alert_resolved(self):
         venta = Venta.objects.create(
@@ -1316,6 +1324,22 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(response.context['recent_events'][0]['payment_reference'], 'OFFLINE-VIEW-001')
         self.assertContains(response, 'Limbo Offline')
         self.assertContains(response, 'OFFLINE-VIEW-001')
+
+    def test_dashboard_offline_limbo_preserves_initial_segment_id_from_query(self):
+        self.client.force_login(self.admin_user)
+
+        with override_settings(
+            OFFLINE_JOURNAL_ENABLED=False,
+            OFFLINE_JOURNAL_ROOT='',
+        ):
+            response = self.client.get(
+                reverse('dashboard_offline_limbo'),
+                {'segment_id': 'sales-20260404-011'},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['initial_segment_id'], 'sales-20260404-011')
+        self.assertContains(response, 'data-initial-segment-id="sales-20260404-011"')
 
     def test_dashboard_offline_limbo_renders_sealed_segment_history(self):
         with TemporaryDirectory() as temp_dir:

@@ -275,6 +275,7 @@
                         <th class="pb-2 font-black">Actor</th>
                         <th class="pb-2 font-black">Sucursal</th>
                         <th class="pb-2 font-black text-right">AuditLog</th>
+                        <th class="pb-2 font-black text-right">Detalle</th>
                     </tr>
                 </thead>
                 <tbody class="text-sm">
@@ -320,6 +321,24 @@
                                 footer=NO
                                 {% endif %}
                             </p>
+                        </td>
+                        <td class="py-3 text-right text-xs">
+                            <div class="flex justify-end gap-2">
+                                <a
+                                    href="{% url 'dashboard_offline_limbo' %}?segment_id={{ action.target_id|urlencode }}"
+                                    class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                                >
+                                    Limbo
+                                </a>
+                                <a
+                                    href="{% url 'dashboard_offline_limbo_segment_json' %}?segment_id={{ action.target_id|urlencode }}"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="bg-indigo-900/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                                >
+                                    JSON
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

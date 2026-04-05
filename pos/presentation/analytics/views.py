@@ -44,10 +44,12 @@ def dashboard_offline_limbo(request):
     if access_redirect:
         return access_redirect
 
+    context = build_offline_limbo_context()
+    context['initial_segment_id'] = str(request.GET.get('segment_id', '') or '').strip()
     return render(
         request,
         'pos/offline_limbo.html',
-        build_offline_limbo_context(),
+        context,
     )
 
 

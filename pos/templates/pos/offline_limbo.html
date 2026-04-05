@@ -3,6 +3,7 @@
 <div
     class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100"
     data-offline-limbo-root
+    data-initial-segment-id="{{ initial_segment_id|default:'' }}"
     data-json-url="{% url 'dashboard_offline_limbo_json' %}"
     data-segment-detail-url="{% url 'dashboard_offline_limbo_segment_json' %}"
     data-segment-revalidate-url="{% url 'dashboard_offline_limbo_segment_revalidate_json' %}"
@@ -263,6 +264,7 @@
     const root = document.querySelector('[data-offline-limbo-root]');
     if (!root) return;
 
+    const initialSegmentId = String(root.dataset.initialSegmentId || '').trim();
     const jsonUrl = root.dataset.jsonUrl;
     const segmentDetailUrl = root.dataset.segmentDetailUrl;
     const segmentRevalidateUrl = root.dataset.segmentRevalidateUrl;
@@ -281,6 +283,7 @@
     const refreshIntervalMs = 10000;
     let refreshTimer = null;
     let lastPayload = null;
+    let pendingAutoOpenSegmentId = initialSegmentId;
     const segmentDetailsCache = new Map();
     const expandedSegmentIds = new Set();
 
@@ -612,6 +615,24 @@
         return payload;
     };
 
+    const ensureSegmentExpanded = async (segmentId) => {
+        if (!segmentId) return;
+        const segments = Array.isArray(lastPayload?.sealed_segments) ? lastPayload.sealed_segments : [];
+        if (!segments.some((segment) => String(segment.segment_id || '') === segmentId)) {
+            return;
+        }
+        expandedSegmentIds.add(segmentId);
+        renderSealedSegments(segments);
+        if (!segmentDetailsCache.has(segmentId)) {
+            try {
+                await loadSegmentDetail(segmentId);
+            } catch (error) {
+                segmentDetailsCache.set(segmentId, { error: `No se pudo cargar el detalle: ${error}` });
+            }
+        }
+        renderSealedSegments(segments);
+    };
+
     const runSegmentAction = async (url, segmentId, fallbackLabel) => {
         const response = await fetch(url, {
             method: 'POST',
@@ -643,6 +664,11 @@
             }
             const payload = await response.json();
             applyPayload(payload);
+            if (pendingAutoOpenSegmentId) {
+                const requestedSegmentId = pendingAutoOpenSegmentId;
+                pendingAutoOpenSegmentId = '';
+                await ensureSegmentExpanded(requestedSegmentId);
+            }
         } catch (error) {
             setStatusBanner('error', `No se pudo refrescar el limbo: ${error}`);
         } finally {
