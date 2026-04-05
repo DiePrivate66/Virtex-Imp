@@ -6,6 +6,7 @@
     data-initial-segment-id="{{ initial_segment_id|default:'' }}"
     data-json-url="{% url 'dashboard_offline_limbo_json' %}"
     data-segment-detail-url="{% url 'dashboard_offline_limbo_segment_json' %}"
+    data-segment-detail-html-url="{% url 'dashboard_offline_limbo_segment_detail' %}"
     data-segment-revalidate-url="{% url 'dashboard_offline_limbo_segment_revalidate_json' %}"
     data-segment-review-url="{% url 'dashboard_offline_limbo_segment_review_json' %}"
     data-reconcile-url="{% url 'dashboard_offline_limbo_reconcile_json' %}"
@@ -59,7 +60,7 @@
     </div>
 
     <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-6" data-segment-search-form>
-        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-3 items-end">
+        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] gap-3 items-end">
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Buscar Segment ID</label>
                 <input
@@ -81,6 +82,13 @@
                 class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-200 text-xs font-black px-4 py-2 rounded-lg transition"
             >
                 Abrir JSON
+            </button>
+            <button
+                type="button"
+                data-segment-search-open-html
+                class="bg-indigo-900/50 hover:bg-indigo-800/50 text-indigo-200 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Abrir HTML
             </button>
             <a
                 href="{% url 'dashboard_offline_limbo' %}"
@@ -273,14 +281,22 @@
                             <p class="text-[10px] text-gray-400 mt-2">{{ segment.detail }}</p>
                         </td>
                         <td class="py-3 text-xs">
-                            <button
-                                type="button"
-                                class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
-                                data-segment-detail-button
-                                data-segment-id="{{ segment.segment_id }}"
-                            >
-                                Ver detalle
-                            </button>
+                            <div class="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                                    data-segment-detail-button
+                                    data-segment-id="{{ segment.segment_id }}"
+                                >
+                                    Ver detalle
+                                </button>
+                                <a
+                                    href="{% url 'dashboard_offline_limbo_segment_detail' %}?segment_id={{ segment.segment_id }}"
+                                    class="bg-indigo-900/40 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                                >
+                                    HTML
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
@@ -302,6 +318,7 @@
     const initialSegmentId = String(root.dataset.initialSegmentId || '').trim();
     const jsonUrl = root.dataset.jsonUrl;
     const segmentDetailUrl = root.dataset.segmentDetailUrl;
+    const segmentDetailHtmlUrl = root.dataset.segmentDetailHtmlUrl;
     const segmentRevalidateUrl = root.dataset.segmentRevalidateUrl;
     const segmentReviewUrl = root.dataset.segmentReviewUrl;
     const reconcileUrl = root.dataset.reconcileUrl;
@@ -316,6 +333,7 @@
     const segmentSearchForm = root.querySelector('[data-segment-search-form]');
     const segmentSearchInput = root.querySelector('[data-segment-search-input]');
     const segmentSearchOpenJson = root.querySelector('[data-segment-search-open-json]');
+    const segmentSearchOpenHtml = root.querySelector('[data-segment-search-open-html]');
     const segmentSearchClear = root.querySelector('[data-segment-search-clear]');
     const segmentSearchFeedback = root.querySelector('[data-segment-search-feedback]');
     const eventsBody = root.querySelector('[data-recent-events-body]');
@@ -398,6 +416,18 @@
         return url.toString();
     };
 
+    const buildSegmentJsonHref = (segmentId) => {
+        const url = new URL(segmentDetailUrl, window.location.origin);
+        url.searchParams.set('segment_id', segmentId);
+        return url.toString();
+    };
+
+    const buildSegmentHtmlHref = (segmentId) => {
+        const url = new URL(segmentDetailHtmlUrl, window.location.origin);
+        url.searchParams.set('segment_id', segmentId);
+        return url.toString();
+    };
+
     const findMatchingSegmentId = (payload, requestedSegmentId) => {
         const query = normalizeSegmentSearch(requestedSegmentId).toLowerCase();
         if (!query) return '';
@@ -437,10 +467,23 @@
             setSegmentSearchFeedback(`No existe una coincidencia exacta cargada para "${requestedSegmentId}".`, 'error');
             return;
         }
-        const detailUrl = new URL(segmentDetailUrl, window.location.origin);
-        detailUrl.searchParams.set('segment_id', exactSegmentId);
-        window.open(detailUrl.toString(), '_blank', 'noopener');
+        window.open(buildSegmentJsonHref(exactSegmentId), '_blank', 'noopener');
         setSegmentSearchFeedback(`JSON abierto para ${exactSegmentId}.`, 'success');
+    };
+
+    const openExactSegmentHtml = () => {
+        const requestedSegmentId = normalizeSegmentSearch(segmentSearchInput?.value);
+        if (!requestedSegmentId) {
+            setSegmentSearchFeedback('Ingresa un segment_id exacto para abrir el detalle HTML.', 'error');
+            return;
+        }
+        const exactSegmentId = findExactSegmentId(lastPayload, requestedSegmentId);
+        if (!exactSegmentId) {
+            setSegmentSearchFeedback(`No existe una coincidencia exacta cargada para "${requestedSegmentId}".`, 'error');
+            return;
+        }
+        window.open(buildSegmentHtmlHref(exactSegmentId), '_blank', 'noopener');
+        setSegmentSearchFeedback(`HTML abierto para ${exactSegmentId}.`, 'success');
     };
 
     const formatTimestamp = (value) => {
@@ -514,6 +557,7 @@
         segments.forEach((segment) => {
             const status = String(segment.status || 'unknown');
             const segmentId = String(segment.segment_id || '');
+            const segmentHtmlHref = buildSegmentHtmlHref(segmentId);
             const isExpanded = expandedSegmentIds.has(segmentId);
             const cachedDetail = segmentDetailsCache.get(segmentId);
             const statusClasses = status === 'sealed'
@@ -536,14 +580,22 @@
                         <p class="text-[10px] text-gray-400 mt-2">${segment.detail || ''}</p>
                     </td>
                     <td class="py-3 text-xs">
-                        <button
-                            type="button"
-                            class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
-                            data-segment-detail-button
-                            data-segment-id="${segmentId}"
-                        >
-                            ${isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
-                        </button>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                                data-segment-detail-button
+                                data-segment-id="${segmentId}"
+                            >
+                                ${isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
+                            </button>
+                            <a
+                                href="${escapeHtml(segmentHtmlHref)}"
+                                class="bg-indigo-900/40 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                            >
+                                HTML
+                            </a>
+                        </div>
                     </td>
                 </tr>
             `);
@@ -842,6 +894,12 @@
     if (segmentSearchOpenJson) {
         segmentSearchOpenJson.addEventListener('click', () => {
             openExactSegmentJson();
+        });
+    }
+
+    if (segmentSearchOpenHtml) {
+        segmentSearchOpenHtml.addEventListener('click', () => {
+            openExactSegmentHtml();
         });
     }
 

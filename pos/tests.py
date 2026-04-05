@@ -2412,6 +2412,7 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(response.context['initial_segment_id'], 'sales-20260404-011')
         self.assertContains(response, 'Buscar Segment ID')
         self.assertContains(response, 'Abrir JSON')
+        self.assertContains(response, 'Abrir HTML')
         self.assertContains(response, 'Ctrl+Enter abre el JSON del segmento exacto.')
         self.assertContains(response, 'value="sales-20260404-011"')
         self.assertContains(response, 'data-initial-segment-id="sales-20260404-011"')
@@ -2479,6 +2480,10 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertContains(response, 'Historial De Segmentos Sellados')
         self.assertContains(response, sealed_snapshot['segment_id'])
         self.assertContains(response, 'Ver detalle')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id={sealed_snapshot["segment_id"]}',
+        )
         self.assertEqual(len(response.context['sealed_segments']), 1)
         self.assertEqual(response.context['sealed_segments'][0]['status'], 'sealed')
 
@@ -2700,6 +2705,53 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(payload['summary']['total_sales'], 1)
         self.assertEqual(payload['summary']['amount_total'], '6.90')
         self.assertEqual(payload['recent_events'][0]['payment_reference'], 'OFFLINE-DETAIL-001')
+
+    def test_dashboard_offline_limbo_segment_detail_renders_html_payload(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-detail-html-1',
+                payload={
+                    'sale_total': '9.40',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-DETAIL-HTML-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-detail-html-001',
+            )
+            sealed_snapshot = runtime.seal_active_segment()
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+            ):
+                response = self.client.get(
+                    reverse('dashboard_offline_limbo_segment_detail'),
+                    {'segment_id': sealed_snapshot['segment_id']},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['segment_detail']['segment_id'], sealed_snapshot['segment_id'])
+        self.assertContains(response, 'DETALLE DE SEGMENTO OFFLINE')
+        self.assertContains(response, sealed_snapshot['segment_id'])
+        self.assertContains(response, 'OFFLINE-DETAIL-HTML-001')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={sealed_snapshot["segment_id"]}',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo")}?segment_id={sealed_snapshot["segment_id"]}',
+        )
 
     def test_dashboard_offline_limbo_segment_revalidate_json_records_ops_metadata(self):
         with TemporaryDirectory() as temp_dir:

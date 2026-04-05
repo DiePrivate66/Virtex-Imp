@@ -355,6 +355,25 @@ def dashboard_offline_limbo_segment_json(request):
         return JsonResponse({'detail': str(exc)}, status=400)
 
 
+def dashboard_offline_limbo_segment_detail(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+    try:
+        detail = build_offline_segment_detail_payload(request.GET.get('segment_id', ''))
+    except ValueError:
+        return redirect('dashboard_offline_limbo')
+
+    context = {
+        'segment_detail': detail,
+        'segment_detail_json_href': _build_offline_segment_json_href(detail['segment_id']),
+        'segment_detail_html_href': _build_offline_segment_html_href(detail['segment_id']),
+        'segment_detail_back_href': _build_offline_segment_back_href(request, detail['segment_id']),
+        'segment_detail_payload_pretty': json.dumps(detail, ensure_ascii=False, indent=2, sort_keys=True),
+    }
+    return render(request, 'pos/offline_segment_detail.html', context)
+
+
 def dashboard_offline_limbo_segment_revalidate_json(request):
     return _execute_offline_segment_action_json(request, action='revalidate_footer')
 
@@ -734,6 +753,31 @@ def _build_offline_batch_back_href(request) -> str:
         if value:
             params[key] = value
     base = reverse('dashboard_offline_incident_batches')
+    return f"{base}?{urlencode(params)}" if params else base
+
+
+def _build_offline_segment_json_href(segment_id='') -> str:
+    params = {}
+    normalized_segment_id = str(segment_id or '').strip()
+    if normalized_segment_id:
+        params['segment_id'] = normalized_segment_id
+    return f"{reverse('dashboard_offline_limbo_segment_json')}?{urlencode(params)}"
+
+
+def _build_offline_segment_html_href(segment_id='') -> str:
+    params = {}
+    normalized_segment_id = str(segment_id or '').strip()
+    if normalized_segment_id:
+        params['segment_id'] = normalized_segment_id
+    return f"{reverse('dashboard_offline_limbo_segment_detail')}?{urlencode(params)}"
+
+
+def _build_offline_segment_back_href(request, segment_id='') -> str:
+    params = {}
+    normalized_segment_id = str(segment_id or '').strip()
+    if normalized_segment_id:
+        params['segment_id'] = normalized_segment_id
+    base = reverse('dashboard_offline_limbo')
     return f"{base}?{urlencode(params)}" if params else base
 
 

@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+    <div class="flex items-start justify-between gap-4 mb-6">
+        <div class="flex flex-col gap-3">
+            <a
+                href="{{ segment_detail_back_href }}"
+                class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition"
+            >
+                &larr; VOLVER A LIMBO
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tight">DETALLE DE SEGMENTO OFFLINE</h1>
+                <p class="text-gray-500 text-xs font-bold mt-1">Vista HTML individual construida sobre el mismo payload canonico del detalle JSON historico.</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a
+                href="{{ segment_detail_json_href }}"
+                target="_blank"
+                rel="noopener"
+                class="bg-indigo-900/50 hover:bg-indigo-800/50 text-indigo-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                JSON
+            </a>
+            <a
+                href="{{ segment_detail_html_href }}"
+                class="bg-gray-800 hover:bg-gray-700 text-gray-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Refrescar HTML
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">SEGMENT ID</p>
+            <p class="text-white text-lg font-black mt-2 break-all">{{ segment_detail.segment_id }}</p>
+            <p class="text-gray-600 text-xs mt-1">{{ segment_detail.segment_path }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">ESTADO</p>
+            <p class="text-3xl font-black mt-2 {% if segment_detail.status == 'sealed' %}text-green-300{% elif segment_detail.status == 'footer_missing' %}text-yellow-300{% else %}text-red-300{% endif %}">
+                {{ segment_detail.status|upper }}
+            </p>
+            <p class="text-gray-600 text-xs mt-1">{{ segment_detail.detail }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">VENTAS</p>
+            <p class="text-white text-4xl font-black mt-2">{{ segment_detail.summary.total_sales|default:0 }}</p>
+            <p class="text-gray-600 text-xs mt-1">Monto ${{ segment_detail.summary.amount_total|default:"0.00" }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">FOOTER</p>
+            <p class="text-4xl font-black mt-2 {% if segment_detail.footer_present %}text-green-300{% else %}text-red-300{% endif %}">
+                {% if segment_detail.footer_present %}YES{% else %}NO{% endif %}
+            </p>
+            <p class="text-gray-600 text-xs mt-1">CRC32 {{ segment_detail.footer.segment_crc32|default:"00000000" }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+        <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
+            <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Snapshot</h2>
+            <div class="mt-4 space-y-3 text-sm">
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Snapshot Path</p>
+                    <p class="text-gray-300 mt-1 break-all">{{ segment_detail.snapshot_path }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Records</p>
+                    <p class="text-white mt-1">{{ segment_detail.snapshot.record_count }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Last Event</p>
+                    <p class="text-white mt-1 break-all">{{ segment_detail.snapshot.last_event_id|default:"SIN_EVENTO" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Rolling CRC32</p>
+                    <p class="text-white mt-1">{{ segment_detail.snapshot.rolling_crc32 }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Seal Pending</p>
+                    <p class="text-white mt-1">{% if segment_detail.snapshot.seal_pending %}YES{% else %}NO{% endif %}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
+            <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Footer Y Salud</h2>
+            <div class="mt-4 space-y-3 text-sm">
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Record Count</p>
+                    <p class="text-white mt-1">{{ segment_detail.record_count }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Last Valid Offset</p>
+                    <p class="text-white mt-1">{{ segment_detail.last_valid_offset }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Last Record Hash</p>
+                    <p class="text-gray-300 mt-1 break-all">{{ segment_detail.last_record_hash|default:"SIN_HASH" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Truncated Tail</p>
+                    <p class="text-white mt-1">{% if segment_detail.segment_health.truncated_tail %}YES{% else %}NO{% endif %}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Corrupted Tail</p>
+                    <p class="text-white mt-1">{% if segment_detail.segment_health.corrupted_tail %}YES{% else %}NO{% endif %}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Health Detail</p>
+                    <p class="text-gray-300 mt-1">{{ segment_detail.segment_health.error_message|default:"Sin errores de integridad reportados." }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
+            <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Revision Operativa</h2>
+            <div class="mt-4 space-y-3 text-sm">
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Ultima Revision</p>
+                    <p class="text-white mt-1">{{ segment_detail.ops_metadata.operational_review.reviewed_at|default:"SIN_REGISTRO" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Revisado Por</p>
+                    <p class="text-white mt-1">{{ segment_detail.ops_metadata.operational_review.reviewed_by|default:"SIN_REGISTRO" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Ultima Revalidacion</p>
+                    <p class="text-white mt-1">{{ segment_detail.ops_metadata.last_footer_revalidation.revalidated_at|default:"SIN_REGISTRO" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Revalidado Por</p>
+                    <p class="text-white mt-1">{{ segment_detail.ops_metadata.last_footer_revalidation.revalidated_by|default:"SIN_REGISTRO" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">AuditLog</p>
+                    <p class="text-gray-300 mt-1">
+                        Review: {{ segment_detail.ops_metadata.operational_review.audit_log.audit_log_id|default:"N/A" }}
+                        <br>
+                        Revalidate: {{ segment_detail.ops_metadata.last_footer_revalidation.audit_log.audit_log_id|default:"N/A" }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5 mb-6">
+        <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Ultimos Eventos Del Segmento</h2>
+        {% if segment_detail.recent_events %}
+        <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                        <th class="pb-2 font-black">Hora</th>
+                        <th class="pb-2 font-black">Tipo</th>
+                        <th class="pb-2 font-black">Origen</th>
+                        <th class="pb-2 font-black">Monto</th>
+                        <th class="pb-2 font-black">Referencia</th>
+                    </tr>
+                </thead>
+                <tbody class="text-sm">
+                    {% for event in segment_detail.recent_events %}
+                    <tr class="border-b border-gray-800/50">
+                        <td class="py-3 text-gray-300 text-xs">{{ event.created_at|default:"SIN_FECHA" }}</td>
+                        <td class="py-3 text-white text-xs">{{ event.capture_event_type|default:event.journal_event_type }}</td>
+                        <td class="py-3 text-gray-300 text-xs">{{ event.sale_origin|default:"N/A" }}</td>
+                        <td class="py-3 text-gray-200 text-xs">${{ event.sale_total|default:"0.00" }}</td>
+                        <td class="py-3 text-gray-400 text-xs break-all">{{ event.payment_reference|default:"SIN_REF" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-400 text-sm mt-4">No hay eventos recientes para este segmento.</p>
+        {% endif %}
+    </div>
+
+    <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
+        <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Payload JSON</h2>
+        <pre class="mt-4 overflow-x-auto rounded-xl bg-[#111] border border-gray-800 p-4 text-xs text-gray-200 whitespace-pre-wrap break-all">{{ segment_detail_payload_pretty }}</pre>
+    </div>
+</div>
+{% endblock %}

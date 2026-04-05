@@ -125,6 +125,11 @@ urlpatterns = [
     path('dashboard/limbo-offline/', analytics_views.dashboard_offline_limbo, name='dashboard_offline_limbo'),
     path('dashboard/limbo-offline/json/', analytics_views.dashboard_offline_limbo_json, name='dashboard_offline_limbo_json'),
     path(
+        'dashboard/limbo-offline/segment/',
+        analytics_views.dashboard_offline_limbo_segment_detail,
+        name='dashboard_offline_limbo_segment_detail',
+    ),
+    path(
         'dashboard/limbo-offline/segment/json/',
         analytics_views.dashboard_offline_limbo_segment_json,
         name='dashboard_offline_limbo_segment_json',
