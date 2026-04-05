@@ -217,6 +217,7 @@ Inspect the current limbo directly from the app:
 - that table now also supports operational filters by a secondary time window, action type, organization, location, actor, segment status, explicit footer presence, and the operational result recorded in `AuditLog` while preserving the active analytics period
 - that same table now also supports quick partial lookup by `segment_id`, so operators can jump into an incident even when they only have a fragment of the segment identifier
 - each row in that table now provides direct navigation to `/dashboard/limbo-offline/?segment_id=<segment_id>` and to `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
+- that same row now also links to `/dashboard/limbo-offline/segment/?segment_id=<segment_id>`, so operators can open the HTML detail page for the segment without first going through the full limbo screen
 - the same row now also links to the Django admin change page for the corresponding `AuditLog`, so operators can move from dashboard analytics to central audit detail without manual lookup
 - when that `AuditLog` targets `OfflineJournalSegment`, the admin change page also exposes reverse links back to `/dashboard/limbo-offline/?segment_id=<segment_id>` and `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
 - the `Limbo Offline` page now also exposes a direct GET search by `segment_id`, so a sealed segment can be opened without first navigating from analytics or admin

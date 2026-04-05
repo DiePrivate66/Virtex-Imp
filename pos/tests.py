@@ -1633,6 +1633,10 @@ class AnalyticsReplayTimelineTests(TestCase):
         )
         self.assertContains(
             response,
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id=sales-20260404-011',
+        )
+        self.assertContains(
+            response,
             f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-011',
         )
         self.assertContains(
@@ -1765,6 +1769,22 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'FALLOS REPORTADOS')
         self.assertContains(response, 'ULTIMA EJECUCION')
         self.assertContains(response, reverse('dashboard_offline_incident_batches'))
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id=sales-20260404-072',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id=sales-20260404-073',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-072',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-073',
+        )
         self.assertContains(
             response,
             reverse('admin:pos_auditlog_change', args=[latest_batch.id]),

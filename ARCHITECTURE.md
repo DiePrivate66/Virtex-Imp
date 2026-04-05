@@ -370,6 +370,7 @@ La base durable local ya no esta en cero:
 - esa misma tabla ya permite busqueda rapida por `segment_id` usando coincidencia parcial, para entrar a un incidente aunque solo se tenga un fragmento del identificador
 - cada fila de esa tabla ya enlaza tanto al dashboard de limbo offline con `segment_id` precargado como al endpoint JSON del detalle del segmento para inspeccion directa
 - esa misma fila ya enlaza tambien al change view administrativo de `AuditLog`, cerrando la navegacion entre analytics, limbo offline, JSON diagnostico y trazabilidad central
+- esa misma fila ahora tambien enlaza al detalle HTML individual del segmento (`/dashboard/limbo-offline/segment/?segment_id=<segment_id>`), asi que el operador puede abrir el payload historico en formato humano sin pasar antes por la vista completa de limbo
 - el `AuditLogAdmin` ya muestra enlaces inversos a `Limbo` y `JSON` cuando el `target_model` es `OfflineJournalSegment`, cerrando la navegacion en ambos sentidos
 - ahora tambien existe `/dashboard/incidentes-offline/`, una vista dedicada de solo criticos que reutiliza los mismos filtros y la misma ordenacion operativa, pero restringe la superficie a segmentos con footer faltante o estado distinto de `sealed`
 - esa vista critica ya expone exportacion `CSV` y `JSON` sobre el subconjunto filtrado actual, usando exactamente el mismo contrato de filtros y orden operativo que la tabla visible

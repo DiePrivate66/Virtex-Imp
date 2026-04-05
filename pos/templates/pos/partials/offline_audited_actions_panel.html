@@ -324,6 +324,14 @@
                                 Limbo
                             </a>
                             <a
+                                href="{% url 'dashboard_offline_limbo_segment_detail' %}?segment_id={{ action.target_id|urlencode }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-sky-900/50 text-sky-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-sky-800/50 transition"
+                            >
+                                HTML
+                            </a>
+                            <a
                                 href="{% url 'dashboard_offline_limbo_segment_json' %}?segment_id={{ action.target_id|urlencode }}"
                                 target="_blank"
                                 rel="noopener"
