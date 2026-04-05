@@ -668,6 +668,19 @@ def _build_offline_bulk_action_metrics(
     location_id: str = '',
     actor_id: str = '',
 ):
+    def _build_bulk_reference(item):
+        if not item:
+            return {
+                'audit_log_id': None,
+                'target_id': '',
+                'event_type': '',
+            }
+        return {
+            'audit_log_id': item.id,
+            'target_id': str(item.target_id or '').strip(),
+            'event_type': item.event_type,
+        }
+
     queryset = AuditLog.objects.filter(
         event_type__in=list(OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP.values()),
         created_at__date__gte=desde,
@@ -698,12 +711,23 @@ def _build_offline_bulk_action_metrics(
     revalidate_runs = 0
     review_runs = 0
     last_run = items[0] if items else None
+    largest_processed_run = None
+    largest_processed_count = -1
+    latest_failed_run = None
 
     for item in items:
         payload = dict(item.payload_json or {})
-        processed_total += int(payload.get('processed') or 0)
-        succeeded_total += int(payload.get('succeeded') or 0)
-        failed_total += int(payload.get('failed') or 0)
+        processed = int(payload.get('processed') or 0)
+        succeeded = int(payload.get('succeeded') or 0)
+        failed = int(payload.get('failed') or 0)
+        processed_total += processed
+        succeeded_total += succeeded
+        failed_total += failed
+        if processed > largest_processed_count:
+            largest_processed_count = processed
+            largest_processed_run = item
+        if failed > 0 and latest_failed_run is None:
+            latest_failed_run = item
         if item.event_type == OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP['revalidate_footer']:
             revalidate_runs += 1
         elif item.event_type == OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP['mark_operational_review']:
@@ -722,6 +746,10 @@ def _build_offline_bulk_action_metrics(
             if last_run and last_run.actor_user_id and last_run.actor_user
             else ''
         ),
+        'runs_reference': _build_bulk_reference(last_run),
+        'processed_reference': _build_bulk_reference(largest_processed_run or last_run),
+        'failed_reference': _build_bulk_reference(latest_failed_run),
+        'last_run_reference': _build_bulk_reference(last_run),
     }
 
 

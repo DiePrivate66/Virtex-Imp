@@ -4,7 +4,7 @@
     <div class="flex items-start justify-between mb-6">
         <div class="flex flex-col gap-3">
             <a href="{% url 'dashboard_analytics' %}" class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
-                ← VOLVER A ANALYTICS
+                &larr; VOLVER A ANALYTICS
             </a>
             <div>
                 <h1 class="text-3xl font-black text-white tracking-tight">INCIDENTES OFFLINE CRITICOS</h1>
@@ -32,22 +32,94 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        {% if offline_bulk_metrics.runs_reference.audit_log_id %}
+        <a
+            href="{% url 'admin:pos_auditlog_change' offline_bulk_metrics.runs_reference.audit_log_id %}"
+            target="_blank"
+            rel="noopener"
+            class="block bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5 hover:border-indigo-500/40 transition"
+        >
+        {% else %}
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+        {% endif %}
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">LOTES MASIVOS</p>
             <p class="text-white text-4xl font-black mt-2">{{ offline_bulk_metrics.runs_count }}</p>
             <p class="text-gray-600 text-xs mt-1">Revalidaciones: {{ offline_bulk_metrics.revalidate_runs }} · Revisiones: {{ offline_bulk_metrics.review_runs }}</p>
+            {% if offline_bulk_metrics.runs_reference.audit_log_id %}
+            <p class="text-indigo-300 text-[10px] font-black uppercase tracking-widest mt-3">
+                AuditLog #{{ offline_bulk_metrics.runs_reference.audit_log_id }}
+            </p>
+            {% endif %}
+        {% if offline_bulk_metrics.runs_reference.audit_log_id %}
+        </a>
+        {% else %}
         </div>
+        {% endif %}
+
+        {% if offline_bulk_metrics.processed_reference.audit_log_id %}
+        <a
+            href="{% url 'admin:pos_auditlog_change' offline_bulk_metrics.processed_reference.audit_log_id %}"
+            target="_blank"
+            rel="noopener"
+            class="block bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5 hover:border-indigo-500/40 transition"
+        >
+        {% else %}
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+        {% endif %}
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">SEGMENTOS PROCESADOS</p>
             <p class="text-white text-4xl font-black mt-2">{{ offline_bulk_metrics.processed_total }}</p>
             <p class="text-gray-600 text-xs mt-1">Exitosos: {{ offline_bulk_metrics.succeeded_total }}</p>
+            {% if offline_bulk_metrics.processed_reference.audit_log_id %}
+            <p class="text-indigo-300 text-[10px] font-black uppercase tracking-widest mt-3">
+                AuditLog #{{ offline_bulk_metrics.processed_reference.audit_log_id }}
+            </p>
+            {% endif %}
+        {% if offline_bulk_metrics.processed_reference.audit_log_id %}
+        </a>
+        {% else %}
         </div>
+        {% endif %}
+
+        {% if offline_bulk_metrics.failed_reference.audit_log_id %}
+        <a
+            href="{% url 'admin:pos_auditlog_change' offline_bulk_metrics.failed_reference.audit_log_id %}"
+            target="_blank"
+            rel="noopener"
+            class="block bg-gradient-to-br from-red-900/30 to-red-900/10 rounded-2xl border border-red-800/30 p-5 hover:border-red-500/50 transition"
+        >
+        {% else %}
         <div class="bg-gradient-to-br from-red-900/30 to-red-900/10 rounded-2xl border border-red-800/30 p-5">
+        {% endif %}
             <p class="text-red-300 text-[10px] font-black uppercase tracking-widest">FALLOS REPORTADOS</p>
             <p class="text-red-300 text-4xl font-black mt-2">{{ offline_bulk_metrics.failed_total }}</p>
-            <p class="text-gray-600 text-xs mt-1">Del subconjunto actual filtrado</p>
+            <p class="text-gray-600 text-xs mt-1">
+                {% if offline_bulk_metrics.failed_reference.audit_log_id %}
+                Del subconjunto actual filtrado
+                {% else %}
+                Sin lote fallido dentro del subconjunto actual
+                {% endif %}
+            </p>
+            {% if offline_bulk_metrics.failed_reference.audit_log_id %}
+            <p class="text-red-200 text-[10px] font-black uppercase tracking-widest mt-3">
+                AuditLog #{{ offline_bulk_metrics.failed_reference.audit_log_id }}
+            </p>
+            {% endif %}
+        {% if offline_bulk_metrics.failed_reference.audit_log_id %}
+        </a>
+        {% else %}
         </div>
+        {% endif %}
+
+        {% if offline_bulk_metrics.last_run_reference.audit_log_id %}
+        <a
+            href="{% url 'admin:pos_auditlog_change' offline_bulk_metrics.last_run_reference.audit_log_id %}"
+            target="_blank"
+            rel="noopener"
+            class="block bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5 hover:border-indigo-500/40 transition"
+        >
+        {% else %}
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+        {% endif %}
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">ULTIMA EJECUCION</p>
             {% if offline_bulk_metrics.last_run_at %}
             <p class="text-white text-2xl font-black mt-2">{{ offline_bulk_metrics.last_run_at|date:"d/m H:i" }}</p>
@@ -62,7 +134,16 @@
             <p class="text-white text-2xl font-black mt-2">SIN_DATOS</p>
             <p class="text-gray-600 text-xs mt-1">No hay lotes registrados en este periodo</p>
             {% endif %}
+            {% if offline_bulk_metrics.last_run_reference.audit_log_id %}
+            <p class="text-indigo-300 text-[10px] font-black uppercase tracking-widest mt-3">
+                AuditLog #{{ offline_bulk_metrics.last_run_reference.audit_log_id }}
+            </p>
+            {% endif %}
+        {% if offline_bulk_metrics.last_run_reference.audit_log_id %}
+        </a>
+        {% else %}
         </div>
+        {% endif %}
     </div>
 
     {% include 'pos/partials/offline_audited_actions_panel.html' %}

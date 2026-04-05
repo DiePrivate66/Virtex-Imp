@@ -1471,7 +1471,7 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertNotIn(footer_ok.target_id, [item.target_id for item in context['offline_audited_actions']])
 
     def test_offline_critical_incidents_context_includes_bulk_metrics(self):
-        AuditLog.objects.create(
+        revalidate_batch = AuditLog.objects.create(
             organization=self.location.organization,
             location=self.location,
             actor_user=self.user,
@@ -1481,7 +1481,7 @@ class AnalyticsReplayTimelineTests(TestCase):
             payload_json={'processed': 3, 'succeeded': 2, 'failed': 1},
             correlation_id='revalidate-batch-001',
         )
-        AuditLog.objects.create(
+        review_batch = AuditLog.objects.create(
             organization=self.location.organization,
             location=self.location,
             actor_user=self.user,
@@ -1501,6 +1501,10 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(context['offline_bulk_metrics']['revalidate_runs'], 1)
         self.assertEqual(context['offline_bulk_metrics']['review_runs'], 1)
         self.assertEqual(context['offline_bulk_metrics']['last_run_actor'], self.user.username)
+        self.assertEqual(context['offline_bulk_metrics']['runs_reference']['audit_log_id'], review_batch.id)
+        self.assertEqual(context['offline_bulk_metrics']['processed_reference']['audit_log_id'], review_batch.id)
+        self.assertEqual(context['offline_bulk_metrics']['failed_reference']['audit_log_id'], revalidate_batch.id)
+        self.assertEqual(context['offline_bulk_metrics']['last_run_reference']['audit_log_id'], review_batch.id)
 
     def test_dashboard_renders_offline_audited_actions_table(self):
         audit = AuditLog.objects.create(
@@ -1592,6 +1596,26 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'value="footer_missing"')
 
     def test_offline_critical_incidents_view_renders_only_critical_actions(self):
+        failing_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-crit-001',
+            payload_json={'processed': 3, 'succeeded': 2, 'failed': 1},
+            correlation_id='revalidate-batch-crit-001',
+        )
+        latest_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-crit-001',
+            payload_json={'processed': 4, 'succeeded': 4, 'failed': 0},
+            correlation_id='review-batch-crit-001',
+        )
         AuditLog.objects.create(
             organization=self.location.organization,
             location=self.location,
@@ -1641,6 +1665,15 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'SEGMENTOS PROCESADOS')
         self.assertContains(response, 'FALLOS REPORTADOS')
         self.assertContains(response, 'ULTIMA EJECUCION')
+        self.assertContains(
+            response,
+            reverse('admin:pos_auditlog_change', args=[latest_batch.id]),
+            count=3,
+        )
+        self.assertContains(
+            response,
+            reverse('admin:pos_auditlog_change', args=[failing_batch.id]),
+        )
 
     def test_offline_critical_incidents_json_export_returns_filtered_rows(self):
         AuditLog.objects.create(
