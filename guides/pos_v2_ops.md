@@ -221,7 +221,7 @@ Inspect the current limbo directly from the app:
 - each row in that table now provides direct navigation to `/dashboard/limbo-offline/?segment_id=<segment_id>` and to `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
 - that same row now also links to `/dashboard/limbo-offline/segment/?segment_id=<segment_id>`, so operators can open the HTML detail page for the segment without first going through the full limbo screen
 - the same row now also links to the Django admin change page for the corresponding `AuditLog`, so operators can move from dashboard analytics to central audit detail without manual lookup
-- when that `AuditLog` targets `OfflineJournalSegment`, the admin change page also exposes reverse links back to `/dashboard/limbo-offline/?segment_id=<segment_id>` and `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
+- when that `AuditLog` targets `OfflineJournalSegment`, the admin change page also exposes reverse links back to `/dashboard/limbo-offline/?segment_id=<segment_id>`, `/dashboard/limbo-offline/segment/?segment_id=<segment_id>`, and `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
 - the `Limbo Offline` page now also exposes a direct GET search by `segment_id`, so a sealed segment can be opened without first navigating from analytics or admin
 - that same search now also rides on the periodic JSON refresh: the browser keeps the active `segment_id` in the URL, sends it to `/dashboard/limbo-offline/json/`, and expands the matching segment without a full page reload
 - the same search box now also supports exact historical JSON jump with `Ctrl+Enter` or the explicit `Abrir JSON` button, so operators can open the segment detail payload directly from keyboard

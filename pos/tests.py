@@ -2275,6 +2275,10 @@ class AnalyticsReplayTimelineTests(TestCase):
         )
         self.assertContains(
             response,
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id=sales-20260404-013',
+        )
+        self.assertContains(
+            response,
             f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-013',
         )
 
