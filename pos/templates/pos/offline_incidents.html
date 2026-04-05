@@ -31,6 +31,40 @@
         </p>
     </div>
 
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">LOTES MASIVOS</p>
+            <p class="text-white text-4xl font-black mt-2">{{ offline_bulk_metrics.runs_count }}</p>
+            <p class="text-gray-600 text-xs mt-1">Revalidaciones: {{ offline_bulk_metrics.revalidate_runs }} · Revisiones: {{ offline_bulk_metrics.review_runs }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">SEGMENTOS PROCESADOS</p>
+            <p class="text-white text-4xl font-black mt-2">{{ offline_bulk_metrics.processed_total }}</p>
+            <p class="text-gray-600 text-xs mt-1">Exitosos: {{ offline_bulk_metrics.succeeded_total }}</p>
+        </div>
+        <div class="bg-gradient-to-br from-red-900/30 to-red-900/10 rounded-2xl border border-red-800/30 p-5">
+            <p class="text-red-300 text-[10px] font-black uppercase tracking-widest">FALLOS REPORTADOS</p>
+            <p class="text-red-300 text-4xl font-black mt-2">{{ offline_bulk_metrics.failed_total }}</p>
+            <p class="text-gray-600 text-xs mt-1">Del subconjunto actual filtrado</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">ULTIMA EJECUCION</p>
+            {% if offline_bulk_metrics.last_run_at %}
+            <p class="text-white text-2xl font-black mt-2">{{ offline_bulk_metrics.last_run_at|date:"d/m H:i" }}</p>
+            <p class="text-gray-600 text-xs mt-1">
+                {% if offline_bulk_metrics.last_run_actor %}
+                {{ offline_bulk_metrics.last_run_actor }}
+                {% else %}
+                SIN_USUARIO
+                {% endif %}
+            </p>
+            {% else %}
+            <p class="text-white text-2xl font-black mt-2">SIN_DATOS</p>
+            <p class="text-gray-600 text-xs mt-1">No hay lotes registrados en este periodo</p>
+            {% endif %}
+        </div>
+    </div>
+
     {% include 'pos/partials/offline_audited_actions_panel.html' %}
 </div>
 <script>

@@ -17,7 +17,11 @@ from pos.infrastructure.offline import (
 from pos.infrastructure.offline.writer import journal_runtime_lock
 from pos.models import AuditLog, Location, Organization, OrganizationMembership
 
-from .queries import build_offline_limbo_payload, build_offline_segment_detail_payload
+from .queries import (
+    OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP,
+    build_offline_limbo_payload,
+    build_offline_segment_detail_payload,
+)
 
 
 class OfflineLimboActionError(RuntimeError):
@@ -162,6 +166,10 @@ def execute_offline_segment_bulk_action(
     succeeded = 0
     failed = 0
     with journal_runtime_lock(root_dir, stream_name):
+        scope_map = _resolve_offline_segment_bulk_scopes(
+            segment_ids=normalized_segment_ids,
+            user=user,
+        )
         for segment_id in normalized_segment_ids:
             try:
                 payload = _execute_offline_segment_action_locked(
@@ -190,6 +198,14 @@ def execute_offline_segment_bulk_action(
                         'detail': str(exc),
                     }
                 )
+        batch_audit_logs = _record_offline_segment_bulk_audit_logs(
+            action_name=action_name,
+            results=results,
+            scope_map=scope_map,
+            user=user,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
     return {
         'action': {
@@ -200,6 +216,7 @@ def execute_offline_segment_bulk_action(
             'failed': failed,
         },
         'results': results,
+        'batch_audit_logs': batch_audit_logs,
     }
 
 
@@ -341,6 +358,143 @@ def _record_offline_segment_audit_log(
         'organization_id': audit_log.organization_id,
         'location_id': audit_log.location_id,
     }
+
+
+def _resolve_offline_segment_bulk_scopes(*, segment_ids, user):
+    scope_map = {}
+    for segment_id in segment_ids or []:
+        try:
+            detail_payload = build_offline_segment_detail_payload(segment_id)
+        except ValueError:
+            continue
+        organization, location, actor_staff = _resolve_offline_segment_audit_scope(
+            detail_payload=detail_payload,
+            user=user,
+        )
+        scope_map[str(segment_id)] = {
+            'organization': organization,
+            'location': location,
+            'actor_staff': actor_staff,
+        }
+    return scope_map
+
+
+def _record_offline_segment_bulk_audit_logs(
+    *,
+    action_name: str,
+    results,
+    scope_map: dict,
+    user,
+    ip_address: str = '',
+    user_agent: str = '',
+):
+    event_type = OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP[action_name]
+    batch_id = f'{action_name}:{timezone.now().strftime("%Y%m%d%H%M%S%f")}'[:64]
+    grouped = {}
+    unresolved_results = []
+
+    for result in results or []:
+        segment_id = str(result.get('segment_id') or '').strip()
+        scope = scope_map.get(segment_id) or {}
+        organization = scope.get('organization')
+        location = scope.get('location')
+        actor_staff = scope.get('actor_staff')
+        if not organization:
+            unresolved_results.append(result)
+            continue
+
+        entry = grouped.setdefault(
+            organization.id,
+            {
+                'organization': organization,
+                'location': location,
+                'actor_staff': actor_staff,
+                'location_ids': set([location.id]) if location else set(),
+                'results': [],
+            },
+        )
+        if location:
+            entry['location_ids'].add(location.id)
+            if len(entry['location_ids']) > 1:
+                entry['location'] = None
+            else:
+                entry['location'] = location
+        entry['results'].append(result)
+
+    memberships = (
+        list(
+            OrganizationMembership.objects.select_related('organization', 'staff_profile')
+            .filter(user=user, active=True)
+        )
+        if getattr(user, 'is_authenticated', False)
+        else []
+    )
+    if unresolved_results:
+        if len(grouped) == 1:
+            next(iter(grouped.values()))['results'].extend(unresolved_results)
+        elif not grouped and len(memberships) == 1:
+            membership = memberships[0]
+            grouped[membership.organization_id] = {
+                'organization': membership.organization,
+                'location': None,
+                'actor_staff': membership.staff_profile,
+                'location_ids': set(),
+                'results': unresolved_results,
+            }
+
+    created_logs = []
+    for group in grouped.values():
+        group_results = list(group['results'])
+        processed = len(group_results)
+        succeeded = sum(1 for result in group_results if result.get('ok'))
+        failed = processed - succeeded
+        successful_segment_ids = [str(result.get('segment_id') or '') for result in group_results if result.get('ok')]
+        failed_results = [result for result in group_results if not result.get('ok')]
+        failed_segment_ids = [str(result.get('segment_id') or '') for result in failed_results]
+        payload_json = {
+            'batch_id': batch_id,
+            'action_name': action_name,
+            'processed': processed,
+            'succeeded': succeeded,
+            'failed': failed,
+            'segment_ids': [str(result.get('segment_id') or '') for result in group_results],
+            'successful_segment_ids': successful_segment_ids,
+            'failed_segment_ids': failed_segment_ids,
+            'failed_details': [
+                {
+                    'segment_id': str(result.get('segment_id') or ''),
+                    'detail': str(result.get('detail') or ''),
+                }
+                for result in failed_results[:20]
+            ],
+        }
+        audit_log = AuditLog.objects.create(
+            organization=group['organization'],
+            location=group['location'],
+            actor_user=user,
+            actor_staff=group['actor_staff'],
+            event_type=event_type,
+            target_model='OfflineJournalSegmentBatch',
+            target_id=batch_id,
+            payload_json=payload_json,
+            ip_address=str(ip_address or '').strip() or None,
+            user_agent=str(user_agent or '').strip()[:255],
+            correlation_id=batch_id,
+        )
+        created_logs.append(
+            {
+                'recorded': True,
+                'audit_log_id': audit_log.id,
+                'event_type': audit_log.event_type,
+                'organization_id': audit_log.organization_id,
+                'location_id': audit_log.location_id,
+                'processed': processed,
+                'succeeded': succeeded,
+                'failed': failed,
+            }
+        )
+
+    return created_logs
 
 
 def _resolve_offline_segment_audit_result(*, event_type: str, detail_payload: dict) -> str:

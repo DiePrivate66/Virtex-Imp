@@ -1470,6 +1470,38 @@ class AnalyticsReplayTimelineTests(TestCase):
         )
         self.assertNotIn(footer_ok.target_id, [item.target_id for item in context['offline_audited_actions']])
 
+    def test_offline_critical_incidents_context_includes_bulk_metrics(self):
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-001',
+            payload_json={'processed': 3, 'succeeded': 2, 'failed': 1},
+            correlation_id='revalidate-batch-001',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-001',
+            payload_json={'processed': 4, 'succeeded': 4, 'failed': 0},
+            correlation_id='review-batch-001',
+        )
+
+        context = build_offline_critical_incidents_context(periodo='semana')
+
+        self.assertEqual(context['offline_bulk_metrics']['runs_count'], 2)
+        self.assertEqual(context['offline_bulk_metrics']['processed_total'], 7)
+        self.assertEqual(context['offline_bulk_metrics']['succeeded_total'], 6)
+        self.assertEqual(context['offline_bulk_metrics']['failed_total'], 1)
+        self.assertEqual(context['offline_bulk_metrics']['revalidate_runs'], 1)
+        self.assertEqual(context['offline_bulk_metrics']['review_runs'], 1)
+        self.assertEqual(context['offline_bulk_metrics']['last_run_actor'], self.user.username)
+
     def test_dashboard_renders_offline_audited_actions_table(self):
         audit = AuditLog.objects.create(
             organization=self.location.organization,
@@ -1605,6 +1637,10 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, reverse('dashboard_offline_incidents_export_csv'))
         self.assertContains(response, 'Revalidar Seleccionados')
         self.assertContains(response, 'Marcar Revision')
+        self.assertContains(response, 'LOTES MASIVOS')
+        self.assertContains(response, 'SEGMENTOS PROCESADOS')
+        self.assertContains(response, 'FALLOS REPORTADOS')
+        self.assertContains(response, 'ULTIMA EJECUCION')
 
     def test_offline_critical_incidents_json_export_returns_filtered_rows(self):
         AuditLog.objects.create(
@@ -2315,10 +2351,17 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(payload['action']['succeeded'], 2)
         self.assertEqual(payload['action']['failed'], 0)
         self.assertTrue(all(result['ok'] for result in payload['results']))
+        self.assertEqual(len(payload['batch_audit_logs']), 1)
+        self.assertEqual(payload['batch_audit_logs'][0]['event_type'], 'offline.segment_bulk_revalidated')
+        self.assertEqual(payload['batch_audit_logs'][0]['processed'], 2)
         self.assertEqual(
             AuditLog.objects.filter(event_type='offline.segment_footer_revalidated').count(),
             2,
         )
+        bulk_audit = AuditLog.objects.get(event_type='offline.segment_bulk_revalidated')
+        self.assertEqual(bulk_audit.payload_json.get('processed'), 2)
+        self.assertEqual(bulk_audit.payload_json.get('succeeded'), 2)
+        self.assertEqual(bulk_audit.payload_json.get('failed'), 0)
 
     def test_dashboard_offline_incidents_bulk_review_json_reports_partial_failure(self):
         with TemporaryDirectory() as temp_dir:
@@ -2380,6 +2423,13 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertTrue(payload['results'][0]['ok'])
         self.assertFalse(payload['results'][1]['ok'])
         self.assertIn('segmento activo', payload['results'][1]['detail'])
+        self.assertEqual(len(payload['batch_audit_logs']), 1)
+        self.assertEqual(payload['batch_audit_logs'][0]['event_type'], 'offline.segment_bulk_review_marked')
+        self.assertEqual(payload['batch_audit_logs'][0]['failed'], 1)
+        bulk_audit = AuditLog.objects.get(event_type='offline.segment_bulk_review_marked')
+        self.assertEqual(bulk_audit.payload_json.get('processed'), 2)
+        self.assertEqual(bulk_audit.payload_json.get('succeeded'), 1)
+        self.assertEqual(bulk_audit.payload_json.get('failed'), 1)
 
     def test_dashboard_offline_limbo_segment_action_skips_audit_log_when_scope_is_unresolved(self):
         with TemporaryDirectory() as temp_dir:

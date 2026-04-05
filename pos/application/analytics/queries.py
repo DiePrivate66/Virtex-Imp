@@ -51,6 +51,11 @@ OFFLINE_AUDIT_SORT_OPTIONS = (
     ('unreviewed', 'Sin revisar primero'),
 )
 
+OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP = {
+    'revalidate_footer': 'offline.segment_bulk_revalidated',
+    'mark_operational_review': 'offline.segment_bulk_review_marked',
+}
+
 
 def _resolve_period(periodo: str, hoy, desde_param, hasta_param):
     if periodo == 'hoy':
@@ -590,12 +595,21 @@ def build_offline_critical_incidents_context(
         sort_order=offline_action_sort,
         critical_only=True,
     )
+    offline_bulk_metrics = _build_offline_bulk_action_metrics(
+        desde,
+        hasta,
+        time_window=offline_action_time_window,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+    )
     context = {
         'periodo': periodo,
         'desde': desde,
         'hasta': hasta,
         'periods': [('hoy', 'Hoy'), ('semana', '7 dias'), ('mes', '30 dias')],
         'offline_critical_incidents_count': offline_audit_bundle['queryset'].count(),
+        'offline_bulk_metrics': offline_bulk_metrics,
     }
     context.update(_build_offline_audit_context_fields(offline_audit_bundle))
     return context
@@ -642,6 +656,72 @@ def build_offline_critical_incidents_export_payload(
         'sort_order': offline_audit_bundle['selected_sort_order'],
         'count': len(items),
         'items': [_serialize_offline_audit_item(item) for item in items],
+    }
+
+
+def _build_offline_bulk_action_metrics(
+    desde,
+    hasta,
+    *,
+    time_window: str = '',
+    organization_id: str = '',
+    location_id: str = '',
+    actor_id: str = '',
+):
+    queryset = AuditLog.objects.filter(
+        event_type__in=list(OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP.values()),
+        created_at__date__gte=desde,
+        created_at__date__lte=hasta,
+    ).select_related('organization', 'location', 'actor_user')
+
+    normalized_time_window = str(time_window or '').strip()
+    if normalized_time_window in {'24h', '72h', '168h'}:
+        hours = int(normalized_time_window[:-1])
+        queryset = queryset.filter(created_at__gte=timezone.now() - timedelta(hours=hours))
+
+    normalized_organization_id = str(organization_id or '').strip()
+    if normalized_organization_id.isdigit():
+        queryset = queryset.filter(organization_id=int(normalized_organization_id))
+
+    normalized_location_id = str(location_id or '').strip()
+    if normalized_location_id.isdigit():
+        queryset = queryset.filter(location_id=int(normalized_location_id))
+
+    normalized_actor_id = str(actor_id or '').strip()
+    if normalized_actor_id.isdigit():
+        queryset = queryset.filter(actor_user_id=int(normalized_actor_id))
+
+    items = list(queryset.order_by('-created_at'))
+    processed_total = 0
+    succeeded_total = 0
+    failed_total = 0
+    revalidate_runs = 0
+    review_runs = 0
+    last_run = items[0] if items else None
+
+    for item in items:
+        payload = dict(item.payload_json or {})
+        processed_total += int(payload.get('processed') or 0)
+        succeeded_total += int(payload.get('succeeded') or 0)
+        failed_total += int(payload.get('failed') or 0)
+        if item.event_type == OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP['revalidate_footer']:
+            revalidate_runs += 1
+        elif item.event_type == OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP['mark_operational_review']:
+            review_runs += 1
+
+    return {
+        'runs_count': len(items),
+        'processed_total': processed_total,
+        'succeeded_total': succeeded_total,
+        'failed_total': failed_total,
+        'revalidate_runs': revalidate_runs,
+        'review_runs': review_runs,
+        'last_run_at': timezone.localtime(last_run.created_at) if last_run else None,
+        'last_run_actor': (
+            last_run.actor_user.username
+            if last_run and last_run.actor_user_id and last_run.actor_user
+            else ''
+        ),
     }
 
 
