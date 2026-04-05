@@ -380,6 +380,7 @@ La base durable local ya no esta en cero:
 - esa vista batch ya expone exportacion `CSV` y `JSON` con el mismo subconjunto visible y la misma metadata de foco (`AuditLog ID`) para analisis externo o intercambio durante incident response
 - cada lote batch ya dispone tambien de su propio endpoint JSON (`/dashboard/incidentes-offline/lotes/run.json?audit_log_id=<id>`), enlazado desde la tabla batch y propagado dentro de los exports para drill-down fino sin pasar por admin
 - ese drill-down batch ya acepta busqueda directa por `batch_id` tanto en la vista `/dashboard/incidentes-offline/lotes/` como en el endpoint individual (`run.json?batch_id=<batch_id>`), sin depender exclusivamente del id interno de `AuditLog`
+- el mismo flujo ahora acepta tambien `correlation_id` como clave operativa de busqueda y foco, tanto en la vista batch como en el endpoint individual (`run.json?correlation_id=<correlation_id>`), para escenarios donde operaciones y soporte trabajen con ese identificador
 - la vista `Limbo Offline` ya incorpora un buscador GET por `segment_id` para abrir o autoexpandir un segmento historico sin depender de venir desde analytics
 - ese mismo buscador ya vive tambien en el polling JSON del limbo: la UI reenvia `segment_id` al endpoint `/dashboard/limbo-offline/json/`, conserva la URL con `history.replaceState` y reexpande coincidencias sin recargar la pagina
 - la misma caja de busqueda ya permite abrir el detalle JSON historico exacto desde teclado (`Ctrl+Enter`) o con boton explicito, sin pasar antes por la tabla de segmentos sellados

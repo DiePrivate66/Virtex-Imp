@@ -124,6 +124,7 @@ def dashboard_offline_incident_batches(request):
         offline_bulk_action_type=request.GET.get('offline_bulk_action_type', ''),
         offline_bulk_audit_log=request.GET.get('offline_bulk_audit_log', ''),
         offline_bulk_batch_id=request.GET.get('offline_bulk_batch_id', ''),
+        offline_bulk_correlation_id=request.GET.get('offline_bulk_correlation_id', ''),
     )
     context['offline_bulk_clear_href'] = (
         f"{reverse('dashboard_offline_incident_batches')}?"
@@ -212,6 +213,7 @@ def dashboard_offline_incident_batch_json(request):
             build_offline_bulk_run_detail_payload(
                 audit_log_id=request.GET.get('audit_log_id', ''),
                 batch_id=request.GET.get('batch_id', ''),
+                correlation_id=request.GET.get('correlation_id', ''),
             )
         )
     except ValueError as exc:
@@ -604,6 +606,7 @@ def _build_offline_bulk_runs_export_payload_from_request(request):
         offline_bulk_action_type=request.GET.get('offline_bulk_action_type', ''),
         offline_bulk_audit_log=request.GET.get('offline_bulk_audit_log', ''),
         offline_bulk_batch_id=request.GET.get('offline_bulk_batch_id', ''),
+        offline_bulk_correlation_id=request.GET.get('offline_bulk_correlation_id', ''),
     )
     for item in payload['items']:
         item['detail_json_url'] = _build_offline_batch_json_href(item['audit_log_id'])
@@ -624,6 +627,7 @@ def _build_offline_bulk_export_query_params_from_context(context):
         'offline_bulk_action_filter_type': 'offline_bulk_action_type',
         'offline_bulk_action_filter_audit_log': 'offline_bulk_audit_log',
         'offline_bulk_action_filter_batch_id': 'offline_bulk_batch_id',
+        'offline_bulk_action_filter_correlation_id': 'offline_bulk_correlation_id',
     }
     for context_field, query_name in mapping.items():
         value = str(context.get(context_field, '') or '').strip()

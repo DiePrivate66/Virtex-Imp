@@ -116,7 +116,7 @@
         <input type="hidden" name="periodo" value="{{ periodo }}">
         {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
         {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
-        <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-8 gap-3">
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">AuditLog ID</label>
                 <input
@@ -133,6 +133,16 @@
                     type="text"
                     name="offline_bulk_batch_id"
                     value="{{ offline_bulk_action_filter_batch_id|default:'' }}"
+                    placeholder="revalidate-batch-001"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Correlation ID</label>
+                <input
+                    type="text"
+                    name="offline_bulk_correlation_id"
+                    value="{{ offline_bulk_action_filter_correlation_id|default:'' }}"
                     placeholder="revalidate-batch-001"
                     class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
                 >
@@ -232,7 +242,7 @@
                     <td class="py-3 text-right text-xs">
                         <div class="flex justify-end gap-2">
                             <a
-                                href="?periodo={{ periodo }}{% if desde %}&desde={{ desde }}{% endif %}{% if hasta %}&hasta={{ hasta }}{% endif %}{% if offline_bulk_action_filter_time_window %}&offline_action_time_window={{ offline_bulk_action_filter_time_window|urlencode }}{% endif %}{% if offline_bulk_action_filter_type %}&offline_bulk_action_type={{ offline_bulk_action_filter_type|urlencode }}{% endif %}{% if offline_bulk_action_filter_organization %}&offline_action_organization={{ offline_bulk_action_filter_organization|urlencode }}{% endif %}{% if offline_bulk_action_filter_location %}&offline_action_location={{ offline_bulk_action_filter_location|urlencode }}{% endif %}{% if offline_bulk_action_filter_actor %}&offline_action_actor={{ offline_bulk_action_filter_actor|urlencode }}{% endif %}&offline_bulk_batch_id={{ batch.target_id|urlencode }}&offline_bulk_audit_log={{ batch.id }}"
+                                href="?periodo={{ periodo }}{% if desde %}&desde={{ desde }}{% endif %}{% if hasta %}&hasta={{ hasta }}{% endif %}{% if offline_bulk_action_filter_time_window %}&offline_action_time_window={{ offline_bulk_action_filter_time_window|urlencode }}{% endif %}{% if offline_bulk_action_filter_type %}&offline_bulk_action_type={{ offline_bulk_action_filter_type|urlencode }}{% endif %}{% if offline_bulk_action_filter_organization %}&offline_action_organization={{ offline_bulk_action_filter_organization|urlencode }}{% endif %}{% if offline_bulk_action_filter_location %}&offline_action_location={{ offline_bulk_action_filter_location|urlencode }}{% endif %}{% if offline_bulk_action_filter_actor %}&offline_action_actor={{ offline_bulk_action_filter_actor|urlencode }}{% endif %}&offline_bulk_correlation_id={{ batch.correlation_id|urlencode }}&offline_bulk_batch_id={{ batch.target_id|urlencode }}&offline_bulk_audit_log={{ batch.id }}"
                                 class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
                             >
                                 Focus

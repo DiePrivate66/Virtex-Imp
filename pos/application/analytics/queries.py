@@ -676,6 +676,7 @@ def build_offline_bulk_runs_context(
     offline_bulk_action_type: str = '',
     offline_bulk_audit_log: str = '',
     offline_bulk_batch_id: str = '',
+    offline_bulk_correlation_id: str = '',
 ):
     hoy = timezone.localdate()
     desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
@@ -689,6 +690,7 @@ def build_offline_bulk_runs_context(
         action_type=offline_bulk_action_type,
         selected_audit_log=offline_bulk_audit_log,
         batch_id=offline_bulk_batch_id,
+        correlation_id=offline_bulk_correlation_id,
     )
     offline_bulk_metrics = _build_offline_bulk_action_metrics(
         desde,
@@ -714,6 +716,7 @@ def build_offline_bulk_runs_context(
         'offline_bulk_action_filter_actor': bulk_bundle['selected_actor_id'],
         'offline_bulk_action_filter_audit_log': bulk_bundle['selected_audit_log'],
         'offline_bulk_action_filter_batch_id': bulk_bundle['selected_batch_id'],
+        'offline_bulk_action_filter_correlation_id': bulk_bundle['selected_correlation_id'],
         'offline_bulk_action_organization_options': bulk_bundle['organization_options'],
         'offline_bulk_action_location_options': bulk_bundle['location_options'],
         'offline_bulk_action_actor_options': bulk_bundle['actor_options'],
@@ -734,6 +737,7 @@ def build_offline_bulk_runs_export_payload(
     offline_bulk_action_type: str = '',
     offline_bulk_audit_log: str = '',
     offline_bulk_batch_id: str = '',
+    offline_bulk_correlation_id: str = '',
 ):
     hoy = timezone.localdate()
     desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
@@ -747,6 +751,7 @@ def build_offline_bulk_runs_export_payload(
         action_type=offline_bulk_action_type,
         selected_audit_log=offline_bulk_audit_log,
         batch_id=offline_bulk_batch_id,
+        correlation_id=offline_bulk_correlation_id,
     )
     items = [_serialize_offline_bulk_run(item) for item in bulk_bundle['items']]
     selected_run = (
@@ -761,6 +766,7 @@ def build_offline_bulk_runs_export_payload(
         'count': len(items),
         'selected_audit_log': bulk_bundle['selected_audit_log'],
         'selected_batch_id': bulk_bundle['selected_batch_id'],
+        'selected_correlation_id': bulk_bundle['selected_correlation_id'],
         'selected_run': selected_run,
         'filters': {
             'time_window': bulk_bundle['selected_time_window'],
@@ -769,6 +775,7 @@ def build_offline_bulk_runs_export_payload(
             'actor_id': bulk_bundle['selected_actor_id'],
             'action_type': bulk_bundle['selected_action_type'],
             'batch_id': bulk_bundle['selected_batch_id'],
+            'correlation_id': bulk_bundle['selected_correlation_id'],
         },
         'metrics': _build_offline_bulk_action_metrics(
             desde,
@@ -782,9 +789,10 @@ def build_offline_bulk_runs_export_payload(
     }
 
 
-def build_offline_bulk_run_detail_payload(audit_log_id='', batch_id='') -> dict:
+def build_offline_bulk_run_detail_payload(audit_log_id='', batch_id='', correlation_id='') -> dict:
     normalized_audit_log_id = str(audit_log_id or '').strip()
     normalized_batch_id = str(batch_id or '').strip()
+    normalized_correlation_id = str(correlation_id or '').strip()
 
     item = None
     if normalized_audit_log_id:
@@ -816,8 +824,20 @@ def build_offline_bulk_run_detail_payload(audit_log_id='', batch_id='') -> dict:
         )
         if not item:
             raise ValueError('No existe un lote batch offline con ese batch_id.')
+    elif normalized_correlation_id:
+        item = (
+            AuditLog.objects.filter(
+                correlation_id=normalized_correlation_id,
+                event_type__in=list(OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP.values()),
+            )
+            .select_related('organization', 'location', 'actor_user')
+            .order_by('-created_at', '-id')
+            .first()
+        )
+        if not item:
+            raise ValueError('No existe un lote batch offline con ese correlation_id.')
     else:
-        raise ValueError('audit_log_id o batch_id requerido')
+        raise ValueError('audit_log_id, batch_id o correlation_id requerido')
 
     payload = dict(item.payload_json or {})
     item.bulk_processed = int(payload.get('processed') or 0)
@@ -855,6 +875,7 @@ def _build_offline_bulk_audit_runs(
     action_type: str = '',
     selected_audit_log: str = '',
     batch_id: str = '',
+    correlation_id: str = '',
 ):
     base_queryset = (
         AuditLog.objects.filter(
@@ -918,8 +939,11 @@ def _build_offline_bulk_audit_runs(
 
     normalized_selected_audit_log = str(selected_audit_log or '').strip()
     normalized_batch_id = str(batch_id or '').strip()
+    normalized_correlation_id = str(correlation_id or '').strip()
     if normalized_batch_id:
         queryset = queryset.filter(target_id__icontains=normalized_batch_id)
+    if normalized_correlation_id:
+        queryset = queryset.filter(correlation_id__icontains=normalized_correlation_id)
     items = []
     selected_run = None
     for item in queryset.order_by('-created_at'):
@@ -935,6 +959,12 @@ def _build_offline_bulk_audit_runs(
         item.bulk_is_selected = (
             normalized_selected_audit_log == str(item.id)
             or (not normalized_selected_audit_log and normalized_batch_id and str(item.target_id or '').strip() == normalized_batch_id)
+            or (
+                not normalized_selected_audit_log
+                and not normalized_batch_id
+                and normalized_correlation_id
+                and str(item.correlation_id or '').strip() == normalized_correlation_id
+            )
         )
         if item.bulk_is_selected:
             selected_run = item
@@ -952,6 +982,7 @@ def _build_offline_bulk_audit_runs(
         'selected_actor_id': normalized_actor_id,
         'selected_audit_log': normalized_selected_audit_log,
         'selected_batch_id': normalized_batch_id,
+        'selected_correlation_id': normalized_correlation_id,
         'selected_run': selected_run,
     }
 

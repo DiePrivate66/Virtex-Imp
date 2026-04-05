@@ -1573,6 +1573,38 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(context['offline_bulk_runs'][0].id, selected_batch.id)
         self.assertEqual(context['offline_bulk_action_filter_batch_id'], 'filter-001')
 
+    def test_offline_bulk_runs_context_filters_by_correlation_id(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-correlation-001',
+            payload_json={'processed': 6, 'succeeded': 5, 'failed': 1},
+            correlation_id='corr-batch-001',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-correlation-XYZ',
+            payload_json={'processed': 1, 'succeeded': 1, 'failed': 0},
+            correlation_id='corr-batch-XYZ',
+        )
+
+        context = build_offline_bulk_runs_context(
+            periodo='semana',
+            offline_bulk_correlation_id='corr-batch-001',
+        )
+
+        self.assertEqual(context['offline_bulk_runs_count'], 1)
+        self.assertEqual(context['offline_bulk_runs'][0].id, selected_batch.id)
+        self.assertEqual(context['offline_bulk_selected_run'].id, selected_batch.id)
+        self.assertEqual(context['offline_bulk_action_filter_correlation_id'], 'corr-batch-001')
+
     def test_dashboard_renders_offline_audited_actions_table(self):
         audit = AuditLog.objects.create(
             organization=self.location.organization,
@@ -1830,6 +1862,46 @@ class AnalyticsReplayTimelineTests(TestCase):
             f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
         )
 
+    def test_offline_incident_batches_view_filters_by_correlation_id(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-view-correlation-001',
+            payload_json={'processed': 4, 'succeeded': 4, 'failed': 0},
+            correlation_id='corr-view-001',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-view-correlation-999',
+            payload_json={'processed': 1, 'succeeded': 1, 'failed': 0},
+            correlation_id='corr-view-999',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batches'),
+            {
+                'offline_bulk_correlation_id': 'corr-view-001',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'revalidate-batch-view-correlation-001')
+        self.assertNotContains(response, 'revalidate-batch-view-correlation-999')
+        self.assertContains(response, 'value="corr-view-001"')
+        self.assertContains(response, 'Correlation ID')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
+        )
+
     def test_offline_incident_batch_json_returns_single_run_payload(self):
         selected_batch = AuditLog.objects.create(
             organization=self.location.organization,
@@ -1884,6 +1956,30 @@ class AnalyticsReplayTimelineTests(TestCase):
         payload = response.json()
         self.assertEqual(payload['audit_log_id'], selected_batch.id)
         self.assertEqual(payload['batch_id'], 'review-batch-detail-batchid-001')
+
+    def test_offline_incident_batch_json_accepts_correlation_id(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-detail-correlation-001',
+            payload_json={'processed': 3, 'succeeded': 2, 'failed': 1},
+            correlation_id='corr-detail-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batch_json'),
+            {'correlation_id': 'corr-detail-001'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['audit_log_id'], selected_batch.id)
+        self.assertEqual(payload['batch_id'], 'revalidate-batch-detail-correlation-001')
+        self.assertEqual(payload['correlation_id'], 'corr-detail-001')
 
     def test_offline_incident_batches_json_export_returns_filtered_rows(self):
         selected_batch = AuditLog.objects.create(
@@ -1966,6 +2062,40 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(payload['count'], 1)
         self.assertEqual(payload['items'][0]['batch_id'], 'review-batch-export-batchid-001')
         self.assertEqual(payload['filters']['batch_id'], 'batchid-001')
+
+    def test_offline_incident_batches_json_export_preserves_correlation_id_filter(self):
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-export-correlation-001',
+            payload_json={'processed': 2, 'succeeded': 2, 'failed': 0},
+            correlation_id='corr-export-001',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-export-correlation-999',
+            payload_json={'processed': 1, 'succeeded': 1, 'failed': 0},
+            correlation_id='corr-export-999',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batches_export_json'),
+            {'offline_bulk_correlation_id': 'corr-export-001'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['count'], 1)
+        self.assertEqual(payload['items'][0]['batch_id'], 'review-batch-export-correlation-001')
+        self.assertEqual(payload['filters']['correlation_id'], 'corr-export-001')
 
     def test_offline_incident_batches_csv_export_returns_filtered_rows(self):
         batch = AuditLog.objects.create(
