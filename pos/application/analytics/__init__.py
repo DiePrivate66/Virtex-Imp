@@ -1,4 +1,8 @@
-from .commands import OfflineLimboActionError, execute_offline_limbo_action
+from .commands import (
+    OfflineLimboActionError,
+    execute_offline_limbo_action,
+    execute_offline_segment_action,
+)
 from .queries import (
     build_analytics_dashboard_context,
     build_offline_limbo_context,
@@ -13,4 +17,5 @@ __all__ = [
     'build_offline_limbo_payload',
     'build_offline_segment_detail_payload',
     'execute_offline_limbo_action',
+    'execute_offline_segment_action',
 ]

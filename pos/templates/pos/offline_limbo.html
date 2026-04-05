@@ -5,6 +5,8 @@
     data-offline-limbo-root
     data-json-url="{% url 'dashboard_offline_limbo_json' %}"
     data-segment-detail-url="{% url 'dashboard_offline_limbo_segment_json' %}"
+    data-segment-revalidate-url="{% url 'dashboard_offline_limbo_segment_revalidate_json' %}"
+    data-segment-review-url="{% url 'dashboard_offline_limbo_segment_review_json' %}"
     data-reconcile-url="{% url 'dashboard_offline_limbo_reconcile_json' %}"
     data-reseal-url="{% url 'dashboard_offline_limbo_reseal_json' %}"
     data-seal-url="{% url 'dashboard_offline_limbo_seal_json' %}"
@@ -263,6 +265,8 @@
 
     const jsonUrl = root.dataset.jsonUrl;
     const segmentDetailUrl = root.dataset.segmentDetailUrl;
+    const segmentRevalidateUrl = root.dataset.segmentRevalidateUrl;
+    const segmentReviewUrl = root.dataset.segmentReviewUrl;
     const reconcileUrl = root.dataset.reconcileUrl;
     const resealUrl = root.dataset.resealUrl;
     const sealUrl = root.dataset.sealUrl;
@@ -450,6 +454,9 @@
                 </tr>
             `).join('')
             : '<tr><td colspan="4" class="py-2 text-[11px] text-gray-500">Sin eventos recientes para este segmento.</td></tr>';
+        const ops = detail.ops_metadata || {};
+        const review = ops.operational_review || {};
+        const revalidation = ops.last_footer_revalidation || {};
         return `
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 <div class="bg-gray-900/60 rounded-xl p-4">
@@ -480,6 +487,47 @@
                         <p class="text-gray-200">Offset valido: <span class="font-black">${escapeHtml(detail.last_valid_offset ?? 0)}</span></p>
                         <p class="text-gray-200">Last Record Hash:</p>
                         <p class="text-[10px] text-gray-400 break-all">${escapeHtml(detail.last_record_hash || 'SIN_HASH')}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div class="bg-gray-900/60 rounded-xl p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Revision Operativa</p>
+                        <button
+                            type="button"
+                            class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                            data-segment-action-button="review"
+                            data-segment-id="${escapeHtml(detail.segment_id)}"
+                        >
+                            Marcar revision
+                        </button>
+                    </div>
+                    <div class="mt-3 space-y-2 text-[11px]">
+                        <p class="text-gray-200">Ultima revision: <span class="font-black">${escapeHtml(formatTimestamp(review.reviewed_at))}</span></p>
+                        <p class="text-gray-200">Revisado por: <span class="font-black">${escapeHtml(review.reviewed_by || 'SIN_REGISTRO')}</span></p>
+                        <p class="text-gray-200">Status al revisar: <span class="font-black">${escapeHtml(review.status_at_review || 'SIN_REGISTRO')}</span></p>
+                        <p class="text-gray-400">${escapeHtml(review.detail_at_review || 'Sin revision operativa registrada.')}</p>
+                    </div>
+                </div>
+                <div class="bg-gray-900/60 rounded-xl p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Revalidacion De Footer</p>
+                        <button
+                            type="button"
+                            class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                            data-segment-action-button="revalidate"
+                            data-segment-id="${escapeHtml(detail.segment_id)}"
+                        >
+                            Revalidar footer
+                        </button>
+                    </div>
+                    <div class="mt-3 space-y-2 text-[11px]">
+                        <p class="text-gray-200">Ultima revalidacion: <span class="font-black">${escapeHtml(formatTimestamp(revalidation.revalidated_at))}</span></p>
+                        <p class="text-gray-200">Revalidado por: <span class="font-black">${escapeHtml(revalidation.revalidated_by || 'SIN_REGISTRO')}</span></p>
+                        <p class="text-gray-200">Footer presente: <span class="font-black">${revalidation.footer_present ? 'YES' : 'NO'}</span></p>
+                        <p class="text-gray-200">CRC32: <span class="font-black">${escapeHtml(revalidation.segment_crc32 || 'SIN_REGISTRO')}</span></p>
+                        <p class="text-gray-400">${escapeHtml(revalidation.detail || 'Sin revalidacion registrada.')}</p>
                     </div>
                 </div>
             </div>
@@ -537,6 +585,24 @@
             method: 'GET',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin',
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.detail || `HTTP ${response.status}`);
+        }
+        segmentDetailsCache.set(segmentId, payload);
+        return payload;
+    };
+
+    const runSegmentAction = async (url, segmentId, fallbackLabel) => {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                ...getHeaders(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ segment_id: segmentId }),
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -619,7 +685,29 @@
     if (sealedSegmentsBody) {
         sealedSegmentsBody.addEventListener('click', async (event) => {
             const button = event.target.closest('[data-segment-detail-button]');
-            if (!button) return;
+            const actionButton = event.target.closest('[data-segment-action-button]');
+            if (!button && !actionButton) return;
+
+            if (actionButton) {
+                const segmentId = actionButton.dataset.segmentId || '';
+                const actionName = actionButton.dataset.segmentActionButton || '';
+                if (!segmentId || !actionName) return;
+                try {
+                    setActionFeedback(`Ejecutando ${actionName} sobre ${segmentId}...`, 'neutral');
+                    if (actionName === 'revalidate') {
+                        await runSegmentAction(segmentRevalidateUrl, segmentId, 'revalidacion footer');
+                        setActionFeedback(`Footer revalidado para ${segmentId}.`, 'success');
+                    } else {
+                        await runSegmentAction(segmentReviewUrl, segmentId, 'revision operativa');
+                        setActionFeedback(`Revision operativa registrada para ${segmentId}.`, 'success');
+                    }
+                } catch (error) {
+                    setActionFeedback(`No se pudo ejecutar ${actionName} en ${segmentId}: ${error}`, 'error');
+                }
+                renderSealedSegments(lastPayload?.sealed_segments || []);
+                return;
+            }
+
             const segmentId = button.dataset.segmentId || '';
             if (!segmentId) return;
             if (expandedSegmentIds.has(segmentId)) {
@@ -629,14 +717,12 @@
             }
             expandedSegmentIds.add(segmentId);
             renderSealedSegments(lastPayload?.sealed_segments || []);
-            if (segmentDetailsCache.has(segmentId)) {
-                renderSealedSegments(lastPayload?.sealed_segments || []);
-                return;
-            }
-            try {
-                await loadSegmentDetail(segmentId);
-            } catch (error) {
-                segmentDetailsCache.set(segmentId, { error: `No se pudo cargar el detalle: ${error}` });
+            if (!segmentDetailsCache.has(segmentId)) {
+                try {
+                    await loadSegmentDetail(segmentId);
+                } catch (error) {
+                    segmentDetailsCache.set(segmentId, { error: `No se pudo cargar el detalle: ${error}` });
+                }
             }
             renderSealedSegments(lastPayload?.sealed_segments || []);
         });

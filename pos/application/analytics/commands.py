@@ -3,17 +3,20 @@ from __future__ import annotations
 from pathlib import Path
 
 from django.conf import settings
+from django.utils import timezone
 
 from pos.infrastructure.offline import (
     JournalIntegrityError,
     OfflineJournalRuntimeConfig,
     SegmentedJournalRuntime,
+    load_snapshot_payload,
+    persist_snapshot_payload,
     reconcile_snapshot_with_segment,
     reseal_segment_from_snapshot,
 )
 from pos.infrastructure.offline.writer import journal_runtime_lock
 
-from .queries import build_offline_limbo_payload
+from .queries import build_offline_limbo_payload, build_offline_segment_detail_payload
 
 
 class OfflineLimboActionError(RuntimeError):
@@ -101,3 +104,67 @@ def execute_offline_limbo_action(*, action: str) -> dict:
         'detail': detail,
     }
     return refreshed
+
+
+def execute_offline_segment_action(*, action: str, segment_id: str, user) -> dict:
+    action_name = str(action or '').strip().lower()
+    if action_name not in {'revalidate_footer', 'mark_operational_review'}:
+        raise OfflineLimboActionError('offline segment action desconocida')
+
+    enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_ENABLED', False))
+    if not enabled:
+        raise OfflineLimboActionError('runtime offline desactivado')
+
+    root_value = str(getattr(settings, 'OFFLINE_JOURNAL_ROOT', '') or '').strip()
+    if not root_value:
+        raise OfflineLimboActionError('OFFLINE_JOURNAL_ROOT no esta configurado')
+
+    root_dir = Path(root_value)
+    if not root_dir.exists() or not root_dir.is_dir():
+        raise OfflineLimboActionError(f'root offline invalido: {root_dir}')
+
+    stream_name = getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales')
+    with journal_runtime_lock(root_dir, stream_name):
+        limbo_payload = build_offline_limbo_payload()
+        active_segment_id = str((limbo_payload.get('limbo') or {}).get('segment_id') or '').strip()
+        active_segment_is_open = not bool((limbo_payload.get('limbo') or {}).get('sealed'))
+        if active_segment_is_open and str(segment_id or '').strip() == active_segment_id:
+            raise OfflineLimboActionError('la accion historica no aplica sobre el segmento activo')
+
+        detail_payload = build_offline_segment_detail_payload(segment_id)
+        snapshot_path = Path(detail_payload['snapshot_path'])
+        snapshot = load_snapshot_payload(snapshot_path)
+        ops_metadata = dict(snapshot.get('ops_metadata') or {})
+        actor_username = user.get_username() if user and hasattr(user, 'get_username') else ''
+        actor_user_id = getattr(user, 'id', None)
+
+        if action_name == 'revalidate_footer':
+            ops_metadata['last_footer_revalidation'] = {
+                'revalidated_at': timezone.now().isoformat(),
+                'revalidated_by': actor_username,
+                'revalidated_by_id': actor_user_id,
+                'status': detail_payload['status'],
+                'footer_present': detail_payload['footer_present'],
+                'detail': detail_payload['detail'],
+                'segment_crc32': detail_payload['rolling_crc32'],
+            }
+            detail = 'Footer historico revalidado y registrado en metadata operativa.'
+        else:
+            ops_metadata['operational_review'] = {
+                'reviewed_at': timezone.now().isoformat(),
+                'reviewed_by': actor_username,
+                'reviewed_by_id': actor_user_id,
+                'status_at_review': detail_payload['status'],
+                'detail_at_review': detail_payload['detail'],
+            }
+            detail = 'Revision operativa historica registrada.'
+
+        snapshot['ops_metadata'] = ops_metadata
+        persist_snapshot_payload(snapshot_path, snapshot)
+        refreshed = build_offline_segment_detail_payload(segment_id)
+        refreshed['action'] = {
+            'name': action_name,
+            'performed': True,
+            'detail': detail,
+        }
+        return refreshed

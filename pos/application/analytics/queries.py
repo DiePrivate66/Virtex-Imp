@@ -306,7 +306,11 @@ def build_offline_limbo_context() -> dict:
         context['sealed_segments'] = _build_sealed_segment_history(
             root_dir=root_dir,
             stream_name=stream_name,
-            active_segment_id=str(limbo.get('segment_id') or '').strip(),
+            active_segment_id=(
+                str(limbo.get('segment_id') or '').strip()
+                if not bool(limbo.get('sealed'))
+                else ''
+            ),
             limit=history_limit,
         )
         segment_path_value = str(limbo.get('segment_path') or '').strip()
@@ -556,6 +560,10 @@ def build_offline_segment_detail_payload(segment_id: str) -> dict:
             'rolling_crc32': str(snapshot.get('rolling_crc32') or '00000000'),
             'sealed': bool(snapshot.get('sealed')),
             'seal_pending': bool(snapshot.get('seal_pending')),
+        },
+        'ops_metadata': {
+            'operational_review': dict((snapshot.get('ops_metadata') or {}).get('operational_review') or {}),
+            'last_footer_revalidation': dict((snapshot.get('ops_metadata') or {}).get('last_footer_revalidation') or {}),
         },
         'summary': summary,
         'segment_health': {
