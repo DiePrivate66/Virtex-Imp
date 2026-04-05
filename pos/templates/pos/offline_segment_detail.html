@@ -5,7 +5,10 @@
     data-offline-segment-detail-root
     data-segment-id="{{ segment_detail.segment_id }}"
     data-segment-html-href="{{ segment_detail_html_href }}"
+    data-segment-can-reseal="{% if segment_detail_can_reseal %}1{% else %}0{% endif %}"
     data-segment-revalidate-url="{% url 'dashboard_offline_limbo_segment_revalidate_json' %}"
+    data-segment-reconcile-url="{% url 'dashboard_offline_limbo_segment_reconcile_json' %}"
+    data-segment-reseal-url="{% url 'dashboard_offline_limbo_segment_reseal_json' %}"
     data-segment-review-url="{% url 'dashboard_offline_limbo_segment_review_json' %}"
 >
     <div class="flex items-start justify-between gap-4 mb-6">
@@ -136,6 +139,21 @@
                 <div class="flex flex-wrap gap-2">
                     <button
                         type="button"
+                        class="bg-emerald-900/50 hover:bg-emerald-800/50 text-emerald-100 text-[11px] font-black px-3 py-2 rounded-lg transition"
+                        data-segment-detail-action="reconcile"
+                    >
+                        Reconciliar Sidecar
+                    </button>
+                    <button
+                        type="button"
+                        class="bg-orange-900/50 hover:bg-orange-800/50 text-orange-100 text-[11px] font-black px-3 py-2 rounded-lg transition"
+                        data-segment-detail-action="reseal"
+                        {% if not segment_detail_can_reseal %}disabled{% endif %}
+                    >
+                        Reseal Segment
+                    </button>
+                    <button
+                        type="button"
                         class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-100 text-[11px] font-black px-3 py-2 rounded-lg transition"
                         data-segment-detail-action="revalidate"
                     >
@@ -174,6 +192,10 @@
                         <br>
                         Revalidate: {{ segment_detail.ops_metadata.last_footer_revalidation.audit_log.audit_log_id|default:"N/A" }}
                     </p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Reseal Disponible</p>
+                    <p class="text-white mt-1">{% if segment_detail_can_reseal %}YES{% else %}NO{% endif %}</p>
                 </div>
             </div>
         </div>
@@ -223,6 +245,9 @@
 
     const segmentId = String(root.dataset.segmentId || '').trim();
     const segmentHtmlHref = String(root.dataset.segmentHtmlHref || '').trim();
+    const segmentCanReseal = root.dataset.segmentCanReseal === '1';
+    const reconcileUrl = String(root.dataset.segmentReconcileUrl || '').trim();
+    const resealUrl = String(root.dataset.segmentResealUrl || '').trim();
     const revalidateUrl = String(root.dataset.segmentRevalidateUrl || '').trim();
     const reviewUrl = String(root.dataset.segmentReviewUrl || '').trim();
     const feedback = root.querySelector('[data-segment-action-feedback]');
@@ -246,15 +271,31 @@
 
     const setButtonsDisabled = (disabled) => {
         actionButtons.forEach((button) => {
-            button.disabled = disabled;
+            if (!disabled && button.dataset.segmentDetailAction === 'reseal' && !segmentCanReseal) {
+                button.disabled = true;
+            } else {
+                button.disabled = disabled;
+            }
             button.classList.toggle('opacity-60', disabled);
             button.classList.toggle('cursor-not-allowed', disabled);
         });
     };
 
     const runAction = async (actionName) => {
-        const endpoint = actionName === 'revalidate' ? revalidateUrl : reviewUrl;
-        const label = actionName === 'revalidate' ? 'revalidacion de footer' : 'revision operativa';
+        const endpointMap = {
+            reconcile: reconcileUrl,
+            reseal: resealUrl,
+            revalidate: revalidateUrl,
+            review: reviewUrl,
+        };
+        const labelMap = {
+            reconcile: 'reconciliacion de sidecar',
+            reseal: 'reseal de segmento',
+            revalidate: 'revalidacion de footer',
+            review: 'revision operativa',
+        };
+        const endpoint = endpointMap[actionName] || '';
+        const label = labelMap[actionName] || 'accion operativa';
         try {
             setButtonsDisabled(true);
             setFeedback(`Ejecutando ${label} para ${segmentId}...`, 'neutral');
@@ -273,9 +314,15 @@
                 throw new Error(payload.detail || `HTTP ${response.status}`);
             }
             const auditLog = payload.audit_log || {};
-            const suffix = auditLog.recorded
-                ? ` AuditLog #${auditLog.audit_log_id} registrado.`
-                : ` Registro central omitido: ${auditLog.detail || 'sin tenant resoluble'}.`;
+            const suffix = (
+                actionName === 'revalidate' || actionName === 'review'
+            )
+                ? (
+                    auditLog.recorded
+                        ? ` AuditLog #${auditLog.audit_log_id} registrado.`
+                        : ` Registro central omitido: ${auditLog.detail || 'sin tenant resoluble'}.`
+                )
+                : '';
             setFeedback(`${payload.action?.detail || 'Accion completada.'}${suffix} Recargando vista...`, 'success');
             window.setTimeout(() => {
                 if (segmentHtmlHref) {
@@ -293,7 +340,7 @@
     actionButtons.forEach((button) => {
         button.addEventListener('click', () => {
             const actionName = button.dataset.segmentDetailAction || '';
-            if (actionName === 'revalidate' || actionName === 'review') {
+            if (actionName === 'reconcile' || actionName === 'reseal' || actionName === 'revalidate' || actionName === 'review') {
                 runAction(actionName);
             }
         });

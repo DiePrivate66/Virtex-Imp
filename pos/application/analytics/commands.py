@@ -125,18 +125,21 @@ def execute_offline_segment_action(
     user_agent: str = '',
 ) -> dict:
     action_name = str(action or '').strip().lower()
-    if action_name not in {'revalidate_footer', 'mark_operational_review'}:
+    if action_name not in {'revalidate_footer', 'mark_operational_review', 'reconcile_sidecar', 'reseal_segment'}:
         raise OfflineLimboActionError('offline segment action desconocida')
 
     root_dir, stream_name = _resolve_offline_runtime_root_and_stream()
-    with journal_runtime_lock(root_dir, stream_name):
-        return _execute_offline_segment_action_locked(
-            action_name=action_name,
-            segment_id=segment_id,
-            user=user,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+    try:
+        with journal_runtime_lock(root_dir, stream_name):
+            return _execute_offline_segment_action_locked(
+                action_name=action_name,
+                segment_id=segment_id,
+                user=user,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+    except JournalIntegrityError as exc:
+        raise OfflineLimboActionError(str(exc)) from exc
 
 
 def execute_offline_segment_bulk_action(
@@ -231,14 +234,51 @@ def _execute_offline_segment_action_locked(
     limbo_payload = build_offline_limbo_payload()
     active_segment_id = str((limbo_payload.get('limbo') or {}).get('segment_id') or '').strip()
     active_segment_is_open = not bool((limbo_payload.get('limbo') or {}).get('sealed'))
-    if active_segment_is_open and str(segment_id or '').strip() == active_segment_id:
-        raise OfflineLimboActionError('la accion historica no aplica sobre el segmento activo')
 
     try:
         detail_payload = build_offline_segment_detail_payload(segment_id)
     except ValueError as exc:
         raise OfflineLimboActionError(str(exc)) from exc
+    if (
+        action_name in {'revalidate_footer', 'mark_operational_review'}
+        and active_segment_is_open
+        and str(segment_id or '').strip() == active_segment_id
+    ):
+        raise OfflineLimboActionError('la accion historica no aplica sobre el segmento activo')
+
+    segment_path = Path(detail_payload['segment_path'])
     snapshot_path = Path(detail_payload['snapshot_path'])
+    if action_name == 'reconcile_sidecar':
+        snapshot = reconcile_snapshot_with_segment(
+            segment_path,
+            snapshot_path,
+            segment_id=detail_payload['segment_id'],
+        )
+        refreshed = build_offline_segment_detail_payload(segment_id)
+        refreshed['action'] = {
+            'name': action_name,
+            'performed': True,
+            'detail': (
+                'Sidecar reconciliado con el journal del segmento. '
+                f'{int(snapshot.get("record_count") or 0)} records confirmados.'
+            ),
+        }
+        return refreshed
+
+    if action_name == 'reseal_segment':
+        resealed = reseal_segment_from_snapshot(segment_path, snapshot_path)
+        refreshed = build_offline_segment_detail_payload(segment_id)
+        refreshed['action'] = {
+            'name': action_name,
+            'performed': bool(resealed),
+            'detail': (
+                'Footer del segmento re-sellado desde el sidecar.'
+                if resealed
+                else 'El segmento ya estaba sellado o no tenia footer pendiente.'
+            ),
+        }
+        return refreshed
+
     snapshot = load_snapshot_payload(snapshot_path)
     ops_metadata = dict(snapshot.get('ops_metadata') or {})
     metadata_key = 'last_footer_revalidation' if action_name == 'revalidate_footer' else 'operational_review'

@@ -215,6 +215,7 @@ Inspect the current limbo directly from the app:
 - Bosco also now exposes an HTML detail page per batch at `/dashboard/incidentes-offline/lotes/run/`, built on top of the same canonical payload as the JSON endpoint and linked directly from the batch table for human review outside admin
 - Bosco now also exposes an HTML detail page per historical segment at `/dashboard/limbo-offline/segment/`, built on top of the same canonical payload as the segment JSON endpoint and linked directly from the sealed segment history
 - that HTML segment page now also runs `revalidate footer` and `mark operational review` directly from the same screen, reusing the existing JSON action endpoints and reloading the detail after success
+- the same page now also exposes `reconcile sidecar` for the specific segment and `reseal segment` when the snapshot still carries `seal_pending` or the visible state is `footer_missing`
 - that table now also supports operational filters by a secondary time window, action type, organization, location, actor, segment status, explicit footer presence, and the operational result recorded in `AuditLog` while preserving the active analytics period
 - that same table now also supports quick partial lookup by `segment_id`, so operators can jump into an incident even when they only have a fragment of the segment identifier
 - each row in that table now provides direct navigation to `/dashboard/limbo-offline/?segment_id=<segment_id>` and to `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`

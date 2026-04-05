@@ -2764,18 +2764,124 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertContains(response, 'DETALLE DE SEGMENTO OFFLINE')
         self.assertContains(response, sealed_snapshot['segment_id'])
         self.assertContains(response, 'OFFLINE-DETAIL-HTML-001')
+        self.assertContains(response, 'Reconciliar Sidecar')
+        self.assertContains(response, 'Reseal Segment')
         self.assertContains(response, 'Revalidar Footer')
         self.assertContains(response, 'Marcar Revision')
         self.assertContains(
             response,
             f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={sealed_snapshot["segment_id"]}',
         )
+        self.assertContains(response, reverse('dashboard_offline_limbo_segment_reconcile_json'))
+        self.assertContains(response, reverse('dashboard_offline_limbo_segment_reseal_json'))
         self.assertContains(response, reverse('dashboard_offline_limbo_segment_revalidate_json'))
         self.assertContains(response, reverse('dashboard_offline_limbo_segment_review_json'))
         self.assertContains(
             response,
             f'{reverse("dashboard_offline_limbo")}?segment_id={sealed_snapshot["segment_id"]}',
         )
+
+    def test_dashboard_offline_limbo_segment_reconcile_json_repairs_requested_segment(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-segment-reconcile-1',
+                payload={
+                    'sale_total': '9.10',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-SEGMENT-RECON-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-segment-reconcile-001',
+            )
+            limbo = runtime.get_limbo_view()
+            snapshot_path = Path(limbo['snapshot_path'])
+            snapshot = json.loads(snapshot_path.read_text(encoding='utf-8'))
+            snapshot['record_count'] = 0
+            snapshot['last_offset_confirmed'] = 0
+            snapshot['last_event_id'] = ''
+            snapshot['last_record_hash'] = ''
+            snapshot['rolling_crc32'] = '00000000'
+            snapshot_path.write_text(json.dumps(snapshot), encoding='utf-8')
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+            ):
+                response = self.client.post(
+                    reverse('dashboard_offline_limbo_segment_reconcile_json'),
+                    data=json.dumps({'segment_id': limbo['segment_id']}),
+                    content_type='application/json',
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'reconcile_sidecar')
+        self.assertTrue(payload['action']['performed'])
+        self.assertEqual(payload['record_count'], 1)
+        self.assertEqual(payload['summary']['total_sales'], 1)
+        self.assertIn('Sidecar reconciliado', payload['action']['detail'])
+
+    def test_dashboard_offline_limbo_segment_reseal_json_writes_pending_footer_for_requested_segment(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-segment-reseal-1',
+                payload={
+                    'sale_total': '6.40',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-SEGMENT-RESEAL-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-segment-reseal-001',
+            )
+            limbo = runtime.get_limbo_view()
+            segment_path = Path(limbo['segment_path'])
+            snapshot_path = Path(limbo['snapshot_path'])
+            journal = SegmentJournal(
+                segment_path=segment_path,
+                snapshot_path=snapshot_path,
+                segment_id=limbo['segment_id'],
+            )
+            journal.prepare_seal(summary=limbo['summary'])
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+            ):
+                response = self.client.post(
+                    reverse('dashboard_offline_limbo_segment_reseal_json'),
+                    data=json.dumps({'segment_id': limbo['segment_id']}),
+                    content_type='application/json',
+                )
+                recovery = recover_segment_prefix(segment_path)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'reseal_segment')
+        self.assertTrue(payload['action']['performed'])
+        self.assertTrue(payload['footer_present'])
+        self.assertEqual(payload['status'], 'sealed')
+        self.assertIsNotNone(recovery.footer)
+        self.assertIn('re-sellado', payload['action']['detail'])
 
     def test_dashboard_offline_limbo_segment_revalidate_json_records_ops_metadata(self):
         with TemporaryDirectory() as temp_dir:

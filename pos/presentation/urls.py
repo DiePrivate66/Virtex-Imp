@@ -140,6 +140,16 @@ urlpatterns = [
         name='dashboard_offline_limbo_segment_revalidate_json',
     ),
     path(
+        'dashboard/limbo-offline/segment/reconcile/',
+        analytics_views.dashboard_offline_limbo_segment_reconcile_json,
+        name='dashboard_offline_limbo_segment_reconcile_json',
+    ),
+    path(
+        'dashboard/limbo-offline/segment/reseal/',
+        analytics_views.dashboard_offline_limbo_segment_reseal_json,
+        name='dashboard_offline_limbo_segment_reseal_json',
+    ),
+    path(
         'dashboard/limbo-offline/segment/review/',
         analytics_views.dashboard_offline_limbo_segment_review_json,
         name='dashboard_offline_limbo_segment_review_json',

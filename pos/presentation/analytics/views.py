@@ -369,6 +369,11 @@ def dashboard_offline_limbo_segment_detail(request):
         'segment_detail_json_href': _build_offline_segment_json_href(detail['segment_id']),
         'segment_detail_html_href': _build_offline_segment_html_href(detail['segment_id']),
         'segment_detail_back_href': _build_offline_segment_back_href(request, detail['segment_id']),
+        'segment_detail_can_reconcile_sidecar': True,
+        'segment_detail_can_reseal': (
+            detail['status'] == 'footer_missing'
+            or bool((detail.get('snapshot') or {}).get('seal_pending'))
+        ),
         'segment_detail_payload_pretty': json.dumps(detail, ensure_ascii=False, indent=2, sort_keys=True),
     }
     return render(request, 'pos/offline_segment_detail.html', context)
@@ -380,6 +385,14 @@ def dashboard_offline_limbo_segment_revalidate_json(request):
 
 def dashboard_offline_limbo_segment_review_json(request):
     return _execute_offline_segment_action_json(request, action='mark_operational_review')
+
+
+def dashboard_offline_limbo_segment_reconcile_json(request):
+    return _execute_offline_segment_action_json(request, action='reconcile_sidecar')
+
+
+def dashboard_offline_limbo_segment_reseal_json(request):
+    return _execute_offline_segment_action_json(request, action='reseal_segment')
 
 
 def dashboard_offline_limbo_reconcile_json(request):

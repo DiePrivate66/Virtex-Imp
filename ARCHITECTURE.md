@@ -385,6 +385,7 @@ La base durable local ya no esta en cero:
 - ademas ya existe una vista HTML individual por lote en `/dashboard/incidentes-offline/lotes/run/`, construida sobre el mismo payload canonico del endpoint JSON y enlazada desde la tabla batch para revision humana sin pasar por admin
 - ahora tambien existe una vista HTML individual por segmento historico en `/dashboard/limbo-offline/segment/`, construida sobre el mismo payload canonico del detalle JSON y enlazada desde el historial sellado del limbo
 - esa vista HTML del segmento ya permite ejecutar `revalidate footer` y `mark operational review` directamente desde la misma pantalla, reutilizando los endpoints JSON existentes y refrescando el detalle in-place sin volver al limbo expandido
+- esa misma vista ahora tambien permite `reconcile sidecar` para el segmento puntual y `reseal segment` cuando el snapshot mantiene `seal_pending` o el estado visible es `footer_missing`, sin caer de nuevo en el contrato global del limbo activo
 - la vista `Limbo Offline` ya incorpora un buscador GET por `segment_id` para abrir o autoexpandir un segmento historico sin depender de venir desde analytics
 - ese mismo buscador ya vive tambien en el polling JSON del limbo: la UI reenvia `segment_id` al endpoint `/dashboard/limbo-offline/json/`, conserva la URL con `history.replaceState` y reexpande coincidencias sin recargar la pagina
 - la misma caja de busqueda ya permite abrir el detalle JSON historico exacto desde teclado (`Ctrl+Enter`) o con boton explicito, sin pasar antes por la tabla de segmentos sellados
