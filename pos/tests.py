@@ -1174,6 +1174,45 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(context['offline_audited_actions'][0].id, audit.id)
         self.assertEqual(context['offline_audited_actions'][0].target_id, 'sales-20260404-009')
 
+    def test_dashboard_context_filters_offline_audited_actions_by_type_and_location(self):
+        other_location = Location.objects.create(
+            organization=self.location.organization,
+            name='Sucursal Norte',
+            slug='sucursal-norte',
+        )
+        matching = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-021',
+            payload_json={'segment_status': 'sealed'},
+            correlation_id='sales-20260404-021',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=other_location,
+            actor_user=self.user,
+            event_type='offline.segment_operational_review_marked',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-022',
+            payload_json={'segment_status': 'sealed'},
+            correlation_id='sales-20260404-022',
+        )
+
+        context = build_analytics_dashboard_context(
+            periodo='semana',
+            offline_action_type='offline.segment_footer_revalidated',
+            offline_action_location=str(self.location.id),
+        )
+
+        self.assertEqual(context['offline_audited_actions_count'], 1)
+        self.assertEqual(context['offline_audited_actions'][0].id, matching.id)
+        self.assertEqual(context['offline_audited_action_filter_type'], 'offline.segment_footer_revalidated')
+        self.assertEqual(context['offline_audited_action_filter_location'], str(self.location.id))
+        self.assertTrue(any(option['location_id'] == self.location.id for option in context['offline_audited_action_location_options']))
+
     def test_dashboard_renders_offline_audited_actions_table(self):
         audit = AuditLog.objects.create(
             organization=self.location.organization,
@@ -1208,6 +1247,35 @@ class AnalyticsReplayTimelineTests(TestCase):
             response,
             reverse('admin:pos_auditlog_change', args=[audit.id]),
         )
+
+    def test_dashboard_renders_offline_audited_action_filters(self):
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-031',
+            payload_json={'segment_status': 'sealed'},
+            correlation_id='sales-20260404-031',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_analytics'),
+            {
+                'periodo': 'semana',
+                'offline_action_type': 'offline.segment_footer_revalidated',
+                'offline_action_location': str(self.location.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tipo De Accion')
+        self.assertContains(response, 'Sucursal')
+        self.assertContains(response, 'Limpiar')
+        self.assertContains(response, 'offline.segment_footer_revalidated')
+        self.assertContains(response, f'value="{self.location.id}"')
 
     def test_audit_log_admin_change_view_is_available_for_offline_audited_action(self):
         audit = AuditLog.objects.create(

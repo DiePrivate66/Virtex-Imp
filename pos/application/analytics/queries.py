@@ -19,6 +19,13 @@ from pos.infrastructure.offline import (
 from pos.models import AccountingAdjustment, Asistencia, AuditLog, DetalleVenta, MovimientoCaja, Venta
 
 
+OFFLINE_AUDIT_EVENT_TYPE_OPTIONS = (
+    ('', 'Todas'),
+    ('offline.segment_footer_revalidated', 'Revalidacion footer'),
+    ('offline.segment_operational_review_marked', 'Revision operativa'),
+)
+
+
 def _resolve_period(periodo: str, hoy, desde_param, hasta_param):
     if periodo == 'hoy':
         desde = hoy
@@ -128,8 +135,8 @@ def _build_attendance_data(desde, hasta):
     return data
 
 
-def _build_offline_audited_actions(desde, hasta):
-    queryset = (
+def _build_offline_audited_actions(desde, hasta, *, action_type: str = '', location_id: str = ''):
+    base_queryset = (
         AuditLog.objects.filter(
             event_type__in=[
                 'offline.segment_footer_revalidated',
@@ -141,10 +148,41 @@ def _build_offline_audited_actions(desde, hasta):
         .select_related('organization', 'location', 'actor_user')
         .order_by('-created_at')
     )
-    return queryset, list(queryset[:10])
+    location_options = list(
+        base_queryset.exclude(location__isnull=True)
+        .values('location_id', 'location__name')
+        .distinct()
+        .order_by('location__name')
+    )
+
+    queryset = base_queryset
+    normalized_action_type = str(action_type or '').strip()
+    if normalized_action_type:
+        queryset = queryset.filter(event_type=normalized_action_type)
+
+    normalized_location_id = str(location_id or '').strip()
+    if normalized_location_id.isdigit():
+        queryset = queryset.filter(location_id=int(normalized_location_id))
+    else:
+        normalized_location_id = ''
+
+    return {
+        'queryset': queryset,
+        'items': list(queryset[:10]),
+        'selected_action_type': normalized_action_type,
+        'selected_location_id': normalized_location_id,
+        'action_type_options': OFFLINE_AUDIT_EVENT_TYPE_OPTIONS,
+        'location_options': location_options,
+    }
 
 
-def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None, hasta_param=None):
+def build_analytics_dashboard_context(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_action_type: str = '',
+    offline_action_location: str = '',
+):
     hoy = timezone.localdate()
     desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
 
@@ -207,7 +245,12 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
     refund_adjustments_open_total = (
         refund_adjustments_queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0')
     )
-    offline_audited_actions_queryset, offline_audited_actions = _build_offline_audited_actions(desde, hasta)
+    offline_audit_bundle = _build_offline_audited_actions(
+        desde,
+        hasta,
+        action_type=offline_action_type,
+        location_id=offline_action_location,
+    )
 
     return {
         'periodo': periodo,
@@ -243,8 +286,12 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
         'refund_adjustments_open': refund_adjustments_open,
         'refund_adjustments_open_count': refund_adjustments_queryset.count(),
         'refund_adjustments_open_total': refund_adjustments_open_total,
-        'offline_audited_actions': offline_audited_actions,
-        'offline_audited_actions_count': offline_audited_actions_queryset.count(),
+        'offline_audited_actions': offline_audit_bundle['items'],
+        'offline_audited_actions_count': offline_audit_bundle['queryset'].count(),
+        'offline_audited_action_filter_type': offline_audit_bundle['selected_action_type'],
+        'offline_audited_action_filter_location': offline_audit_bundle['selected_location_id'],
+        'offline_audited_action_type_options': offline_audit_bundle['action_type_options'],
+        'offline_audited_action_location_options': offline_audit_bundle['location_options'],
     }
 
 

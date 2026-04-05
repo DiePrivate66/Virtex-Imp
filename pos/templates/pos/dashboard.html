@@ -264,6 +264,54 @@
                 {{ offline_audited_actions_count }}
             </div>
         </div>
+        <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-4">
+            <input type="hidden" name="periodo" value="{{ periodo }}">
+            {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
+            {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Tipo De Accion</label>
+                    <select
+                        name="offline_action_type"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                    >
+                        {% for value, label in offline_audited_action_type_options %}
+                        <option value="{{ value }}" {% if offline_audited_action_filter_type == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Sucursal</label>
+                    <select
+                        name="offline_action_location"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                    >
+                        <option value="">Todas</option>
+                        {% for option in offline_audited_action_location_options %}
+                        <option
+                            value="{{ option.location_id }}"
+                            {% if offline_audited_action_filter_location == option.location_id|stringformat:"s" %}selected{% endif %}
+                        >
+                            {{ option.location__name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-end gap-2">
+                    <button type="submit" class="bg-indigo-500 hover:bg-indigo-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
+                        Filtrar
+                    </button>
+                    <a
+                        href="{% url 'dashboard_analytics' %}?periodo={{ periodo }}{% if desde %}&desde={{ desde }}{% endif %}{% if hasta %}&hasta={{ hasta }}{% endif %}"
+                        class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-black px-4 py-2 rounded-lg transition"
+                    >
+                        Limpiar
+                    </a>
+                </div>
+            </div>
+        </form>
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
                 <thead>
