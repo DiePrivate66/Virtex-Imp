@@ -1,5 +1,6 @@
 from .views import (
     dashboard_analytics,
+    dashboard_offline_incident_batch_detail,
     dashboard_offline_incident_batch_json,
     dashboard_offline_incident_batches,
     dashboard_offline_incident_batches_export_csv,
@@ -24,6 +25,7 @@ from .views import (
 
 __all__ = [
     'dashboard_analytics',
+    'dashboard_offline_incident_batch_detail',
     'dashboard_offline_incident_batch_json',
     'dashboard_offline_incident_batches',
     'dashboard_offline_incident_batches_export_csv',

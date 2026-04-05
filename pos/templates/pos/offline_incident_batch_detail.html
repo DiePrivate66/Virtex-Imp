@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+    <div class="flex items-start justify-between gap-4 mb-6">
+        <div class="flex flex-col gap-3">
+            <a
+                href="{{ batch_detail_back_href }}"
+                class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition"
+            >
+                &larr; VOLVER A LOTES
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tight">DETALLE DE LOTE OFFLINE</h1>
+                <p class="text-gray-500 text-xs font-bold mt-1">Vista HTML individual para inspeccionar un batch offline sin depender del admin.</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a
+                href="{{ batch_detail_json_href }}"
+                target="_blank"
+                rel="noopener"
+                class="bg-indigo-900/50 hover:bg-indigo-800/50 text-indigo-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                JSON
+            </a>
+            <a
+                href="{{ batch_detail_auditlog_href }}"
+                target="_blank"
+                rel="noopener"
+                class="bg-emerald-900/50 hover:bg-emerald-800/50 text-emerald-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                AuditLog
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">AUDITLOG</p>
+            <p class="text-white text-3xl font-black mt-2">#{{ batch_detail.audit_log_id }}</p>
+            <p class="text-gray-600 text-xs mt-1">{{ batch_detail.action_label }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">BATCH ID</p>
+            <p class="text-white text-lg font-black mt-2 break-all">{{ batch_detail.batch_id }}</p>
+            <p class="text-gray-600 text-xs mt-1">Correlation: {{ batch_detail.correlation_id|default:"SIN_CORRELATION" }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">PROCESADOS</p>
+            <p class="text-white text-4xl font-black mt-2">{{ batch_detail.processed }}</p>
+            <p class="text-gray-600 text-xs mt-1">OK {{ batch_detail.succeeded }}</p>
+        </div>
+        <div class="bg-gradient-to-br from-red-900/30 to-red-900/10 rounded-2xl border border-red-800/30 p-5">
+            <p class="text-red-300 text-[10px] font-black uppercase tracking-widest">FALLOS</p>
+            <p class="text-red-300 text-4xl font-black mt-2">{{ batch_detail.failed }}</p>
+            <p class="text-gray-600 text-xs mt-1">{{ batch_detail.failed_details|length }} detalle(s)</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
+            <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Metadatos</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm">
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Fecha</p>
+                    <p class="text-white mt-1">{{ batch_detail.created_at }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Tipo</p>
+                    <p class="text-white mt-1">{{ batch_detail.event_type }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Organizacion</p>
+                    <p class="text-white mt-1">{{ batch_detail.organization_name|default:"SIN_ORGANIZACION" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Sucursal</p>
+                    <p class="text-white mt-1">{{ batch_detail.location_name|default:"SIN_SUCURSAL" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Actor</p>
+                    <p class="text-white mt-1">{{ batch_detail.actor_username|default:"SIN_USUARIO" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Target Model</p>
+                    <p class="text-white mt-1">{{ batch_detail.target_model }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
+            <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Payload JSON</h2>
+            <pre class="mt-4 overflow-x-auto rounded-xl bg-[#111] border border-gray-800 p-4 text-xs text-gray-200 whitespace-pre-wrap break-all">{{ batch_detail_payload_pretty }}</pre>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5 mt-6">
+        <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Failed Details</h2>
+        {% if batch_detail.failed_details %}
+        <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                        <th class="pb-2 font-black">Segmento</th>
+                        <th class="pb-2 font-black">Detalle</th>
+                    </tr>
+                </thead>
+                <tbody class="text-sm">
+                    {% for item in batch_detail.failed_details %}
+                    <tr class="border-b border-gray-800/50">
+                        <td class="py-3 text-gray-200 break-all">{{ item.segment_id|default:"SIN_SEGMENTO" }}</td>
+                        <td class="py-3 text-gray-300">
+                            {% if item.detail %}
+                                {{ item.detail }}
+                            {% elif item.reason %}
+                                {{ item.reason }}
+                            {% else %}
+                                SIN_DETALLE
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-400 text-sm mt-4">No hay failed details registrados para este lote.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -146,6 +146,15 @@ def dashboard_offline_incident_batches(request):
         if context.get('offline_bulk_selected_run')
         else ''
     )
+    context['offline_bulk_selected_run_html_href'] = (
+        _build_offline_batch_html_href(
+            context['offline_bulk_selected_run'].id,
+            batch_id=context['offline_bulk_selected_run'].target_id,
+            correlation_id=context['offline_bulk_selected_run'].correlation_id,
+        )
+        if context.get('offline_bulk_selected_run')
+        else ''
+    )
     return render(request, 'pos/offline_incident_batches.html', context)
 
 
@@ -218,6 +227,38 @@ def dashboard_offline_incident_batch_json(request):
         )
     except ValueError as exc:
         return JsonResponse({'detail': str(exc)}, status=400)
+
+
+def dashboard_offline_incident_batch_detail(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+    try:
+        detail = build_offline_bulk_run_detail_payload(
+            audit_log_id=request.GET.get('audit_log_id', ''),
+            batch_id=request.GET.get('batch_id', ''),
+            correlation_id=request.GET.get('correlation_id', ''),
+        )
+    except ValueError:
+        return redirect('dashboard_offline_incident_batches')
+
+    context = {
+        'batch_detail': detail,
+        'batch_detail_json_href': _build_offline_batch_json_href(
+            detail['audit_log_id'],
+            batch_id=detail['batch_id'],
+            correlation_id=detail['correlation_id'],
+        ),
+        'batch_detail_html_href': _build_offline_batch_html_href(
+            detail['audit_log_id'],
+            batch_id=detail['batch_id'],
+            correlation_id=detail['correlation_id'],
+        ),
+        'batch_detail_auditlog_href': reverse('admin:pos_auditlog_change', args=[detail['audit_log_id']]),
+        'batch_detail_payload_pretty': json.dumps(detail['payload_json'], ensure_ascii=False, indent=2, sort_keys=True),
+        'batch_detail_back_href': _build_offline_batch_back_href(request),
+    }
+    return render(request, 'pos/offline_incident_batch_detail.html', context)
 
 
 def dashboard_offline_incidents_export_json(request):
@@ -610,9 +651,19 @@ def _build_offline_bulk_runs_export_payload_from_request(request):
     )
     for item in payload['items']:
         item['detail_json_url'] = _build_offline_batch_json_href(item['audit_log_id'])
+        item['detail_html_url'] = _build_offline_batch_html_href(
+            item['audit_log_id'],
+            batch_id=item['batch_id'],
+            correlation_id=item.get('correlation_id', ''),
+        )
     if payload.get('selected_run'):
         payload['selected_run']['detail_json_url'] = _build_offline_batch_json_href(
             payload['selected_run']['audit_log_id']
+        )
+        payload['selected_run']['detail_html_url'] = _build_offline_batch_html_href(
+            payload['selected_run']['audit_log_id'],
+            batch_id=payload['selected_run']['batch_id'],
+            correlation_id=payload['selected_run'].get('correlation_id', ''),
         )
     return payload
 
@@ -636,8 +687,54 @@ def _build_offline_bulk_export_query_params_from_context(context):
     return params
 
 
-def _build_offline_batch_json_href(audit_log_id) -> str:
-    return f"{reverse('dashboard_offline_incident_batch_json')}?audit_log_id={audit_log_id}"
+def _build_offline_batch_json_href(audit_log_id='', *, batch_id='', correlation_id='') -> str:
+    params = {}
+    normalized_audit_log_id = str(audit_log_id or '').strip()
+    normalized_batch_id = str(batch_id or '').strip()
+    normalized_correlation_id = str(correlation_id or '').strip()
+    if normalized_audit_log_id:
+        params['audit_log_id'] = normalized_audit_log_id
+    elif normalized_batch_id:
+        params['batch_id'] = normalized_batch_id
+    elif normalized_correlation_id:
+        params['correlation_id'] = normalized_correlation_id
+    return f"{reverse('dashboard_offline_incident_batch_json')}?{urlencode(params)}"
+
+
+def _build_offline_batch_html_href(audit_log_id='', *, batch_id='', correlation_id='') -> str:
+    params = {}
+    normalized_audit_log_id = str(audit_log_id or '').strip()
+    normalized_batch_id = str(batch_id or '').strip()
+    normalized_correlation_id = str(correlation_id or '').strip()
+    if normalized_audit_log_id:
+        params['audit_log_id'] = normalized_audit_log_id
+    elif normalized_batch_id:
+        params['batch_id'] = normalized_batch_id
+    elif normalized_correlation_id:
+        params['correlation_id'] = normalized_correlation_id
+    return f"{reverse('dashboard_offline_incident_batch_detail')}?{urlencode(params)}"
+
+
+def _build_offline_batch_back_href(request) -> str:
+    params = {}
+    for key in (
+        'periodo',
+        'desde',
+        'hasta',
+        'offline_action_time_window',
+        'offline_action_organization',
+        'offline_action_location',
+        'offline_action_actor',
+        'offline_bulk_action_type',
+        'offline_bulk_audit_log',
+        'offline_bulk_batch_id',
+        'offline_bulk_correlation_id',
+    ):
+        value = str(request.GET.get(key, '') or '').strip()
+        if value:
+            params[key] = value
+    base = reverse('dashboard_offline_incident_batches')
+    return f"{base}?{urlencode(params)}" if params else base
 
 
 def _execute_offline_segment_bulk_action_json(request, *, action: str):

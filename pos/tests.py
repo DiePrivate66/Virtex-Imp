@@ -1818,6 +1818,11 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, reverse('dashboard_offline_incident_batches_export_csv'))
         self.assertContains(
             response,
+            f'{reverse("dashboard_offline_incident_batch_detail")}?audit_log_id={selected_batch.id}',
+            count=2,
+        )
+        self.assertContains(
+            response,
             f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
             count=2,
         )
@@ -1933,6 +1938,43 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(payload['failed'], 1)
         self.assertEqual(payload['correlation_id'], 'revalidate-batch-detail-001')
         self.assertEqual(payload['payload_json']['processed'], 9)
+
+    def test_offline_incident_batch_detail_renders_single_run_payload(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-detail-html-001',
+            payload_json={
+                'processed': 9,
+                'succeeded': 8,
+                'failed': 1,
+                'failed_details': [{'segment_id': 'sales-001', 'detail': 'footer missing'}],
+            },
+            correlation_id='corr-detail-html-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batch_detail'),
+            {'audit_log_id': str(selected_batch.id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'DETALLE DE LOTE OFFLINE')
+        self.assertContains(response, 'revalidate-batch-detail-html-001')
+        self.assertContains(response, 'corr-detail-html-001')
+        self.assertContains(response, 'footer missing')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
+        )
+        self.assertContains(
+            response,
+            reverse('admin:pos_auditlog_change', args=[selected_batch.id]),
+        )
 
     def test_offline_incident_batch_json_accepts_batch_id(self):
         selected_batch = AuditLog.objects.create(

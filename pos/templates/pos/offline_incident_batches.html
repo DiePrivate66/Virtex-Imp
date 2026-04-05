@@ -93,6 +93,12 @@
         </div>
         <div class="flex justify-end gap-2 mt-4">
             <a
+                href="{{ offline_bulk_selected_run_html_href }}"
+                class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+            >
+                Detalle
+            </a>
+            <a
                 href="{{ offline_bulk_selected_run_json_href }}"
                 target="_blank"
                 rel="noopener"
@@ -254,6 +260,12 @@
                                 class="bg-emerald-900/50 text-emerald-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-emerald-800/50 transition"
                             >
                                 AuditLog
+                            </a>
+                            <a
+                                href="{% url 'dashboard_offline_incident_batch_detail' %}?audit_log_id={{ batch.id }}"
+                                class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                            >
+                                Detalle
                             </a>
                             <a
                                 href="{% url 'dashboard_offline_incident_batch_json' %}?audit_log_id={{ batch.id }}"
