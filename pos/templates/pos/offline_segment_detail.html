@@ -1,6 +1,13 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+<div
+    class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100"
+    data-offline-segment-detail-root
+    data-segment-id="{{ segment_detail.segment_id }}"
+    data-segment-html-href="{{ segment_detail_html_href }}"
+    data-segment-revalidate-url="{% url 'dashboard_offline_limbo_segment_revalidate_json' %}"
+    data-segment-review-url="{% url 'dashboard_offline_limbo_segment_review_json' %}"
+>
     <div class="flex items-start justify-between gap-4 mb-6">
         <div class="flex flex-col gap-3">
             <a
@@ -30,6 +37,13 @@
                 Refrescar HTML
             </a>
         </div>
+    </div>
+
+    <div
+        class="rounded-2xl border border-gray-800 bg-black/20 px-4 py-3 text-sm text-gray-300 mb-6"
+        data-segment-action-feedback
+    >
+        Sin acciones operativas ejecutadas en esta vista.
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -117,7 +131,25 @@
         </div>
 
         <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
-            <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Revision Operativa</h2>
+            <div class="flex items-start justify-between gap-3">
+                <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Revision Operativa</h2>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-100 text-[11px] font-black px-3 py-2 rounded-lg transition"
+                        data-segment-detail-action="revalidate"
+                    >
+                        Revalidar Footer
+                    </button>
+                    <button
+                        type="button"
+                        class="bg-violet-900/50 hover:bg-violet-800/50 text-violet-100 text-[11px] font-black px-3 py-2 rounded-lg transition"
+                        data-segment-detail-action="review"
+                    >
+                        Marcar Revision
+                    </button>
+                </div>
+            </div>
             <div class="mt-4 space-y-3 text-sm">
                 <div>
                     <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Ultima Revision</p>
@@ -184,4 +216,88 @@
         <pre class="mt-4 overflow-x-auto rounded-xl bg-[#111] border border-gray-800 p-4 text-xs text-gray-200 whitespace-pre-wrap break-all">{{ segment_detail_payload_pretty }}</pre>
     </div>
 </div>
+<script>
+(() => {
+    const root = document.querySelector('[data-offline-segment-detail-root]');
+    if (!root) return;
+
+    const segmentId = String(root.dataset.segmentId || '').trim();
+    const segmentHtmlHref = String(root.dataset.segmentHtmlHref || '').trim();
+    const revalidateUrl = String(root.dataset.segmentRevalidateUrl || '').trim();
+    const reviewUrl = String(root.dataset.segmentReviewUrl || '').trim();
+    const feedback = root.querySelector('[data-segment-action-feedback]');
+    const actionButtons = Array.from(root.querySelectorAll('[data-segment-detail-action]'));
+    const csrfToken = '{{ csrf_token }}';
+
+    const setFeedback = (message, tone = 'neutral') => {
+        if (!feedback) return;
+        feedback.textContent = message || 'Sin acciones operativas ejecutadas en esta vista.';
+        feedback.className = 'rounded-2xl border px-4 py-3 text-sm mb-6';
+        if (tone === 'success') {
+            feedback.classList.add('border-green-700/40', 'bg-green-950/30', 'text-green-200');
+            return;
+        }
+        if (tone === 'error') {
+            feedback.classList.add('border-red-700/40', 'bg-red-950/30', 'text-red-200');
+            return;
+        }
+        feedback.classList.add('border-gray-800', 'bg-black/20', 'text-gray-300');
+    };
+
+    const setButtonsDisabled = (disabled) => {
+        actionButtons.forEach((button) => {
+            button.disabled = disabled;
+            button.classList.toggle('opacity-60', disabled);
+            button.classList.toggle('cursor-not-allowed', disabled);
+        });
+    };
+
+    const runAction = async (actionName) => {
+        const endpoint = actionName === 'revalidate' ? revalidateUrl : reviewUrl;
+        const label = actionName === 'revalidate' ? 'revalidacion de footer' : 'revision operativa';
+        try {
+            setButtonsDisabled(true);
+            setFeedback(`Ejecutando ${label} para ${segmentId}...`, 'neutral');
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ segment_id: segmentId }),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || `HTTP ${response.status}`);
+            }
+            const auditLog = payload.audit_log || {};
+            const suffix = auditLog.recorded
+                ? ` AuditLog #${auditLog.audit_log_id} registrado.`
+                : ` Registro central omitido: ${auditLog.detail || 'sin tenant resoluble'}.`;
+            setFeedback(`${payload.action?.detail || 'Accion completada.'}${suffix} Recargando vista...`, 'success');
+            window.setTimeout(() => {
+                if (segmentHtmlHref) {
+                    window.location.assign(segmentHtmlHref);
+                } else {
+                    window.location.reload();
+                }
+            }, 500);
+        } catch (error) {
+            setFeedback(`No se pudo ejecutar ${label}: ${error}`, 'error');
+            setButtonsDisabled(false);
+        }
+    };
+
+    actionButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const actionName = button.dataset.segmentDetailAction || '';
+            if (actionName === 'revalidate' || actionName === 'review') {
+                runAction(actionName);
+            }
+        });
+    });
+})();
+</script>
 {% endblock %}

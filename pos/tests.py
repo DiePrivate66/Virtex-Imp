@@ -2764,10 +2764,14 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertContains(response, 'DETALLE DE SEGMENTO OFFLINE')
         self.assertContains(response, sealed_snapshot['segment_id'])
         self.assertContains(response, 'OFFLINE-DETAIL-HTML-001')
+        self.assertContains(response, 'Revalidar Footer')
+        self.assertContains(response, 'Marcar Revision')
         self.assertContains(
             response,
             f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={sealed_snapshot["segment_id"]}',
         )
+        self.assertContains(response, reverse('dashboard_offline_limbo_segment_revalidate_json'))
+        self.assertContains(response, reverse('dashboard_offline_limbo_segment_review_json'))
         self.assertContains(
             response,
             f'{reverse("dashboard_offline_limbo")}?segment_id={sealed_snapshot["segment_id"]}',
