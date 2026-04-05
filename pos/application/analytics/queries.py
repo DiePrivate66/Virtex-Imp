@@ -32,6 +32,19 @@ OFFLINE_AUDIT_RESULT_OPTIONS = (
     ('review_marked', 'Revision registrada'),
 )
 
+OFFLINE_AUDIT_TIME_WINDOW_OPTIONS = (
+    ('', 'Todo el periodo'),
+    ('24h', 'Ultimas 24h'),
+    ('72h', 'Ultimas 72h'),
+    ('168h', 'Ultimos 7 dias'),
+)
+
+OFFLINE_AUDIT_FOOTER_PRESENCE_OPTIONS = (
+    ('', 'Todos'),
+    ('present', 'Footer presente'),
+    ('missing', 'Footer ausente'),
+)
+
 
 def _resolve_period(periodo: str, hoy, desde_param, hasta_param):
     if periodo == 'hoy':
@@ -165,12 +178,14 @@ def _build_offline_audited_actions(
     hasta,
     *,
     segment_id: str = '',
+    time_window: str = '',
     action_type: str = '',
     organization_id: str = '',
     location_id: str = '',
     actor_id: str = '',
     segment_status: str = '',
     audit_result: str = '',
+    footer_presence: str = '',
 ):
     base_queryset = (
         AuditLog.objects.filter(
@@ -214,6 +229,13 @@ def _build_offline_audited_actions(
     if normalized_segment_id:
         queryset = queryset.filter(target_id__icontains=normalized_segment_id)
 
+    normalized_time_window = str(time_window or '').strip()
+    if normalized_time_window in {'24h', '72h', '168h'}:
+        hours = int(normalized_time_window[:-1])
+        queryset = queryset.filter(created_at__gte=timezone.now() - timedelta(hours=hours))
+    else:
+        normalized_time_window = ''
+
     normalized_action_type = str(action_type or '').strip()
     if normalized_action_type:
         queryset = queryset.filter(event_type=normalized_action_type)
@@ -240,6 +262,14 @@ def _build_offline_audited_actions(
     if normalized_segment_status:
         queryset = queryset.filter(payload_json__segment_status=normalized_segment_status)
 
+    normalized_footer_presence = str(footer_presence or '').strip()
+    if normalized_footer_presence == 'present':
+        queryset = queryset.filter(payload_json__footer_present=True)
+    elif normalized_footer_presence == 'missing':
+        queryset = queryset.exclude(payload_json__footer_present=True)
+    else:
+        normalized_footer_presence = ''
+
     normalized_audit_result = str(audit_result or '').strip()
     if normalized_audit_result == 'footer_present':
         queryset = queryset.filter(
@@ -265,18 +295,22 @@ def _build_offline_audited_actions(
         'queryset': queryset,
         'items': items,
         'selected_segment_id': normalized_segment_id,
+        'selected_time_window': normalized_time_window,
         'selected_action_type': normalized_action_type,
         'selected_organization_id': normalized_organization_id,
         'selected_location_id': normalized_location_id,
         'selected_actor_id': normalized_actor_id,
         'selected_segment_status': normalized_segment_status,
         'selected_audit_result': normalized_audit_result,
+        'selected_footer_presence': normalized_footer_presence,
+        'time_window_options': OFFLINE_AUDIT_TIME_WINDOW_OPTIONS,
         'action_type_options': OFFLINE_AUDIT_EVENT_TYPE_OPTIONS,
         'organization_options': organization_options,
         'location_options': location_options,
         'actor_options': actor_options,
         'segment_status_options': segment_status_options,
         'audit_result_options': OFFLINE_AUDIT_RESULT_OPTIONS,
+        'footer_presence_options': OFFLINE_AUDIT_FOOTER_PRESENCE_OPTIONS,
     }
 
 
@@ -285,12 +319,14 @@ def build_analytics_dashboard_context(
     desde_param=None,
     hasta_param=None,
     offline_action_segment_id: str = '',
+    offline_action_time_window: str = '',
     offline_action_type: str = '',
     offline_action_organization: str = '',
     offline_action_location: str = '',
     offline_action_actor: str = '',
     offline_action_segment_status: str = '',
     offline_action_result: str = '',
+    offline_action_footer_presence: str = '',
 ):
     hoy = timezone.localdate()
     desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
@@ -358,12 +394,14 @@ def build_analytics_dashboard_context(
         desde,
         hasta,
         segment_id=offline_action_segment_id,
+        time_window=offline_action_time_window,
         action_type=offline_action_type,
         organization_id=offline_action_organization,
         location_id=offline_action_location,
         actor_id=offline_action_actor,
         segment_status=offline_action_segment_status,
         audit_result=offline_action_result,
+        footer_presence=offline_action_footer_presence,
     )
 
     return {
@@ -403,18 +441,22 @@ def build_analytics_dashboard_context(
         'offline_audited_actions': offline_audit_bundle['items'],
         'offline_audited_actions_count': offline_audit_bundle['queryset'].count(),
         'offline_audited_action_filter_segment_id': offline_audit_bundle['selected_segment_id'],
+        'offline_audited_action_filter_time_window': offline_audit_bundle['selected_time_window'],
         'offline_audited_action_filter_type': offline_audit_bundle['selected_action_type'],
         'offline_audited_action_filter_organization': offline_audit_bundle['selected_organization_id'],
         'offline_audited_action_filter_location': offline_audit_bundle['selected_location_id'],
         'offline_audited_action_filter_actor': offline_audit_bundle['selected_actor_id'],
         'offline_audited_action_filter_segment_status': offline_audit_bundle['selected_segment_status'],
         'offline_audited_action_filter_result': offline_audit_bundle['selected_audit_result'],
+        'offline_audited_action_filter_footer_presence': offline_audit_bundle['selected_footer_presence'],
+        'offline_audited_action_time_window_options': offline_audit_bundle['time_window_options'],
         'offline_audited_action_type_options': offline_audit_bundle['action_type_options'],
         'offline_audited_action_organization_options': offline_audit_bundle['organization_options'],
         'offline_audited_action_location_options': offline_audit_bundle['location_options'],
         'offline_audited_action_actor_options': offline_audit_bundle['actor_options'],
         'offline_audited_action_segment_status_options': offline_audit_bundle['segment_status_options'],
         'offline_audited_action_result_options': offline_audit_bundle['audit_result_options'],
+        'offline_audited_action_footer_presence_options': offline_audit_bundle['footer_presence_options'],
     }
 
 

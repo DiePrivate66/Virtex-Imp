@@ -36,12 +36,14 @@ def dashboard_analytics(request):
             desde_param=request.GET.get('desde'),
             hasta_param=request.GET.get('hasta'),
             offline_action_segment_id=request.GET.get('offline_action_segment_id', ''),
+            offline_action_time_window=request.GET.get('offline_action_time_window', ''),
             offline_action_type=request.GET.get('offline_action_type', ''),
             offline_action_organization=request.GET.get('offline_action_organization', ''),
             offline_action_location=request.GET.get('offline_action_location', ''),
             offline_action_actor=request.GET.get('offline_action_actor', ''),
             offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
             offline_action_result=request.GET.get('offline_action_result', ''),
+            offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
         ),
     )
 

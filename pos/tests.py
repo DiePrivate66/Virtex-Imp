@@ -1203,6 +1203,19 @@ class AnalyticsReplayTimelineTests(TestCase):
             payload_json={'segment_status': 'sealed', 'footer_present': True, 'audit_result': 'footer_present'},
             correlation_id='sales-20260404-021',
         )
+        stale_matching = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260403-020',
+            payload_json={'segment_status': 'sealed', 'footer_present': True, 'audit_result': 'footer_present'},
+            correlation_id='sales-20260403-020',
+        )
+        AuditLog.objects.filter(id=stale_matching.id).update(
+            created_at=timezone.now() - timedelta(hours=30),
+        )
         AuditLog.objects.create(
             organization=self.location.organization,
             location=self.location,
@@ -1267,17 +1280,20 @@ class AnalyticsReplayTimelineTests(TestCase):
         context = build_analytics_dashboard_context(
             periodo='semana',
             offline_action_segment_id='20260404-021',
+            offline_action_time_window='24h',
             offline_action_type='offline.segment_footer_revalidated',
             offline_action_organization=str(self.location.organization.id),
             offline_action_location=str(self.location.id),
             offline_action_actor=str(self.user.id),
             offline_action_segment_status='sealed',
             offline_action_result='footer_present',
+            offline_action_footer_presence='present',
         )
 
         self.assertEqual(context['offline_audited_actions_count'], 1)
         self.assertEqual(context['offline_audited_actions'][0].id, matching.id)
         self.assertEqual(context['offline_audited_action_filter_segment_id'], '20260404-021')
+        self.assertEqual(context['offline_audited_action_filter_time_window'], '24h')
         self.assertEqual(context['offline_audited_action_filter_type'], 'offline.segment_footer_revalidated')
         self.assertEqual(
             context['offline_audited_action_filter_organization'],
@@ -1287,6 +1303,7 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(context['offline_audited_action_filter_actor'], str(self.user.id))
         self.assertEqual(context['offline_audited_action_filter_segment_status'], 'sealed')
         self.assertEqual(context['offline_audited_action_filter_result'], 'footer_present')
+        self.assertEqual(context['offline_audited_action_filter_footer_presence'], 'present')
         self.assertTrue(
             any(
                 option['organization_id'] == self.location.organization.id
@@ -1306,6 +1323,18 @@ class AnalyticsReplayTimelineTests(TestCase):
             any(
                 value == 'footer_present'
                 for value, _label in context['offline_audited_action_result_options']
+            )
+        )
+        self.assertTrue(
+            any(
+                value == '24h'
+                for value, _label in context['offline_audited_action_time_window_options']
+            )
+        )
+        self.assertTrue(
+            any(
+                value == 'present'
+                for value, _label in context['offline_audited_action_footer_presence_options']
             )
         )
 
@@ -1362,31 +1391,37 @@ class AnalyticsReplayTimelineTests(TestCase):
             {
                 'periodo': 'semana',
                 'offline_action_segment_id': '20260404-031',
+                'offline_action_time_window': '24h',
                 'offline_action_type': 'offline.segment_footer_revalidated',
                 'offline_action_organization': str(self.location.organization.id),
                 'offline_action_location': str(self.location.id),
                 'offline_action_actor': str(self.user.id),
                 'offline_action_segment_status': 'sealed',
                 'offline_action_result': 'footer_present',
+                'offline_action_footer_presence': 'present',
             },
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Segment ID')
+        self.assertContains(response, 'Ventana Temporal')
         self.assertContains(response, 'Tipo De Accion')
         self.assertContains(response, 'Organizacion')
         self.assertContains(response, 'Sucursal')
         self.assertContains(response, 'Actor')
         self.assertContains(response, 'Estado Del Segmento')
         self.assertContains(response, 'Resultado AuditLog')
+        self.assertContains(response, 'Presencia De Footer')
         self.assertContains(response, 'Limpiar')
         self.assertContains(response, 'value="20260404-031"')
+        self.assertContains(response, 'value="24h"')
         self.assertContains(response, 'offline.segment_footer_revalidated')
         self.assertContains(response, f'value="{self.location.organization.id}"')
         self.assertContains(response, f'value="{self.location.id}"')
         self.assertContains(response, f'value="{self.user.id}"')
         self.assertContains(response, 'value="sealed"')
         self.assertContains(response, 'value="footer_present"')
+        self.assertContains(response, 'value="present"')
 
     def test_audit_log_admin_change_view_is_available_for_offline_audited_action(self):
         audit = AuditLog.objects.create(
