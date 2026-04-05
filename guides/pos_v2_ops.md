@@ -193,6 +193,7 @@ Inspect the current limbo directly from the app:
 - Operational actions:
   - `POST /dashboard/limbo-offline/reconcile/` repairs a lagging `.snapshot` sidecar from the active segment
   - `POST /dashboard/limbo-offline/reseal/` appends the pending footer when the sidecar already carries a valid seal request
+  - `POST /dashboard/limbo-offline/seal-active/` seals the active segment only when the runtime reports `rotation_needed=true`
 - Both actions run under the same runtime file lock used by the writer, so they do not race appends from the shadow capture path
 - Sealed history depth is controlled by `OFFLINE_JOURNAL_HISTORY_LIMIT` and defaults to `5`
 

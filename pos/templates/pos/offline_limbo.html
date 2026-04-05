@@ -6,6 +6,7 @@
     data-json-url="{% url 'dashboard_offline_limbo_json' %}"
     data-reconcile-url="{% url 'dashboard_offline_limbo_reconcile_json' %}"
     data-reseal-url="{% url 'dashboard_offline_limbo_reseal_json' %}"
+    data-seal-url="{% url 'dashboard_offline_limbo_seal_json' %}"
 >
     <div class="flex items-start justify-between mb-6 gap-4">
         <div class="flex flex-col gap-3">
@@ -79,6 +80,24 @@
                         <p class="text-lg font-black mt-1" data-field="sealed_label">{% if limbo.sealed %}YES{% else %}NO{% endif %}</p>
                     </div>
                 </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Segment Size</p>
+                        <p class="text-white text-sm font-black mt-1" data-field="segment_size_bytes">{{ rotation.segment_size_bytes|default:0 }}</p>
+                    </div>
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Max Bytes</p>
+                        <p class="text-white text-sm font-black mt-1" data-field="segment_max_bytes">{{ rotation.segment_max_bytes|default:0 }}</p>
+                    </div>
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Rotation Needed</p>
+                        <p class="text-sm font-black mt-1" data-field="rotation_needed_label">{% if rotation.rotation_needed %}YES{% else %}NO{% endif %}</p>
+                    </div>
+                </div>
+                <div class="bg-gray-900/60 rounded-xl p-3">
+                    <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Rotation Reason</p>
+                    <p class="text-gray-300 break-words" data-field="rotation_reason">{{ rotation.reason|default:"Sin criterio de rotacion activo." }}</p>
+                </div>
                 <div class="pt-3 border-t border-gray-800">
                     <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3">Acciones Operativas</p>
                     <div class="flex flex-wrap gap-3">
@@ -95,6 +114,14 @@
                             data-action-button="reseal"
                         >
                             Reseal Segment
+                        </button>
+                        <button
+                            type="button"
+                            class="bg-green-900/40 text-green-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-green-800/50 transition"
+                            data-action-button="seal"
+                            {% if not rotation.action_allowed %}disabled{% endif %}
+                        >
+                            Seal Active Segment
                         </button>
                     </div>
                     <p class="mt-3 text-[11px] text-gray-400" data-action-feedback>Sin acciones ejecutadas.</p>
@@ -225,10 +252,12 @@
     const jsonUrl = root.dataset.jsonUrl;
     const reconcileUrl = root.dataset.reconcileUrl;
     const resealUrl = root.dataset.resealUrl;
+    const sealUrl = root.dataset.sealUrl;
     const statusBanner = root.querySelector('[data-status-banner]');
     const refreshButton = root.querySelector('[data-refresh-button]');
     const reconcileButton = root.querySelector('[data-action-button="reconcile"]');
     const resealButton = root.querySelector('[data-action-button="reseal"]');
+    const sealButton = root.querySelector('[data-action-button="seal"]');
     const actionFeedback = root.querySelector('[data-action-feedback]');
     const eventsBody = root.querySelector('[data-recent-events-body]');
     const sealedSegmentsBody = root.querySelector('[data-sealed-segments-body]');
@@ -364,9 +393,17 @@
         setText('snapshot_path', payload.limbo?.snapshot_path || 'N/A');
         setText('record_count', payload.limbo?.record_count ?? 0);
         setText('sealed_label', payload.limbo?.sealed ? 'YES' : 'NO');
+        setText('segment_size_bytes', payload.rotation?.segment_size_bytes ?? 0);
+        setText('segment_max_bytes', payload.rotation?.segment_max_bytes ?? 0);
+        setText('rotation_needed_label', payload.rotation?.rotation_needed ? 'YES' : 'NO');
+        setText('rotation_reason', payload.rotation?.reason || 'Sin criterio de rotacion activo.');
         setText('truncated_tail_label', payload.segment_health?.truncated_tail ? 'YES' : 'NO');
         setText('corrupted_tail_label', payload.segment_health?.corrupted_tail ? 'YES' : 'NO');
         setText('segment_error_message', payload.segment_health?.error_message || 'Sin errores de integridad reportados.');
+        if (sealButton) {
+            sealButton.dataset.actionAllowed = payload.rotation?.action_allowed ? '1' : '0';
+            sealButton.disabled = !payload.rotation?.action_allowed;
+        }
         setStatusBanner(payload.status || 'error', payload.detail || '');
         renderEvents(payload.recent_events || []);
         renderSealedSegments(payload.sealed_segments || []);
@@ -396,6 +433,13 @@
         [refreshButton, reconcileButton, resealButton].forEach((button) => {
             if (button) button.disabled = disabled;
         });
+        if (sealButton) {
+            if (disabled) {
+                sealButton.disabled = true;
+            } else {
+                sealButton.disabled = sealButton.dataset.actionAllowed !== '1';
+            }
+        }
     };
 
     const runAction = async (url, fallbackLabel) => {
@@ -431,6 +475,9 @@
     }
     if (resealButton) {
         resealButton.addEventListener('click', () => runAction(resealUrl, 'reseal segment'));
+    }
+    if (sealButton) {
+        sealButton.addEventListener('click', () => runAction(sealUrl, 'seal active segment'));
     }
 
     refreshTimer = window.setInterval(refresh, refreshIntervalMs);

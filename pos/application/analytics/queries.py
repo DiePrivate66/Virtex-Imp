@@ -236,6 +236,7 @@ def build_offline_limbo_context() -> dict:
     capture_enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS', False))
     recent_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50)))
     history_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_HISTORY_LIMIT', 5)))
+    segment_max_bytes = int(getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024))
 
     context = {
         'offline_journal_enabled': enabled,
@@ -260,6 +261,14 @@ def build_offline_limbo_context() -> dict:
             'truncated_tail': False,
             'corrupted_tail': False,
             'error_message': '',
+        },
+        'rotation': {
+            'segment_size_bytes': 0,
+            'segment_max_bytes': segment_max_bytes,
+            'seal_pending': False,
+            'rotation_needed': False,
+            'action_allowed': False,
+            'reason': 'No hay segmento activo para evaluar rotacion.',
         },
         'recent_events': [],
         'sealed_segments': [],
@@ -306,16 +315,26 @@ def build_offline_limbo_context() -> dict:
             context['detail'] = 'No hay segmentos activos para este stream.'
             return context
 
-        recovery = recover_segment_prefix(Path(segment_path_value))
+        segment_path = Path(segment_path_value)
+        snapshot_path = Path(str(limbo.get('snapshot_path') or '').strip())
+        snapshot = load_snapshot_payload(snapshot_path)
+        recovery = recover_segment_prefix(segment_path)
         context['segment_health'] = {
             'truncated_tail': recovery.truncated_tail,
             'corrupted_tail': recovery.corrupted_tail,
             'error_message': recovery.error_message,
         }
+        context['rotation'] = _build_rotation_status(
+            segment_path=segment_path,
+            snapshot=snapshot,
+            recovery=recovery,
+            segment_max_bytes=segment_max_bytes,
+        )
         context['recent_events'] = _build_recent_offline_events(recovery.records, limit=recent_limit)
         if recovery.truncated_tail or recovery.corrupted_tail:
             context['status'] = 'integrity_error'
             context['detail'] = recovery.error_message or 'El segmento activo tiene una cola invalida.'
+            context['rotation']['action_allowed'] = False
             return context
 
         context['detail'] = 'Limbo cargado desde el runtime offline.'
@@ -350,6 +369,39 @@ def _build_recent_offline_events(records, *, limit: int) -> list[dict]:
             }
         )
     return events
+
+
+def _build_rotation_status(
+    *,
+    segment_path: Path,
+    snapshot: dict,
+    recovery,
+    segment_max_bytes: int,
+) -> dict:
+    segment_size_bytes = segment_path.stat().st_size if segment_path.exists() else 0
+    seal_pending = bool(snapshot.get('seal_pending'))
+    sealed = bool(snapshot.get('sealed'))
+    rotation_needed = False
+    reason = 'El segmento aun esta por debajo del umbral de rotacion.'
+
+    if sealed:
+        reason = 'El segmento actual ya esta sellado.'
+    elif seal_pending:
+        rotation_needed = True
+        reason = 'El sidecar marca footer pendiente; el segmento debe sellarse.'
+    elif segment_size_bytes >= segment_max_bytes:
+        rotation_needed = True
+        reason = 'El segmento alcanzo el tamano maximo configurado y debe rotar.'
+
+    action_allowed = rotation_needed and not recovery.truncated_tail and not recovery.corrupted_tail
+    return {
+        'segment_size_bytes': segment_size_bytes,
+        'segment_max_bytes': segment_max_bytes,
+        'seal_pending': seal_pending,
+        'rotation_needed': rotation_needed,
+        'action_allowed': action_allowed,
+        'reason': reason,
+    }
 
 
 def _build_sealed_segment_history(

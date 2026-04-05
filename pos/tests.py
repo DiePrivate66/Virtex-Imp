@@ -1368,6 +1368,46 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(payload['recent_events'][0]['payment_reference'], 'OFFLINE-JSON-001')
         self.assertIn('refreshed_at', payload)
 
+    def test_dashboard_offline_limbo_json_reports_rotation_needed_for_oversized_active_segment(self):
+        with TemporaryDirectory() as temp_dir:
+            segment_path = Path(temp_dir) / 'sales-20260404-001.jsonl'
+            snapshot_path = Path(temp_dir) / 'sales-20260404-001.snapshot.json'
+            journal = SegmentJournal(
+                segment_path=segment_path,
+                snapshot_path=snapshot_path,
+                segment_id='sales-20260404-001',
+            )
+            journal.append_event(
+                event_id='evt-offline-rotation-1',
+                payload={
+                    'journal_event_type': 'sale',
+                    'sale_total': '11.20',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-ROTATION-001',
+                    'journal_capture_source': 'client_runtime_harness',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-rotation-001',
+                summary={'total_sales': 1, 'amount_total': '11.20'},
+            )
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_SEGMENT_MAX_BYTES=1,
+            ):
+                response = self.client.get(reverse('dashboard_offline_limbo_json'))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['rotation']['rotation_needed'])
+        self.assertTrue(payload['rotation']['action_allowed'])
+        self.assertEqual(payload['rotation']['segment_max_bytes'], 1)
+        self.assertIn('debe rotar', payload['rotation']['reason'])
+
     def test_dashboard_offline_limbo_json_includes_sealed_segment_history(self):
         with TemporaryDirectory() as temp_dir:
             runtime = SegmentedJournalRuntime(
@@ -1420,6 +1460,49 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertTrue(payload['sealed_segments'][0]['footer_present'])
         self.assertEqual(payload['sealed_segments'][0]['summary_total_sales'], 1)
         self.assertEqual(payload['sealed_segments'][0]['summary_amount_total'], '3.15')
+
+    def test_dashboard_offline_limbo_seal_json_seals_rotation_needed_segment(self):
+        with TemporaryDirectory() as temp_dir:
+            segment_path = Path(temp_dir) / 'sales-20260404-001.jsonl'
+            snapshot_path = Path(temp_dir) / 'sales-20260404-001.snapshot.json'
+            journal = SegmentJournal(
+                segment_path=segment_path,
+                snapshot_path=snapshot_path,
+                segment_id='sales-20260404-001',
+            )
+            journal.append_event(
+                event_id='evt-offline-manual-seal-1',
+                payload={
+                    'journal_event_type': 'sale',
+                    'sale_total': '10.50',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-MANUAL-SEAL-001',
+                    'journal_capture_source': 'client_runtime_harness',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-manual-seal-001',
+                summary={'total_sales': 1, 'amount_total': '10.50'},
+            )
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_SEGMENT_MAX_BYTES=1,
+            ):
+                response = self.client.post(reverse('dashboard_offline_limbo_seal_json'))
+                recovery = recover_segment_prefix(segment_path)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'seal_active_segment')
+        self.assertTrue(payload['action']['performed'])
+        self.assertTrue(payload['limbo']['sealed'])
+        self.assertFalse(payload['rotation']['rotation_needed'])
+        self.assertIn('sellado manualmente', payload['action']['detail'])
+        self.assertIsNotNone(recovery.footer)
 
     def test_dashboard_offline_limbo_json_rejects_non_admin_user(self):
         self.client.force_login(self.user)

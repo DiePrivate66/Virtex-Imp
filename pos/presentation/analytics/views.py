@@ -62,6 +62,10 @@ def dashboard_offline_limbo_reseal_json(request):
     return _execute_offline_limbo_action_json(request, action='reseal_segment')
 
 
+def dashboard_offline_limbo_seal_json(request):
+    return _execute_offline_limbo_action_json(request, action='seal_active_segment')
+
+
 def resolver_excepcion_pago(request):
     access_redirect = _require_admin_dashboard_access(request, allow_get_redirect=True)
     if access_redirect:
