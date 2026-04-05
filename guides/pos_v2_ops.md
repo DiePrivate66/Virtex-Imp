@@ -207,6 +207,7 @@ Inspect the current limbo directly from the app:
 - the critical-only view now also supports bulk admin actions for selected historical segments, returning per-segment success/failure so one bad segment does not block the rest of the batch
 - each bulk action now records an aggregate `AuditLog` batch event, and the critical view surfaces summary metrics for runs, processed segments, failures, and last execution so operators can audit batch activity without leaving analytics
 - each metric card also links to the most relevant batch `AuditLog` for direct drill-down: latest observed batch, highest-volume batch, latest failing batch, and the last execution record
+- Bosco also exposes `/dashboard/incidentes-offline/lotes/` as a dedicated batch view that reuses the same period and operational filters (`time window`, `organization`, `location`, `actor`) and supports focusing a specific run by `AuditLog ID`
 - that table now also supports operational filters by a secondary time window, action type, organization, location, actor, segment status, explicit footer presence, and the operational result recorded in `AuditLog` while preserving the active analytics period
 - that same table now also supports quick partial lookup by `segment_id`, so operators can jump into an incident even when they only have a fragment of the segment identifier
 - each row in that table now provides direct navigation to `/dashboard/limbo-offline/?segment_id=<segment_id>` and to `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`

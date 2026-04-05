@@ -6,6 +6,7 @@ from .commands import (
 )
 from .queries import (
     build_analytics_dashboard_context,
+    build_offline_bulk_runs_context,
     build_offline_critical_incidents_context,
     build_offline_critical_incidents_export_payload,
     build_offline_limbo_context,
@@ -16,6 +17,7 @@ from .queries import (
 __all__ = [
     'OfflineLimboActionError',
     'build_analytics_dashboard_context',
+    'build_offline_bulk_runs_context',
     'build_offline_critical_incidents_context',
     'build_offline_critical_incidents_export_payload',
     'build_offline_limbo_context',

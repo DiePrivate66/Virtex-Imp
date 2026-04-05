@@ -78,6 +78,11 @@ urlpatterns = [
     path('dashboard/', analytics_views.dashboard_analytics, name='dashboard_analytics'),
     path('dashboard/incidentes-offline/', analytics_views.dashboard_offline_incidents, name='dashboard_offline_incidents'),
     path(
+        'dashboard/incidentes-offline/lotes/',
+        analytics_views.dashboard_offline_incident_batches,
+        name='dashboard_offline_incident_batches',
+    ),
+    path(
         'dashboard/incidentes-offline/export.json',
         analytics_views.dashboard_offline_incidents_export_json,
         name='dashboard_offline_incidents_export_json',

@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+    <div class="flex items-start justify-between gap-4 mb-6">
+        <div class="flex flex-col gap-3">
+            <a
+                href="{{ offline_bulk_back_to_incidents_href }}"
+                class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition"
+            >
+                &larr; VOLVER A INCIDENTES
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tight">LOTES OFFLINE AUDITADOS</h1>
+                <p class="text-gray-500 text-xs font-bold mt-1">Revision de lotes agregados registrados por acciones masivas sobre segmentos offline.</p>
+            </div>
+        </div>
+        <div class="bg-indigo-500 text-black text-2xl font-black px-4 py-2 rounded-xl">
+            {{ offline_bulk_runs_count }}
+        </div>
+    </div>
+
+    <div class="flex gap-2 mb-6">
+        {% for val, label in periods %}
+        <a href="?periodo={{ val }}" class="px-4 py-2 rounded-lg text-xs font-black uppercase transition
+            {% if periodo == val %}bg-bosco-orange text-black{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">LOTES</p>
+            <p class="text-white text-4xl font-black mt-2">{{ offline_bulk_metrics.runs_count }}</p>
+            <p class="text-gray-600 text-xs mt-1">Revalidaciones: {{ offline_bulk_metrics.revalidate_runs }} · Revisiones: {{ offline_bulk_metrics.review_runs }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">SEGMENTOS PROCESADOS</p>
+            <p class="text-white text-4xl font-black mt-2">{{ offline_bulk_metrics.processed_total }}</p>
+            <p class="text-gray-600 text-xs mt-1">Exitosos: {{ offline_bulk_metrics.succeeded_total }}</p>
+        </div>
+        <div class="bg-gradient-to-br from-red-900/30 to-red-900/10 rounded-2xl border border-red-800/30 p-5">
+            <p class="text-red-300 text-[10px] font-black uppercase tracking-widest">FALLOS REPORTADOS</p>
+            <p class="text-red-300 text-4xl font-black mt-2">{{ offline_bulk_metrics.failed_total }}</p>
+            <p class="text-gray-600 text-xs mt-1">Lotes con error dentro del filtro actual</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">ULTIMA EJECUCION</p>
+            {% if offline_bulk_metrics.last_run_at %}
+            <p class="text-white text-2xl font-black mt-2">{{ offline_bulk_metrics.last_run_at|date:"d/m H:i" }}</p>
+            <p class="text-gray-600 text-xs mt-1">{{ offline_bulk_metrics.last_run_actor|default:"SIN_USUARIO" }}</p>
+            {% else %}
+            <p class="text-white text-2xl font-black mt-2">SIN_DATOS</p>
+            <p class="text-gray-600 text-xs mt-1">No hay lotes registrados en este periodo</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if offline_bulk_selected_run %}
+    <div class="rounded-2xl border border-indigo-700/40 bg-indigo-950/30 p-4 mb-6">
+        <p class="text-indigo-300 text-xs font-black uppercase tracking-widest">Lote Seleccionado</p>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-3 text-sm">
+            <div>
+                <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">AuditLog</p>
+                <p class="text-white font-black mt-1">#{{ offline_bulk_selected_run.id }}</p>
+            </div>
+            <div>
+                <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Batch ID</p>
+                <p class="text-white font-black mt-1 break-all">{{ offline_bulk_selected_run.target_id }}</p>
+            </div>
+            <div>
+                <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Accion</p>
+                <p class="text-white font-black mt-1">{{ offline_bulk_selected_run.bulk_action_label }}</p>
+            </div>
+            <div>
+                <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Resultado</p>
+                <p class="text-white font-black mt-1">{{ offline_bulk_selected_run.bulk_succeeded }}/{{ offline_bulk_selected_run.bulk_processed }} OK</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-4">
+        <input type="hidden" name="periodo" value="{{ periodo }}">
+        {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
+        {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
+        <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">AuditLog ID</label>
+                <input
+                    type="text"
+                    name="offline_bulk_audit_log"
+                    value="{{ offline_bulk_action_filter_audit_log|default:'' }}"
+                    placeholder="123"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Ventana Temporal</label>
+                <select name="offline_action_time_window" class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white">
+                    {% for value, label in offline_audited_action_time_window_options %}
+                    <option value="{{ value }}" {% if offline_bulk_action_filter_time_window == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Tipo De Lote</label>
+                <select name="offline_bulk_action_type" class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white">
+                    {% for value, label in offline_bulk_action_type_options %}
+                    <option value="{{ value }}" {% if offline_bulk_action_filter_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Organizacion</label>
+                <select name="offline_action_organization" class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white">
+                    <option value="">Todas</option>
+                    {% for option in offline_bulk_action_organization_options %}
+                    <option value="{{ option.organization_id }}" {% if offline_bulk_action_filter_organization == option.organization_id|stringformat:"s" %}selected{% endif %}>{{ option.organization__name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Sucursal</label>
+                <select name="offline_action_location" class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white">
+                    <option value="">Todas</option>
+                    {% for option in offline_bulk_action_location_options %}
+                    <option value="{{ option.location_id }}" {% if offline_bulk_action_filter_location == option.location_id|stringformat:"s" %}selected{% endif %}>{{ option.location__name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Actor</label>
+                <select name="offline_action_actor" class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white">
+                    <option value="">Todos</option>
+                    {% for option in offline_bulk_action_actor_options %}
+                    <option value="{{ option.actor_user_id }}" {% if offline_bulk_action_filter_actor == option.actor_user_id|stringformat:"s" %}selected{% endif %}>{{ option.actor_user__username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-4">
+            <button type="submit" class="bg-indigo-500 hover:bg-indigo-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
+                Filtrar
+            </button>
+            <a href="{{ offline_bulk_clear_href }}" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-black px-4 py-2 rounded-lg transition">
+                Limpiar
+            </a>
+        </div>
+    </form>
+
+    {% if offline_bulk_runs_count %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                    <th class="pb-2 font-black">Hora</th>
+                    <th class="pb-2 font-black">Tipo</th>
+                    <th class="pb-2 font-black">Batch</th>
+                    <th class="pb-2 font-black">Procesados</th>
+                    <th class="pb-2 font-black">Fallos</th>
+                    <th class="pb-2 font-black">Actor</th>
+                    <th class="pb-2 font-black">Sucursal</th>
+                    <th class="pb-2 font-black text-right">Detalle</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm">
+                {% for batch in offline_bulk_runs %}
+                <tr class="border-b border-gray-800/50 transition {% if batch.bulk_is_selected %}bg-indigo-950/30{% else %}hover:bg-gray-800/30{% endif %}">
+                    <td class="py-3 text-gray-300 text-xs">{{ batch.created_at|date:"d/m H:i" }}</td>
+                    <td class="py-3 text-xs">
+                        <span class="px-2 py-1 rounded-md text-[10px] font-black {% if batch.event_type == 'offline.segment_bulk_revalidated' %}bg-sky-900/40 text-sky-300{% else %}bg-violet-900/40 text-violet-300{% endif %}">
+                            {{ batch.bulk_action_label }}
+                        </span>
+                    </td>
+                    <td class="py-3 text-xs">
+                        <p class="text-white font-bold break-all">{{ batch.target_id }}</p>
+                        <p class="text-gray-500 text-[10px] mt-1">AuditLog #{{ batch.id }}</p>
+                    </td>
+                    <td class="py-3 text-xs">
+                        <p class="text-white font-black">{{ batch.bulk_processed }}</p>
+                        <p class="text-gray-500 text-[10px] mt-1">OK {{ batch.bulk_succeeded }}</p>
+                    </td>
+                    <td class="py-3 text-xs">
+                        <p class="{% if batch.bulk_failed %}text-red-300{% else %}text-emerald-300{% endif %} font-black">{{ batch.bulk_failed }}</p>
+                        <p class="text-gray-500 text-[10px] mt-1">{{ batch.bulk_failed_details|length }} detalle(s)</p>
+                    </td>
+                    <td class="py-3 text-gray-300 text-xs">{% if batch.actor_user %}{{ batch.actor_user.username }}{% else %}SIN_USUARIO{% endif %}</td>
+                    <td class="py-3 text-gray-300 text-xs">{% if batch.location %}{{ batch.location.name }}{% else %}{{ batch.organization.name|default:"SIN_UBICACION" }}{% endif %}</td>
+                    <td class="py-3 text-right text-xs">
+                        <div class="flex justify-end gap-2">
+                            <a
+                                href="?periodo={{ periodo }}{% if desde %}&desde={{ desde }}{% endif %}{% if hasta %}&hasta={{ hasta }}{% endif %}{% if offline_bulk_action_filter_time_window %}&offline_action_time_window={{ offline_bulk_action_filter_time_window|urlencode }}{% endif %}{% if offline_bulk_action_filter_type %}&offline_bulk_action_type={{ offline_bulk_action_filter_type|urlencode }}{% endif %}{% if offline_bulk_action_filter_organization %}&offline_action_organization={{ offline_bulk_action_filter_organization|urlencode }}{% endif %}{% if offline_bulk_action_filter_location %}&offline_action_location={{ offline_bulk_action_filter_location|urlencode }}{% endif %}{% if offline_bulk_action_filter_actor %}&offline_action_actor={{ offline_bulk_action_filter_actor|urlencode }}{% endif %}&offline_bulk_audit_log={{ batch.id }}"
+                                class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                            >
+                                Focus
+                            </a>
+                            <a
+                                href="{% url 'admin:pos_auditlog_change' batch.id %}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-emerald-900/50 text-emerald-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-emerald-800/50 transition"
+                            >
+                                AuditLog
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="rounded-xl border border-dashed border-indigo-700/50 bg-black/20 px-4 py-6 text-center text-sm text-indigo-100">
+        No hay lotes offline auditados que coincidan con los filtros actuales.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

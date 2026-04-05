@@ -56,6 +56,12 @@ OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP = {
     'mark_operational_review': 'offline.segment_bulk_review_marked',
 }
 
+OFFLINE_AUDIT_BULK_EVENT_TYPE_OPTIONS = (
+    ('', 'Todos'),
+    ('offline.segment_bulk_revalidated', 'Revalidacion masiva'),
+    ('offline.segment_bulk_review_marked', 'Revision masiva'),
+)
+
 
 def _resolve_period(periodo: str, hoy, desde_param, hasta_param):
     if periodo == 'hoy':
@@ -656,6 +662,165 @@ def build_offline_critical_incidents_export_payload(
         'sort_order': offline_audit_bundle['selected_sort_order'],
         'count': len(items),
         'items': [_serialize_offline_audit_item(item) for item in items],
+    }
+
+
+def build_offline_bulk_runs_context(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_action_time_window: str = '',
+    offline_action_organization: str = '',
+    offline_action_location: str = '',
+    offline_action_actor: str = '',
+    offline_bulk_action_type: str = '',
+    offline_bulk_audit_log: str = '',
+):
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    bulk_bundle = _build_offline_bulk_audit_runs(
+        desde,
+        hasta,
+        time_window=offline_action_time_window,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+        action_type=offline_bulk_action_type,
+        selected_audit_log=offline_bulk_audit_log,
+    )
+    offline_bulk_metrics = _build_offline_bulk_action_metrics(
+        desde,
+        hasta,
+        time_window=offline_action_time_window,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+    )
+    context = {
+        'periodo': periodo,
+        'desde': desde,
+        'hasta': hasta,
+        'periods': [('hoy', 'Hoy'), ('semana', '7 dias'), ('mes', '30 dias')],
+        'offline_bulk_runs': bulk_bundle['items'],
+        'offline_bulk_runs_count': len(bulk_bundle['items']),
+        'offline_audited_action_time_window_options': OFFLINE_AUDIT_TIME_WINDOW_OPTIONS,
+        'offline_bulk_action_type_options': OFFLINE_AUDIT_BULK_EVENT_TYPE_OPTIONS,
+        'offline_bulk_action_filter_type': bulk_bundle['selected_action_type'],
+        'offline_bulk_action_filter_time_window': bulk_bundle['selected_time_window'],
+        'offline_bulk_action_filter_organization': bulk_bundle['selected_organization_id'],
+        'offline_bulk_action_filter_location': bulk_bundle['selected_location_id'],
+        'offline_bulk_action_filter_actor': bulk_bundle['selected_actor_id'],
+        'offline_bulk_action_filter_audit_log': bulk_bundle['selected_audit_log'],
+        'offline_bulk_action_organization_options': bulk_bundle['organization_options'],
+        'offline_bulk_action_location_options': bulk_bundle['location_options'],
+        'offline_bulk_action_actor_options': bulk_bundle['actor_options'],
+        'offline_bulk_selected_run': bulk_bundle['selected_run'],
+        'offline_bulk_metrics': offline_bulk_metrics,
+    }
+    return context
+
+
+def _build_offline_bulk_audit_runs(
+    desde,
+    hasta,
+    *,
+    time_window: str = '',
+    organization_id: str = '',
+    location_id: str = '',
+    actor_id: str = '',
+    action_type: str = '',
+    selected_audit_log: str = '',
+):
+    base_queryset = (
+        AuditLog.objects.filter(
+            event_type__in=list(OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP.values()),
+            created_at__date__gte=desde,
+            created_at__date__lte=hasta,
+        )
+        .select_related('organization', 'location', 'actor_user')
+    )
+    organization_options = list(
+        base_queryset.exclude(organization__isnull=True)
+        .values('organization_id', 'organization__name')
+        .distinct()
+        .order_by('organization__name')
+    )
+    location_options = list(
+        base_queryset.exclude(location__isnull=True)
+        .values('location_id', 'location__name')
+        .distinct()
+        .order_by('location__name')
+    )
+    actor_options = list(
+        base_queryset.exclude(actor_user__isnull=True)
+        .values('actor_user_id', 'actor_user__username')
+        .distinct()
+        .order_by('actor_user__username')
+    )
+
+    queryset = base_queryset
+    normalized_time_window = str(time_window or '').strip()
+    if normalized_time_window in {'24h', '72h', '168h'}:
+        hours = int(normalized_time_window[:-1])
+        queryset = queryset.filter(created_at__gte=timezone.now() - timedelta(hours=hours))
+    else:
+        normalized_time_window = ''
+
+    normalized_organization_id = str(organization_id or '').strip()
+    if normalized_organization_id.isdigit():
+        queryset = queryset.filter(organization_id=int(normalized_organization_id))
+    else:
+        normalized_organization_id = ''
+
+    normalized_location_id = str(location_id or '').strip()
+    if normalized_location_id.isdigit():
+        queryset = queryset.filter(location_id=int(normalized_location_id))
+    else:
+        normalized_location_id = ''
+
+    normalized_actor_id = str(actor_id or '').strip()
+    if normalized_actor_id.isdigit():
+        queryset = queryset.filter(actor_user_id=int(normalized_actor_id))
+    else:
+        normalized_actor_id = ''
+
+    normalized_action_type = str(action_type or '').strip()
+    if normalized_action_type in dict(OFFLINE_AUDIT_BULK_EVENT_TYPE_OPTIONS):
+        if normalized_action_type:
+            queryset = queryset.filter(event_type=normalized_action_type)
+    else:
+        normalized_action_type = ''
+
+    normalized_selected_audit_log = str(selected_audit_log or '').strip()
+    items = []
+    selected_run = None
+    for item in queryset.order_by('-created_at'):
+        payload = dict(item.payload_json or {})
+        item.bulk_processed = int(payload.get('processed') or 0)
+        item.bulk_succeeded = int(payload.get('succeeded') or 0)
+        item.bulk_failed = int(payload.get('failed') or 0)
+        item.bulk_failed_details = payload.get('failed_details') or []
+        item.bulk_action_label = {
+            'offline.segment_bulk_revalidated': 'REVALIDACION_MASIVA',
+            'offline.segment_bulk_review_marked': 'REVISION_MASIVA',
+        }.get(item.event_type, item.event_type)
+        item.bulk_is_selected = normalized_selected_audit_log == str(item.id)
+        if item.bulk_is_selected:
+            selected_run = item
+        items.append(item)
+
+    return {
+        'items': items,
+        'organization_options': organization_options,
+        'location_options': location_options,
+        'actor_options': actor_options,
+        'selected_action_type': normalized_action_type,
+        'selected_time_window': normalized_time_window,
+        'selected_organization_id': normalized_organization_id,
+        'selected_location_id': normalized_location_id,
+        'selected_actor_id': normalized_actor_id,
+        'selected_audit_log': normalized_selected_audit_log,
+        'selected_run': selected_run,
     }
 
 

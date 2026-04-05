@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from .application.analytics import (
     build_analytics_dashboard_context,
+    build_offline_bulk_runs_context,
     build_offline_critical_incidents_context,
     build_offline_limbo_context,
 )
@@ -1506,6 +1507,41 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(context['offline_bulk_metrics']['failed_reference']['audit_log_id'], revalidate_batch.id)
         self.assertEqual(context['offline_bulk_metrics']['last_run_reference']['audit_log_id'], review_batch.id)
 
+    def test_offline_bulk_runs_context_filters_and_selects_batch(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-ctx-001',
+            payload_json={'processed': 5, 'succeeded': 4, 'failed': 1},
+            correlation_id='revalidate-batch-ctx-001',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-ctx-001',
+            payload_json={'processed': 3, 'succeeded': 3, 'failed': 0},
+            correlation_id='review-batch-ctx-001',
+        )
+
+        context = build_offline_bulk_runs_context(
+            periodo='semana',
+            offline_bulk_action_type='offline.segment_bulk_revalidated',
+            offline_bulk_audit_log=str(selected_batch.id),
+        )
+
+        self.assertEqual(context['offline_bulk_runs_count'], 1)
+        self.assertEqual(context['offline_bulk_runs'][0].id, selected_batch.id)
+        self.assertTrue(context['offline_bulk_runs'][0].bulk_is_selected)
+        self.assertEqual(context['offline_bulk_selected_run'].id, selected_batch.id)
+        self.assertEqual(context['offline_bulk_action_filter_type'], 'offline.segment_bulk_revalidated')
+        self.assertEqual(context['offline_bulk_action_filter_audit_log'], str(selected_batch.id))
+
     def test_dashboard_renders_offline_audited_actions_table(self):
         audit = AuditLog.objects.create(
             organization=self.location.organization,
@@ -1665,6 +1701,7 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'SEGMENTOS PROCESADOS')
         self.assertContains(response, 'FALLOS REPORTADOS')
         self.assertContains(response, 'ULTIMA EJECUCION')
+        self.assertContains(response, reverse('dashboard_offline_incident_batches'))
         self.assertContains(
             response,
             reverse('admin:pos_auditlog_change', args=[latest_batch.id]),
@@ -1674,6 +1711,46 @@ class AnalyticsReplayTimelineTests(TestCase):
             response,
             reverse('admin:pos_auditlog_change', args=[failing_batch.id]),
         )
+
+    def test_offline_incident_batches_view_renders_filtered_batches(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-view-001',
+            payload_json={'processed': 7, 'succeeded': 6, 'failed': 1},
+            correlation_id='revalidate-batch-view-001',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-view-001',
+            payload_json={'processed': 2, 'succeeded': 2, 'failed': 0},
+            correlation_id='review-batch-view-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batches'),
+            {
+                'periodo': 'semana',
+                'offline_bulk_action_type': 'offline.segment_bulk_revalidated',
+                'offline_bulk_audit_log': str(selected_batch.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'LOTES OFFLINE AUDITADOS')
+        self.assertContains(response, 'revalidate-batch-view-001')
+        self.assertNotContains(response, 'review-batch-view-001')
+        self.assertContains(response, 'Lote Seleccionado')
+        self.assertContains(response, reverse('admin:pos_auditlog_change', args=[selected_batch.id]))
+        self.assertContains(response, reverse('dashboard_offline_incidents'))
 
     def test_offline_critical_incidents_json_export_returns_filtered_rows(self):
         AuditLog.objects.create(

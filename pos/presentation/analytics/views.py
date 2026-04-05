@@ -13,6 +13,7 @@ from django.urls import reverse
 from pos.application.analytics import (
     OfflineLimboActionError,
     build_analytics_dashboard_context,
+    build_offline_bulk_runs_context,
     build_offline_critical_incidents_context,
     build_offline_critical_incidents_export_payload,
     build_offline_limbo_context,
@@ -98,7 +99,38 @@ def dashboard_offline_incidents(request):
             export_query_params=_build_offline_actions_query_params_from_context(context),
         )
     )
+    context['offline_bulk_runs_href'] = (
+        f"{reverse('dashboard_offline_incident_batches')}?"
+        f"{urlencode(_build_offline_bulk_query_params_from_context(context))}"
+    )
     return render(request, 'pos/offline_incidents.html', context)
+
+
+def dashboard_offline_incident_batches(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    context = build_offline_bulk_runs_context(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_action_time_window=request.GET.get('offline_action_time_window', ''),
+        offline_action_organization=request.GET.get('offline_action_organization', ''),
+        offline_action_location=request.GET.get('offline_action_location', ''),
+        offline_action_actor=request.GET.get('offline_action_actor', ''),
+        offline_bulk_action_type=request.GET.get('offline_bulk_action_type', ''),
+        offline_bulk_audit_log=request.GET.get('offline_bulk_audit_log', ''),
+    )
+    context['offline_bulk_clear_href'] = (
+        f"{reverse('dashboard_offline_incident_batches')}?"
+        f"{urlencode(_build_period_query_params(context['periodo'], context['desde'], context['hasta']))}"
+    )
+    context['offline_bulk_back_to_incidents_href'] = (
+        f"{reverse('dashboard_offline_incidents')}?"
+        f"{urlencode(_build_offline_bulk_back_to_incidents_query_params(context))}"
+    )
+    return render(request, 'pos/offline_incident_batches.html', context)
 
 
 def dashboard_offline_incidents_export_json(request):
@@ -424,6 +456,36 @@ def _build_offline_actions_query_params_from_context(context):
         value = str(context.get(field_name, '') or '').strip()
         if value:
             params[field_name.replace('offline_audited_action_filter_', 'offline_action_')] = value
+    return params
+
+
+def _build_offline_bulk_query_params_from_context(context):
+    params = _build_period_query_params(context['periodo'], context['desde'], context['hasta'])
+    mapping = {
+        'offline_audited_action_filter_time_window': 'offline_action_time_window',
+        'offline_audited_action_filter_organization': 'offline_action_organization',
+        'offline_audited_action_filter_location': 'offline_action_location',
+        'offline_audited_action_filter_actor': 'offline_action_actor',
+    }
+    for context_field, query_name in mapping.items():
+        value = str(context.get(context_field, '') or '').strip()
+        if value:
+            params[query_name] = value
+    return params
+
+
+def _build_offline_bulk_back_to_incidents_query_params(context):
+    params = _build_period_query_params(context['periodo'], context['desde'], context['hasta'])
+    mapping = {
+        'offline_bulk_action_filter_time_window': 'offline_action_time_window',
+        'offline_bulk_action_filter_organization': 'offline_action_organization',
+        'offline_bulk_action_filter_location': 'offline_action_location',
+        'offline_bulk_action_filter_actor': 'offline_action_actor',
+    }
+    for context_field, query_name in mapping.items():
+        value = str(context.get(context_field, '') or '').strip()
+        if value:
+            params[query_name] = value
     return params
 
 
