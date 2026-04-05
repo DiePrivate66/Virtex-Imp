@@ -123,6 +123,7 @@ def dashboard_offline_incident_batches(request):
         offline_action_actor=request.GET.get('offline_action_actor', ''),
         offline_bulk_action_type=request.GET.get('offline_bulk_action_type', ''),
         offline_bulk_audit_log=request.GET.get('offline_bulk_audit_log', ''),
+        offline_bulk_batch_id=request.GET.get('offline_bulk_batch_id', ''),
     )
     context['offline_bulk_clear_href'] = (
         f"{reverse('dashboard_offline_incident_batches')}?"
@@ -208,7 +209,10 @@ def dashboard_offline_incident_batch_json(request):
         return api_error
     try:
         return JsonResponse(
-            build_offline_bulk_run_detail_payload(request.GET.get('audit_log_id', ''))
+            build_offline_bulk_run_detail_payload(
+                audit_log_id=request.GET.get('audit_log_id', ''),
+                batch_id=request.GET.get('batch_id', ''),
+            )
         )
     except ValueError as exc:
         return JsonResponse({'detail': str(exc)}, status=400)
@@ -599,6 +603,7 @@ def _build_offline_bulk_runs_export_payload_from_request(request):
         offline_action_actor=request.GET.get('offline_action_actor', ''),
         offline_bulk_action_type=request.GET.get('offline_bulk_action_type', ''),
         offline_bulk_audit_log=request.GET.get('offline_bulk_audit_log', ''),
+        offline_bulk_batch_id=request.GET.get('offline_bulk_batch_id', ''),
     )
     for item in payload['items']:
         item['detail_json_url'] = _build_offline_batch_json_href(item['audit_log_id'])
@@ -618,6 +623,7 @@ def _build_offline_bulk_export_query_params_from_context(context):
         'offline_bulk_action_filter_actor': 'offline_action_actor',
         'offline_bulk_action_filter_type': 'offline_bulk_action_type',
         'offline_bulk_action_filter_audit_log': 'offline_bulk_audit_log',
+        'offline_bulk_action_filter_batch_id': 'offline_bulk_batch_id',
     }
     for context_field, query_name in mapping.items():
         value = str(context.get(context_field, '') or '').strip()

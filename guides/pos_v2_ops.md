@@ -210,6 +210,7 @@ Inspect the current limbo directly from the app:
 - Bosco also exposes `/dashboard/incidentes-offline/lotes/` as a dedicated batch view that reuses the same period and operational filters (`time window`, `organization`, `location`, `actor`) and supports focusing a specific run by `AuditLog ID`
 - that batch view also exposes `CSV` and `JSON` exports for the exact filtered subset, carrying the same focus metadata (`AuditLog ID`) used on screen
 - each batch run also exposes its own JSON endpoint at `/dashboard/incidentes-offline/lotes/run.json?audit_log_id=<id>`, linked from the batch table and embedded in the exports for finer drill-down without relying on admin
+- that drill-down now also accepts direct lookup by `batch_id`, both in `/dashboard/incidentes-offline/lotes/` and in the individual endpoint (`run.json?batch_id=<batch_id>`), so operators are not forced to know the internal `AuditLog` id
 - that table now also supports operational filters by a secondary time window, action type, organization, location, actor, segment status, explicit footer presence, and the operational result recorded in `AuditLog` while preserving the active analytics period
 - that same table now also supports quick partial lookup by `segment_id`, so operators can jump into an incident even when they only have a fragment of the segment identifier
 - each row in that table now provides direct navigation to `/dashboard/limbo-offline/?segment_id=<segment_id>` and to `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
