@@ -202,6 +202,7 @@ Inspect the current limbo directly from the app:
 - the expanded UI detail now shows the central logging result directly, including `audit_log_id` when recorded or the explicit skip reason when tenant scope could not be resolved
 - the main analytics dashboard now includes an `ACCIONES OFFLINE AUDITADAS` table filtered by the active period so recent offline operations can be reviewed without opening each historical segment detail
 - that table now supports operational ordering by newest first, missing-footer first, and unreviewed first so incident triage can be driven by severity instead of chronology alone
+- Bosco also exposes `/dashboard/incidentes-offline/` as a dedicated critical-only view backed by the same filters and ordering rules, but restricted to segments still in incident state (`footer missing` or non-`sealed` status)
 - that table now also supports operational filters by a secondary time window, action type, organization, location, actor, segment status, explicit footer presence, and the operational result recorded in `AuditLog` while preserving the active analytics period
 - that same table now also supports quick partial lookup by `segment_id`, so operators can jump into an incident even when they only have a fragment of the segment identifier
 - each row in that table now provides direct navigation to `/dashboard/limbo-offline/?segment_id=<segment_id>` and to `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`

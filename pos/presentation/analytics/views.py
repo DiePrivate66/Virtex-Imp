@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 
 from pos.application.analytics import (
     OfflineLimboActionError,
     build_analytics_dashboard_context,
+    build_offline_critical_incidents_context,
     build_offline_limbo_context,
     build_offline_limbo_payload,
     build_offline_segment_detail_payload,
@@ -28,25 +31,69 @@ def dashboard_analytics(request):
     if access_redirect:
         return access_redirect
 
-    return render(
-        request,
-        'pos/dashboard.html',
-        build_analytics_dashboard_context(
-            periodo=request.GET.get('periodo', 'semana'),
-            desde_param=request.GET.get('desde'),
-            hasta_param=request.GET.get('hasta'),
-            offline_action_segment_id=request.GET.get('offline_action_segment_id', ''),
-            offline_action_time_window=request.GET.get('offline_action_time_window', ''),
-            offline_action_type=request.GET.get('offline_action_type', ''),
-            offline_action_organization=request.GET.get('offline_action_organization', ''),
-            offline_action_location=request.GET.get('offline_action_location', ''),
-            offline_action_actor=request.GET.get('offline_action_actor', ''),
-            offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
-            offline_action_result=request.GET.get('offline_action_result', ''),
-            offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
-            offline_action_sort=request.GET.get('offline_action_sort', 'recent'),
-        ),
+    context = build_analytics_dashboard_context(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_action_segment_id=request.GET.get('offline_action_segment_id', ''),
+        offline_action_time_window=request.GET.get('offline_action_time_window', ''),
+        offline_action_type=request.GET.get('offline_action_type', ''),
+        offline_action_organization=request.GET.get('offline_action_organization', ''),
+        offline_action_location=request.GET.get('offline_action_location', ''),
+        offline_action_actor=request.GET.get('offline_action_actor', ''),
+        offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
+        offline_action_result=request.GET.get('offline_action_result', ''),
+        offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
+        offline_action_sort=request.GET.get('offline_action_sort', 'recent'),
     )
+    context.update(
+        _build_offline_actions_panel_context(
+            route_name='dashboard_analytics',
+            periodo=context['periodo'],
+            desde=context['desde'],
+            hasta=context['hasta'],
+            title='ACCIONES OFFLINE AUDITADAS',
+            subtitle='Revision centralizada del journal offline dentro del periodo activo.',
+            force_render=False,
+            critical_view=False,
+        )
+    )
+    return render(request, 'pos/dashboard.html', context)
+
+
+def dashboard_offline_incidents(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    context = build_offline_critical_incidents_context(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_action_segment_id=request.GET.get('offline_action_segment_id', ''),
+        offline_action_time_window=request.GET.get('offline_action_time_window', ''),
+        offline_action_type=request.GET.get('offline_action_type', ''),
+        offline_action_organization=request.GET.get('offline_action_organization', ''),
+        offline_action_location=request.GET.get('offline_action_location', ''),
+        offline_action_actor=request.GET.get('offline_action_actor', ''),
+        offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
+        offline_action_result=request.GET.get('offline_action_result', ''),
+        offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
+        offline_action_sort=request.GET.get('offline_action_sort', 'footer_missing'),
+    )
+    context.update(
+        _build_offline_actions_panel_context(
+            route_name='dashboard_offline_incidents',
+            periodo=context['periodo'],
+            desde=context['desde'],
+            hasta=context['hasta'],
+            title='INCIDENTES OFFLINE CRITICOS',
+            subtitle='Solo segmentos con footer faltante o estado distinto de sealed.',
+            force_render=True,
+            critical_view=True,
+        )
+    )
+    return render(request, 'pos/offline_incidents.html', context)
 
 
 def dashboard_offline_limbo(request):
@@ -247,3 +294,35 @@ def _execute_offline_segment_action_json(request, *, action: str):
             },
             status=409,
         )
+
+
+def _build_offline_actions_panel_context(
+    *,
+    route_name: str,
+    periodo,
+    desde,
+    hasta,
+    title: str,
+    subtitle: str,
+    force_render: bool,
+    critical_view: bool,
+):
+    period_query = urlencode(_build_period_query_params(periodo, desde, hasta))
+    return {
+        'offline_actions_title': title,
+        'offline_actions_subtitle': subtitle,
+        'offline_actions_force_render': force_render,
+        'offline_actions_clear_href': f"{reverse(route_name)}?{period_query}",
+        'offline_actions_critical_view': critical_view,
+        'offline_actions_secondary_href': f"{reverse('dashboard_analytics' if critical_view else 'dashboard_offline_incidents')}?{period_query}",
+        'offline_actions_secondary_label': 'Volver a analytics' if critical_view else 'Solo criticos',
+    }
+
+
+def _build_period_query_params(periodo, desde, hasta):
+    params = {'periodo': periodo}
+    if desde:
+        params['desde'] = str(desde)
+    if hasta:
+        params['hasta'] = str(hasta)
+    return params

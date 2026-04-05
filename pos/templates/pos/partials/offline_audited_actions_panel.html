@@ -1,0 +1,289 @@
+{% if offline_actions_force_render or offline_audited_actions_count %}
+<div class="bg-indigo-950/40 rounded-2xl border border-indigo-700/50 p-6 mb-6">
+    <div class="flex items-center justify-between gap-4 mb-4">
+        <div>
+            <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">{{ offline_actions_title|default:"ACCIONES OFFLINE AUDITADAS" }}</h2>
+            <p class="text-indigo-200 text-xs mt-1">
+                {% if offline_actions_subtitle %}
+                {{ offline_actions_subtitle }}
+                {% else %}
+                {{ offline_audited_actions_count }} accion(es) auditadas del journal offline en el periodo activo.
+                {% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a
+                href="{{ offline_actions_secondary_href }}"
+                class="bg-gray-800 hover:bg-gray-700 text-gray-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                {{ offline_actions_secondary_label }}
+            </a>
+            <div class="bg-indigo-500 text-black text-2xl font-black px-4 py-2 rounded-xl">
+                {{ offline_audited_actions_count }}
+            </div>
+        </div>
+    </div>
+    <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-4">
+        <input type="hidden" name="periodo" value="{{ periodo }}">
+        {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
+        {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
+        <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-11 gap-3">
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Segment ID</label>
+                <input
+                    type="text"
+                    name="offline_action_segment_id"
+                    value="{{ offline_audited_action_filter_segment_id|default:'' }}"
+                    placeholder="sales-20260404"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Ventana Temporal</label>
+                <select
+                    name="offline_action_time_window"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_audited_action_time_window_options %}
+                    <option value="{{ value }}" {% if offline_audited_action_filter_time_window == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Tipo De Accion</label>
+                <select
+                    name="offline_action_type"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_audited_action_type_options %}
+                    <option value="{{ value }}" {% if offline_audited_action_filter_type == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Organizacion</label>
+                <select
+                    name="offline_action_organization"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    <option value="">Todas</option>
+                    {% for option in offline_audited_action_organization_options %}
+                    <option
+                        value="{{ option.organization_id }}"
+                        {% if offline_audited_action_filter_organization == option.organization_id|stringformat:"s" %}selected{% endif %}
+                    >
+                        {{ option.organization__name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Sucursal</label>
+                <select
+                    name="offline_action_location"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    <option value="">Todas</option>
+                    {% for option in offline_audited_action_location_options %}
+                    <option
+                        value="{{ option.location_id }}"
+                        {% if offline_audited_action_filter_location == option.location_id|stringformat:"s" %}selected{% endif %}
+                    >
+                        {{ option.location__name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Actor</label>
+                <select
+                    name="offline_action_actor"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    <option value="">Todos</option>
+                    {% for option in offline_audited_action_actor_options %}
+                    <option
+                        value="{{ option.actor_user_id }}"
+                        {% if offline_audited_action_filter_actor == option.actor_user_id|stringformat:"s" %}selected{% endif %}
+                    >
+                        {{ option.actor_user__username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Estado Del Segmento</label>
+                <select
+                    name="offline_action_segment_status"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    <option value="">Todos</option>
+                    {% for value in offline_audited_action_segment_status_options %}
+                    <option
+                        value="{{ value }}"
+                        {% if offline_audited_action_filter_segment_status == value %}selected{% endif %}
+                    >
+                        {{ value }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Resultado AuditLog</label>
+                <select
+                    name="offline_action_result"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_audited_action_result_options %}
+                    <option value="{{ value }}" {% if offline_audited_action_filter_result == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Presencia De Footer</label>
+                <select
+                    name="offline_action_footer_presence"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_audited_action_footer_presence_options %}
+                    <option value="{{ value }}" {% if offline_audited_action_filter_footer_presence == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Orden Operativa</label>
+                <select
+                    name="offline_action_sort"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_audited_action_sort_options %}
+                    <option value="{{ value }}" {% if offline_audited_action_filter_sort == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="bg-indigo-500 hover:bg-indigo-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
+                    Filtrar
+                </button>
+                <a
+                    href="{{ offline_actions_clear_href }}"
+                    class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-black px-4 py-2 rounded-lg transition"
+                >
+                    Limpiar
+                </a>
+            </div>
+        </div>
+    </form>
+    {% if offline_audited_actions_count %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                    <th class="pb-2 font-black">Hora</th>
+                    <th class="pb-2 font-black">Tipo</th>
+                    <th class="pb-2 font-black">Segmento</th>
+                    <th class="pb-2 font-black">Estado</th>
+                    <th class="pb-2 font-black">Resultado</th>
+                    <th class="pb-2 font-black">Actor</th>
+                    <th class="pb-2 font-black">Sucursal</th>
+                    <th class="pb-2 font-black text-right">AuditLog</th>
+                    <th class="pb-2 font-black text-right">Detalle</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm">
+                {% for action in offline_audited_actions %}
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
+                    <td class="py-3 text-gray-300 text-xs">{{ action.created_at|date:"d/m H:i" }}</td>
+                    <td class="py-3 text-xs">
+                        <span class="px-2 py-1 rounded-md text-[10px] font-black {% if action.event_type == 'offline.segment_footer_revalidated' %}bg-sky-900/40 text-sky-300{% else %}bg-violet-900/40 text-violet-300{% endif %}">
+                            {% if action.event_type == 'offline.segment_footer_revalidated' %}
+                            FOOTER_REVALIDATED
+                            {% else %}
+                            OPERATIONAL_REVIEW
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td class="py-3 text-xs">
+                        <p class="text-white font-bold break-all">{{ action.target_id }}</p>
+                        <p class="text-gray-500 text-[10px] mt-1">{{ action.target_model }}</p>
+                    </td>
+                    <td class="py-3 text-gray-200 text-xs">
+                        {{ action.payload_json.segment_status|default:"SIN_STATUS" }}
+                    </td>
+                    <td class="py-3 text-xs">
+                        <span class="px-2 py-1 rounded-md text-[10px] font-black {% if action.offline_audit_result == 'footer_present' %}bg-emerald-900/40 text-emerald-300{% elif action.offline_audit_result == 'footer_missing' %}bg-rose-900/40 text-rose-300{% else %}bg-violet-900/40 text-violet-300{% endif %}">
+                            {{ action.offline_audit_result_label }}
+                        </span>
+                    </td>
+                    <td class="py-3 text-gray-300 text-xs">
+                        {% if action.actor_user %}
+                        {{ action.actor_user.username }}
+                        {% else %}
+                        SIN_USUARIO
+                        {% endif %}
+                    </td>
+                    <td class="py-3 text-gray-300 text-xs">
+                        {% if action.location %}
+                        {{ action.location.name }}
+                        {% else %}
+                        {{ action.organization.name|default:"SIN_UBICACION" }}
+                        {% endif %}
+                    </td>
+                    <td class="py-3 text-right text-xs">
+                        <p class="text-indigo-300 font-black">#{{ action.id }}</p>
+                        <p class="text-gray-500 text-[10px] mt-1">
+                            {% if action.payload_json.footer_present %}
+                            footer=YES
+                            {% else %}
+                            footer=NO
+                            {% endif %}
+                        </p>
+                    </td>
+                    <td class="py-3 text-right text-xs">
+                        <div class="flex justify-end gap-2">
+                            <a
+                                href="{% url 'dashboard_offline_limbo' %}?segment_id={{ action.target_id|urlencode }}"
+                                class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                            >
+                                Limbo
+                            </a>
+                            <a
+                                href="{% url 'dashboard_offline_limbo_segment_json' %}?segment_id={{ action.target_id|urlencode }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-indigo-900/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                            >
+                                JSON
+                            </a>
+                            <a
+                                href="{% url 'admin:pos_auditlog_change' action.id %}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-emerald-900/50 text-emerald-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-emerald-800/50 transition"
+                            >
+                                AuditLog
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="rounded-xl border border-dashed border-indigo-700/50 bg-black/20 px-4 py-6 text-center text-sm text-indigo-100">
+        No hay acciones offline auditadas que coincidan con los filtros actuales.
+    </div>
+    {% endif %}
+</div>
+{% endif %}

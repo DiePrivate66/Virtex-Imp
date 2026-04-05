@@ -76,6 +76,7 @@ urlpatterns = [
 
     # Analytics
     path('dashboard/', analytics_views.dashboard_analytics, name='dashboard_analytics'),
+    path('dashboard/incidentes-offline/', analytics_views.dashboard_offline_incidents, name='dashboard_offline_incidents'),
     path('dashboard/limbo-offline/', analytics_views.dashboard_offline_limbo, name='dashboard_offline_limbo'),
     path('dashboard/limbo-offline/json/', analytics_views.dashboard_offline_limbo_json, name='dashboard_offline_limbo_json'),
     path(

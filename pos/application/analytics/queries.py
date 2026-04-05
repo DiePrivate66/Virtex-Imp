@@ -193,6 +193,7 @@ def _build_offline_audited_actions(
     audit_result: str = '',
     footer_presence: str = '',
     sort_order: str = 'recent',
+    critical_only: bool = False,
 ):
     base_queryset = (
         AuditLog.objects.filter(
@@ -315,7 +316,24 @@ def _build_offline_audited_actions(
             default=Value(0),
             output_field=IntegerField(),
         ),
+        critical_priority=Case(
+            When(
+                event_type='offline.segment_footer_revalidated',
+                payload_json__segment_status='sealed',
+                payload_json__footer_present=True,
+                then=Value(0),
+            ),
+            When(
+                event_type='offline.segment_operational_review_marked',
+                payload_json__segment_status='sealed',
+                then=Value(0),
+            ),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
     )
+    if critical_only:
+        queryset = queryset.filter(critical_priority=1)
     if normalized_sort_order == 'footer_missing':
         queryset = queryset.order_by('footer_missing_priority', '-created_at', '-id')
     elif normalized_sort_order == 'unreviewed':
@@ -328,6 +346,7 @@ def _build_offline_audited_actions(
         item.offline_segment_status = str((item.payload_json or {}).get('segment_status') or '').strip()
         item.offline_audit_result = _resolve_offline_audit_result(item.event_type, item.payload_json)
         item.offline_audit_result_label = _resolve_offline_audit_result_label(item.offline_audit_result)
+        item.offline_is_critical = bool(getattr(item, 'critical_priority', 0))
 
     return {
         'queryset': queryset,
@@ -351,6 +370,34 @@ def _build_offline_audited_actions(
         'audit_result_options': OFFLINE_AUDIT_RESULT_OPTIONS,
         'footer_presence_options': OFFLINE_AUDIT_FOOTER_PRESENCE_OPTIONS,
         'sort_options': OFFLINE_AUDIT_SORT_OPTIONS,
+        'critical_only': bool(critical_only),
+    }
+
+
+def _build_offline_audit_context_fields(offline_audit_bundle: dict) -> dict:
+    return {
+        'offline_audited_actions': offline_audit_bundle['items'],
+        'offline_audited_actions_count': offline_audit_bundle['queryset'].count(),
+        'offline_audited_action_filter_segment_id': offline_audit_bundle['selected_segment_id'],
+        'offline_audited_action_filter_time_window': offline_audit_bundle['selected_time_window'],
+        'offline_audited_action_filter_type': offline_audit_bundle['selected_action_type'],
+        'offline_audited_action_filter_organization': offline_audit_bundle['selected_organization_id'],
+        'offline_audited_action_filter_location': offline_audit_bundle['selected_location_id'],
+        'offline_audited_action_filter_actor': offline_audit_bundle['selected_actor_id'],
+        'offline_audited_action_filter_segment_status': offline_audit_bundle['selected_segment_status'],
+        'offline_audited_action_filter_result': offline_audit_bundle['selected_audit_result'],
+        'offline_audited_action_filter_footer_presence': offline_audit_bundle['selected_footer_presence'],
+        'offline_audited_action_filter_sort': offline_audit_bundle['selected_sort_order'],
+        'offline_audited_action_time_window_options': offline_audit_bundle['time_window_options'],
+        'offline_audited_action_type_options': offline_audit_bundle['action_type_options'],
+        'offline_audited_action_organization_options': offline_audit_bundle['organization_options'],
+        'offline_audited_action_location_options': offline_audit_bundle['location_options'],
+        'offline_audited_action_actor_options': offline_audit_bundle['actor_options'],
+        'offline_audited_action_segment_status_options': offline_audit_bundle['segment_status_options'],
+        'offline_audited_action_result_options': offline_audit_bundle['audit_result_options'],
+        'offline_audited_action_footer_presence_options': offline_audit_bundle['footer_presence_options'],
+        'offline_audited_action_sort_options': offline_audit_bundle['sort_options'],
+        'offline_audited_actions_critical_only': offline_audit_bundle['critical_only'],
     }
 
 
@@ -446,7 +493,7 @@ def build_analytics_dashboard_context(
         sort_order=offline_action_sort,
     )
 
-    return {
+    context = {
         'periodo': periodo,
         'desde': desde,
         'hasta': hasta,
@@ -480,28 +527,52 @@ def build_analytics_dashboard_context(
         'refund_adjustments_open': refund_adjustments_open,
         'refund_adjustments_open_count': refund_adjustments_queryset.count(),
         'refund_adjustments_open_total': refund_adjustments_open_total,
-        'offline_audited_actions': offline_audit_bundle['items'],
-        'offline_audited_actions_count': offline_audit_bundle['queryset'].count(),
-        'offline_audited_action_filter_segment_id': offline_audit_bundle['selected_segment_id'],
-        'offline_audited_action_filter_time_window': offline_audit_bundle['selected_time_window'],
-        'offline_audited_action_filter_type': offline_audit_bundle['selected_action_type'],
-        'offline_audited_action_filter_organization': offline_audit_bundle['selected_organization_id'],
-        'offline_audited_action_filter_location': offline_audit_bundle['selected_location_id'],
-        'offline_audited_action_filter_actor': offline_audit_bundle['selected_actor_id'],
-        'offline_audited_action_filter_segment_status': offline_audit_bundle['selected_segment_status'],
-        'offline_audited_action_filter_result': offline_audit_bundle['selected_audit_result'],
-        'offline_audited_action_filter_footer_presence': offline_audit_bundle['selected_footer_presence'],
-        'offline_audited_action_filter_sort': offline_audit_bundle['selected_sort_order'],
-        'offline_audited_action_time_window_options': offline_audit_bundle['time_window_options'],
-        'offline_audited_action_type_options': offline_audit_bundle['action_type_options'],
-        'offline_audited_action_organization_options': offline_audit_bundle['organization_options'],
-        'offline_audited_action_location_options': offline_audit_bundle['location_options'],
-        'offline_audited_action_actor_options': offline_audit_bundle['actor_options'],
-        'offline_audited_action_segment_status_options': offline_audit_bundle['segment_status_options'],
-        'offline_audited_action_result_options': offline_audit_bundle['audit_result_options'],
-        'offline_audited_action_footer_presence_options': offline_audit_bundle['footer_presence_options'],
-        'offline_audited_action_sort_options': offline_audit_bundle['sort_options'],
     }
+    context.update(_build_offline_audit_context_fields(offline_audit_bundle))
+    return context
+
+
+def build_offline_critical_incidents_context(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_action_segment_id: str = '',
+    offline_action_time_window: str = '',
+    offline_action_type: str = '',
+    offline_action_organization: str = '',
+    offline_action_location: str = '',
+    offline_action_actor: str = '',
+    offline_action_segment_status: str = '',
+    offline_action_result: str = '',
+    offline_action_footer_presence: str = '',
+    offline_action_sort: str = 'footer_missing',
+):
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    offline_audit_bundle = _build_offline_audited_actions(
+        desde,
+        hasta,
+        segment_id=offline_action_segment_id,
+        time_window=offline_action_time_window,
+        action_type=offline_action_type,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+        segment_status=offline_action_segment_status,
+        audit_result=offline_action_result,
+        footer_presence=offline_action_footer_presence,
+        sort_order=offline_action_sort,
+        critical_only=True,
+    )
+    context = {
+        'periodo': periodo,
+        'desde': desde,
+        'hasta': hasta,
+        'periods': [('hoy', 'Hoy'), ('semana', '7 dias'), ('mes', '30 dias')],
+        'offline_critical_incidents_count': offline_audit_bundle['queryset'].count(),
+    }
+    context.update(_build_offline_audit_context_fields(offline_audit_bundle))
+    return context
 
 
 def build_offline_limbo_context() -> dict:

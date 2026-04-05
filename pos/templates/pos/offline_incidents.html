@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+    <div class="flex items-start justify-between mb-6">
+        <div class="flex flex-col gap-3">
+            <a href="{% url 'dashboard_analytics' %}" class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+                ← VOLVER A ANALYTICS
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tight">INCIDENTES OFFLINE CRITICOS</h1>
+                <p class="text-gray-500 text-xs font-bold mt-1">Vista operativa dedicada a segmentos con footer faltante o estado distinto de sealed.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex gap-2 mb-6">
+        {% for val, label in periods %}
+        <a href="?periodo={{ val }}" class="px-4 py-2 rounded-lg text-xs font-black uppercase transition
+            {% if periodo == val %}bg-bosco-orange text-black{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="rounded-2xl border border-rose-700/40 bg-rose-950/30 p-4 mb-6">
+        <p class="text-rose-200 text-xs font-bold uppercase tracking-widest">Criterio Critico</p>
+        <p class="text-rose-100 text-sm mt-2">
+            Esta vista muestra solo acciones auditadas de segmentos offline que siguen en incidente:
+            footer faltante o estado distinto de <span class="font-black">sealed</span>.
+            El orden por defecto es <span class="font-black">Footer missing primero</span>.
+        </p>
+    </div>
+
+    {% include 'pos/partials/offline_audited_actions_panel.html' %}
+</div>
+{% endblock %}

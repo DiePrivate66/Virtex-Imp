@@ -20,7 +20,11 @@ from django.test.client import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from .application.analytics import build_analytics_dashboard_context, build_offline_limbo_context
+from .application.analytics import (
+    build_analytics_dashboard_context,
+    build_offline_critical_incidents_context,
+    build_offline_limbo_context,
+)
 from .application.printing import build_cash_closing_context
 from .application.sales.replay_admission import admit_replay_request
 from .application.web_orders import WebOrderError, build_web_orders_payload, create_web_order
@@ -1423,6 +1427,49 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(context['offline_audited_action_filter_sort'], 'unreviewed')
         self.assertEqual(context['offline_audited_actions'][0].target_id, 'sales-20260404-051')
 
+    def test_offline_critical_incidents_context_includes_only_critical_actions(self):
+        footer_ok = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-061',
+            payload_json={'segment_status': 'sealed', 'footer_present': True, 'audit_result': 'footer_present'},
+            correlation_id='sales-20260404-061',
+        )
+        missing_footer = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-062',
+            payload_json={'segment_status': 'sealed', 'footer_present': False, 'audit_result': 'footer_missing'},
+            correlation_id='sales-20260404-062',
+        )
+        corrupt_segment = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_operational_review_marked',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-063',
+            payload_json={'segment_status': 'corrupt', 'audit_result': 'review_marked'},
+            correlation_id='sales-20260404-063',
+        )
+
+        context = build_offline_critical_incidents_context(periodo='semana')
+
+        self.assertEqual(context['offline_critical_incidents_count'], 2)
+        self.assertTrue(context['offline_audited_actions_critical_only'])
+        self.assertEqual(context['offline_audited_action_filter_sort'], 'footer_missing')
+        self.assertEqual(
+            [item.target_id for item in context['offline_audited_actions']],
+            [missing_footer.target_id, corrupt_segment.target_id],
+        )
+        self.assertNotIn(footer_ok.target_id, [item.target_id for item in context['offline_audited_actions']])
+
     def test_dashboard_renders_offline_audited_actions_table(self):
         audit = AuditLog.objects.create(
             organization=self.location.organization,
@@ -1457,6 +1504,7 @@ class AnalyticsReplayTimelineTests(TestCase):
             response,
             reverse('admin:pos_auditlog_change', args=[audit.id]),
         )
+        self.assertContains(response, reverse('dashboard_offline_incidents'))
 
     def test_dashboard_renders_offline_audited_action_filters(self):
         AuditLog.objects.create(
@@ -1509,6 +1557,49 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'value="sealed"')
         self.assertContains(response, 'value="footer_present"')
         self.assertContains(response, 'value="present"')
+        self.assertContains(response, 'value="footer_missing"')
+
+    def test_offline_critical_incidents_view_renders_only_critical_actions(self):
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-071',
+            payload_json={'segment_status': 'sealed', 'footer_present': True, 'audit_result': 'footer_present'},
+            correlation_id='sales-20260404-071',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-072',
+            payload_json={'segment_status': 'sealed', 'footer_present': False, 'audit_result': 'footer_missing'},
+            correlation_id='sales-20260404-072',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_operational_review_marked',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-073',
+            payload_json={'segment_status': 'corrupt', 'audit_result': 'review_marked'},
+            correlation_id='sales-20260404-073',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard_offline_incidents'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'INCIDENTES OFFLINE CRITICOS')
+        self.assertContains(response, 'sales-20260404-072')
+        self.assertContains(response, 'sales-20260404-073')
+        self.assertNotContains(response, 'sales-20260404-071')
+        self.assertContains(response, reverse('dashboard_analytics'))
         self.assertContains(response, 'value="footer_missing"')
 
     def test_audit_log_admin_change_view_is_available_for_offline_audited_action(self):
