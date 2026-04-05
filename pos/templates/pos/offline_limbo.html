@@ -4,6 +4,7 @@
     class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100"
     data-offline-limbo-root
     data-json-url="{% url 'dashboard_offline_limbo_json' %}"
+    data-segment-detail-url="{% url 'dashboard_offline_limbo_segment_json' %}"
     data-reconcile-url="{% url 'dashboard_offline_limbo_reconcile_json' %}"
     data-reseal-url="{% url 'dashboard_offline_limbo_reseal_json' %}"
     data-seal-url="{% url 'dashboard_offline_limbo_seal_json' %}"
@@ -211,6 +212,7 @@
                         <th class="pb-2 font-black">Ventas</th>
                         <th class="pb-2 font-black">Monto</th>
                         <th class="pb-2 font-black">Estado</th>
+                        <th class="pb-2 font-black">Detalle</th>
                     </tr>
                 </thead>
                 <tbody class="text-sm" data-sealed-segments-body>
@@ -232,10 +234,20 @@
                             </span>
                             <p class="text-[10px] text-gray-400 mt-2">{{ segment.detail }}</p>
                         </td>
+                        <td class="py-3 text-xs">
+                            <button
+                                type="button"
+                                class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                                data-segment-detail-button
+                                data-segment-id="{{ segment.segment_id }}"
+                            >
+                                Ver detalle
+                            </button>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr data-empty-sealed-row>
-                        <td colspan="6" class="py-4 text-center text-gray-500 text-sm">No hay segmentos sellados para mostrar.</td>
+                        <td colspan="7" class="py-4 text-center text-gray-500 text-sm">No hay segmentos sellados para mostrar.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -250,6 +262,7 @@
     if (!root) return;
 
     const jsonUrl = root.dataset.jsonUrl;
+    const segmentDetailUrl = root.dataset.segmentDetailUrl;
     const reconcileUrl = root.dataset.reconcileUrl;
     const resealUrl = root.dataset.resealUrl;
     const sealUrl = root.dataset.sealUrl;
@@ -263,6 +276,9 @@
     const sealedSegmentsBody = root.querySelector('[data-sealed-segments-body]');
     const refreshIntervalMs = 10000;
     let refreshTimer = null;
+    let lastPayload = null;
+    const segmentDetailsCache = new Map();
+    const expandedSegmentIds = new Set();
 
     const setText = (field, value) => {
         const node = root.querySelector(`[data-field="${field}"]`);
@@ -313,6 +329,13 @@
         }).replace(',', '');
     };
 
+    const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+
     const renderEvents = (events) => {
         if (!eventsBody) return;
         if (!Array.isArray(events) || events.length === 0) {
@@ -349,12 +372,22 @@
     const renderSealedSegments = (segments) => {
         if (!sealedSegmentsBody) return;
         if (!Array.isArray(segments) || segments.length === 0) {
-            sealedSegmentsBody.innerHTML = '<tr data-empty-sealed-row><td colspan="6" class="py-4 text-center text-gray-500 text-sm">No hay segmentos sellados para mostrar.</td></tr>';
+            sealedSegmentsBody.innerHTML = '<tr data-empty-sealed-row><td colspan="7" class="py-4 text-center text-gray-500 text-sm">No hay segmentos sellados para mostrar.</td></tr>';
             return;
         }
+        const validIds = new Set(segments.map((segment) => String(segment.segment_id || '')));
+        Array.from(expandedSegmentIds).forEach((segmentId) => {
+            if (!validIds.has(segmentId)) {
+                expandedSegmentIds.delete(segmentId);
+                segmentDetailsCache.delete(segmentId);
+            }
+        });
         const rows = [];
         segments.forEach((segment) => {
             const status = String(segment.status || 'unknown');
+            const segmentId = String(segment.segment_id || '');
+            const isExpanded = expandedSegmentIds.has(segmentId);
+            const cachedDetail = segmentDetailsCache.get(segmentId);
             const statusClasses = status === 'sealed'
                 ? 'bg-green-900/40 text-green-300'
                 : status === 'footer_missing'
@@ -374,13 +407,103 @@
                         <span class="px-2 py-1 rounded-md text-[10px] font-black ${statusClasses}">${status.toUpperCase()}</span>
                         <p class="text-[10px] text-gray-400 mt-2">${segment.detail || ''}</p>
                     </td>
+                    <td class="py-3 text-xs">
+                        <button
+                            type="button"
+                            class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                            data-segment-detail-button
+                            data-segment-id="${segmentId}"
+                        >
+                            ${isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
+                        </button>
+                    </td>
                 </tr>
             `);
+            if (isExpanded) {
+                rows.push(`
+                    <tr class="border-b border-gray-900/70 bg-gray-950/40">
+                        <td colspan="7" class="p-4">
+                            ${renderSegmentDetail(cachedDetail)}
+                        </td>
+                    </tr>
+                `);
+            }
         });
         sealedSegmentsBody.innerHTML = rows.join('');
     };
 
+    const renderSegmentDetail = (detail) => {
+        if (!detail) {
+            return '<p class="text-sm text-gray-400">Cargando detalle...</p>';
+        }
+        if (detail.error) {
+            return `<p class="text-sm text-red-300">${escapeHtml(detail.error)}</p>`;
+        }
+        const recentEvents = Array.isArray(detail.recent_events) ? detail.recent_events : [];
+        const eventRows = recentEvents.length
+            ? recentEvents.map((event) => `
+                <tr class="border-b border-gray-800/50">
+                    <td class="py-2 pr-3 text-[11px] text-gray-300">${escapeHtml(formatTimestamp(event.created_at))}</td>
+                    <td class="py-2 pr-3 text-[11px] text-gray-200">${escapeHtml(event.capture_event_type || event.journal_event_type || '')}</td>
+                    <td class="py-2 pr-3 text-[11px] text-gray-200">$${escapeHtml(event.sale_total || '0.00')}</td>
+                    <td class="py-2 text-[11px] text-gray-400 break-all">${escapeHtml(event.payment_reference || 'SIN_REF')}</td>
+                </tr>
+            `).join('')
+            : '<tr><td colspan="4" class="py-2 text-[11px] text-gray-500">Sin eventos recientes para este segmento.</td></tr>';
+        return `
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div class="bg-gray-900/60 rounded-xl p-4">
+                    <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Snapshot</p>
+                    <div class="mt-3 space-y-2 text-[11px]">
+                        <p class="text-gray-200">Records: <span class="font-black">${escapeHtml(detail.snapshot?.record_count ?? 0)}</span></p>
+                        <p class="text-gray-200">Last Event: <span class="font-black break-all">${escapeHtml(detail.snapshot?.last_event_id || 'SIN_EVENTO')}</span></p>
+                        <p class="text-gray-200">Rolling CRC32: <span class="font-black">${escapeHtml(detail.snapshot?.rolling_crc32 || '00000000')}</span></p>
+                        <p class="text-gray-200">Summary: <span class="font-black">${escapeHtml(detail.summary?.total_sales ?? 0)} ventas / $${escapeHtml(detail.summary?.amount_total || '0.00')}</span></p>
+                    </div>
+                </div>
+                <div class="bg-gray-900/60 rounded-xl p-4">
+                    <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Footer</p>
+                    <div class="mt-3 space-y-2 text-[11px]">
+                        <p class="text-gray-200">Presente: <span class="font-black">${detail.footer_present ? 'YES' : 'NO'}</span></p>
+                        <p class="text-gray-200">Record Count: <span class="font-black">${escapeHtml(detail.footer?.record_count ?? 0)}</span></p>
+                        <p class="text-gray-200">Segment CRC32: <span class="font-black">${escapeHtml(detail.footer?.segment_crc32 || '00000000')}</span></p>
+                        <p class="text-gray-200">Final Hash:</p>
+                        <p class="text-[10px] text-gray-400 break-all">${escapeHtml(detail.footer?.final_record_hash || 'SIN_FOOTER')}</p>
+                    </div>
+                </div>
+                <div class="bg-gray-900/60 rounded-xl p-4">
+                    <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Salud</p>
+                    <div class="mt-3 space-y-2 text-[11px]">
+                        <p class="text-gray-200">Status: <span class="font-black">${escapeHtml(String(detail.status || '').toUpperCase())}</span></p>
+                        <p class="text-gray-200">Detalle:</p>
+                        <p class="text-gray-400">${escapeHtml(detail.detail || '')}</p>
+                        <p class="text-gray-200">Offset valido: <span class="font-black">${escapeHtml(detail.last_valid_offset ?? 0)}</span></p>
+                        <p class="text-gray-200">Last Record Hash:</p>
+                        <p class="text-[10px] text-gray-400 break-all">${escapeHtml(detail.last_record_hash || 'SIN_HASH')}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 bg-gray-900/60 rounded-xl p-4">
+                <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black mb-3">Ultimos Eventos Del Segmento</p>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="text-[10px] uppercase text-gray-500 border-b border-gray-800">
+                                <th class="pb-2 font-black">Hora</th>
+                                <th class="pb-2 font-black">Tipo</th>
+                                <th class="pb-2 font-black">Monto</th>
+                                <th class="pb-2 font-black">Referencia</th>
+                            </tr>
+                        </thead>
+                        <tbody>${eventRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    };
+
     const applyPayload = (payload) => {
+        lastPayload = payload;
         setText('stream_name', payload.stream_name || '');
         setText('root_dir', payload.root_dir || 'SIN_ROOT');
         setText('refreshed_at', formatTimestamp(payload.refreshed_at));
@@ -407,6 +530,20 @@
         setStatusBanner(payload.status || 'error', payload.detail || '');
         renderEvents(payload.recent_events || []);
         renderSealedSegments(payload.sealed_segments || []);
+    };
+
+    const loadSegmentDetail = async (segmentId) => {
+        const response = await fetch(`${segmentDetailUrl}?segment_id=${encodeURIComponent(segmentId)}`, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.detail || `HTTP ${response.status}`);
+        }
+        segmentDetailsCache.set(segmentId, payload);
+        return payload;
     };
 
     const refresh = async () => {
@@ -479,7 +616,33 @@
     if (sealButton) {
         sealButton.addEventListener('click', () => runAction(sealUrl, 'seal active segment'));
     }
+    if (sealedSegmentsBody) {
+        sealedSegmentsBody.addEventListener('click', async (event) => {
+            const button = event.target.closest('[data-segment-detail-button]');
+            if (!button) return;
+            const segmentId = button.dataset.segmentId || '';
+            if (!segmentId) return;
+            if (expandedSegmentIds.has(segmentId)) {
+                expandedSegmentIds.delete(segmentId);
+                renderSealedSegments(lastPayload?.sealed_segments || []);
+                return;
+            }
+            expandedSegmentIds.add(segmentId);
+            renderSealedSegments(lastPayload?.sealed_segments || []);
+            if (segmentDetailsCache.has(segmentId)) {
+                renderSealedSegments(lastPayload?.sealed_segments || []);
+                return;
+            }
+            try {
+                await loadSegmentDetail(segmentId);
+            } catch (error) {
+                segmentDetailsCache.set(segmentId, { error: `No se pudo cargar el detalle: ${error}` });
+            }
+            renderSealedSegments(lastPayload?.sealed_segments || []);
+        });
+    }
 
+    refresh();
     refreshTimer = window.setInterval(refresh, refreshIntervalMs);
     window.addEventListener('beforeunload', () => {
         if (refreshTimer) window.clearInterval(refreshTimer);

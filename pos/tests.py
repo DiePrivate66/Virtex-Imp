@@ -1320,6 +1320,7 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Historial De Segmentos Sellados')
         self.assertContains(response, sealed_snapshot['segment_id'])
+        self.assertContains(response, 'Ver detalle')
         self.assertEqual(len(response.context['sealed_segments']), 1)
         self.assertEqual(response.context['sealed_segments'][0]['status'], 'sealed')
 
@@ -1461,6 +1462,48 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(payload['sealed_segments'][0]['summary_total_sales'], 1)
         self.assertEqual(payload['sealed_segments'][0]['summary_amount_total'], '3.15')
 
+    def test_dashboard_offline_limbo_segment_json_returns_detail_for_admin(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-detail-1',
+                payload={
+                    'sale_total': '6.90',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-DETAIL-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-detail-001',
+            )
+            sealed_snapshot = runtime.seal_active_segment()
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+            ):
+                response = self.client.get(
+                    reverse('dashboard_offline_limbo_segment_json'),
+                    {'segment_id': sealed_snapshot['segment_id']},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['segment_id'], sealed_snapshot['segment_id'])
+        self.assertEqual(payload['status'], 'sealed')
+        self.assertTrue(payload['footer_present'])
+        self.assertEqual(payload['summary']['total_sales'], 1)
+        self.assertEqual(payload['summary']['amount_total'], '6.90')
+        self.assertEqual(payload['recent_events'][0]['payment_reference'], 'OFFLINE-DETAIL-001')
+
     def test_dashboard_offline_limbo_seal_json_seals_rotation_needed_segment(self):
         with TemporaryDirectory() as temp_dir:
             segment_path = Path(temp_dir) / 'sales-20260404-001.jsonl'
@@ -1508,6 +1551,33 @@ class OfflineLimboDashboardTests(TestCase):
         self.client.force_login(self.user)
 
         response = self.client.get(reverse('dashboard_offline_limbo_json'))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['detail'], 'admin required')
+
+    def test_dashboard_offline_limbo_segment_json_rejects_invalid_segment_id(self):
+        self.client.force_login(self.admin_user)
+
+        with override_settings(
+            OFFLINE_JOURNAL_ENABLED=True,
+            OFFLINE_JOURNAL_ROOT='D:/tmp/bosco-offline-invalid',
+            OFFLINE_JOURNAL_STREAM_NAME='sales',
+        ):
+            response = self.client.get(
+                reverse('dashboard_offline_limbo_segment_json'),
+                {'segment_id': '../escape'},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('segment_id invalido', response.json()['detail'])
+
+    def test_dashboard_offline_limbo_segment_json_rejects_non_admin_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse('dashboard_offline_limbo_segment_json'),
+            {'segment_id': 'sales-20260404-001'},
+        )
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()['detail'], 'admin required')

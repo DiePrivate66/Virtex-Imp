@@ -9,6 +9,7 @@ from pos.application.analytics import (
     build_analytics_dashboard_context,
     build_offline_limbo_context,
     build_offline_limbo_payload,
+    build_offline_segment_detail_payload,
     execute_offline_limbo_action,
 )
 from pos.application.sales import (
@@ -52,6 +53,17 @@ def dashboard_offline_limbo_json(request):
     if api_error:
         return api_error
     return JsonResponse(build_offline_limbo_payload())
+
+
+def dashboard_offline_limbo_segment_json(request):
+    api_error = _require_admin_dashboard_api_access(request)
+    if api_error:
+        return api_error
+    segment_id = request.GET.get('segment_id', '')
+    try:
+        return JsonResponse(build_offline_segment_detail_payload(segment_id))
+    except ValueError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
 
 
 def dashboard_offline_limbo_reconcile_json(request):

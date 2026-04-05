@@ -3,6 +3,7 @@ from .queries import (
     build_analytics_dashboard_context,
     build_offline_limbo_context,
     build_offline_limbo_payload,
+    build_offline_segment_detail_payload,
 )
 
 __all__ = [
@@ -10,5 +11,6 @@ __all__ = [
     'build_analytics_dashboard_context',
     'build_offline_limbo_context',
     'build_offline_limbo_payload',
+    'build_offline_segment_detail_payload',
     'execute_offline_limbo_action',
 ]

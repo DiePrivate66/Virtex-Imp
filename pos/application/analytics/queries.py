@@ -492,3 +492,98 @@ def build_offline_limbo_payload() -> dict:
         ],
         'refreshed_at': timezone.now().isoformat(),
     }
+
+
+def build_offline_segment_detail_payload(segment_id: str) -> dict:
+    enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_ENABLED', False))
+    if not enabled:
+        raise ValueError('runtime offline desactivado')
+
+    root_value = str(getattr(settings, 'OFFLINE_JOURNAL_ROOT', '') or '').strip()
+    if not root_value:
+        raise ValueError('OFFLINE_JOURNAL_ROOT no esta configurado')
+
+    stream_name = getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales')
+    normalized_segment_id = _validate_segment_id(segment_id=segment_id, stream_name=stream_name)
+    root_dir = Path(root_value)
+    if not root_dir.exists() or not root_dir.is_dir():
+        raise ValueError(f'root offline invalido: {root_dir}')
+
+    segment_path = root_dir / f'{normalized_segment_id}.jsonl'
+    snapshot_path = root_dir / f'{normalized_segment_id}.snapshot.json'
+    if not segment_path.exists():
+        raise ValueError(f'segmento inexistente: {normalized_segment_id}')
+
+    snapshot = load_snapshot_payload(snapshot_path)
+    recovery = recover_segment_prefix(segment_path)
+    recent_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50)))
+    summary = snapshot.get('summary') or rebuild_limbo_summary_from_records(
+        recovery.records,
+        limbo_recent_limit=recent_limit,
+    )
+
+    if recovery.truncated_tail or recovery.corrupted_tail:
+        status = 'integrity_error'
+        detail = recovery.error_message or 'El segmento tiene una cola invalida.'
+    elif recovery.footer:
+        status = 'sealed'
+        detail = 'Footer presente y validado.'
+    elif snapshot.get('sealed'):
+        status = 'footer_missing'
+        detail = 'Snapshot sellado, pero el footer no esta presente en el segmento.'
+    else:
+        status = 'open'
+        detail = 'El segmento aun no esta sellado.'
+
+    return {
+        'segment_id': normalized_segment_id,
+        'segment_path': str(segment_path),
+        'snapshot_path': str(snapshot_path),
+        'status': status,
+        'detail': detail,
+        'record_count': recovery.record_count,
+        'last_valid_offset': recovery.last_valid_offset,
+        'last_event_id': recovery.last_event_id,
+        'last_record_hash': recovery.last_record_hash,
+        'rolling_crc32': recovery.rolling_crc32,
+        'footer_present': bool(recovery.footer),
+        'footer': recovery.footer or {},
+        'snapshot': {
+            'record_count': int(snapshot.get('record_count') or 0),
+            'last_offset_confirmed': int(snapshot.get('last_offset_confirmed') or 0),
+            'last_event_id': str(snapshot.get('last_event_id') or ''),
+            'last_record_hash': str(snapshot.get('last_record_hash') or ''),
+            'rolling_crc32': str(snapshot.get('rolling_crc32') or '00000000'),
+            'sealed': bool(snapshot.get('sealed')),
+            'seal_pending': bool(snapshot.get('seal_pending')),
+        },
+        'summary': summary,
+        'segment_health': {
+            'truncated_tail': recovery.truncated_tail,
+            'corrupted_tail': recovery.corrupted_tail,
+            'error_message': recovery.error_message,
+        },
+        'recent_events': [
+            {
+                **event,
+                'created_at': (
+                    event['created_at'].isoformat()
+                    if hasattr(event.get('created_at'), 'isoformat')
+                    else event.get('created_at')
+                ),
+            }
+            for event in _build_recent_offline_events(recovery.records, limit=min(10, recent_limit))
+        ],
+        'refreshed_at': timezone.now().isoformat(),
+    }
+
+
+def _validate_segment_id(*, segment_id: str, stream_name: str) -> str:
+    normalized = str(segment_id or '').strip()
+    if not normalized:
+        raise ValueError('segment_id requerido')
+    if any(separator in normalized for separator in ('/', '\\', '..')):
+        raise ValueError('segment_id invalido')
+    if not normalized.startswith(f'{stream_name}-'):
+        raise ValueError('segment_id fuera del stream configurado')
+    return normalized

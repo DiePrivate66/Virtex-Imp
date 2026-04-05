@@ -189,6 +189,7 @@ Inspect the current limbo directly from the app:
 - Access: admin or superuser only
 - Surface: current summary, active segment paths, tail health, recent events and bounded history of sealed segments
 - JSON refresh endpoint: `/dashboard/limbo-offline/json/`
+- Historical segment detail endpoint: `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
 - Polling: the page refreshes automatically every 10 seconds and also supports manual refresh
 - Operational actions:
   - `POST /dashboard/limbo-offline/reconcile/` repairs a lagging `.snapshot` sidecar from the active segment
@@ -196,6 +197,7 @@ Inspect the current limbo directly from the app:
   - `POST /dashboard/limbo-offline/seal-active/` seals the active segment only when the runtime reports `rotation_needed=true`
 - Both actions run under the same runtime file lock used by the writer, so they do not race appends from the shadow capture path
 - Sealed history depth is controlled by `OFFLINE_JOURNAL_HISTORY_LIMIT` and defaults to `5`
+- Historical segment detail is loaded on demand from the UI, so sealed-history inspection does not bloat the periodic limbo refresh payload
 
 ## Recommended Deploy Sequence
 
