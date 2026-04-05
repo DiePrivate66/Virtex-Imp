@@ -58,7 +58,7 @@
         Estado: <span data-field="status">{{ status|upper }}</span>. <span data-field="detail">{{ detail }}</span>
     </div>
 
-    <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-6">
+    <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-6" data-segment-search-form>
         <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto] gap-3 items-end">
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Buscar Segment ID</label>
@@ -67,6 +67,7 @@
                     name="segment_id"
                     value="{{ initial_segment_id|default:'' }}"
                     placeholder="sales-20260404-001"
+                    data-segment-search-input
                     class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
                 >
             </div>
@@ -75,11 +76,13 @@
             </button>
             <a
                 href="{% url 'dashboard_offline_limbo' %}"
+                data-segment-search-clear
                 class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-black px-4 py-2 rounded-lg transition text-center"
             >
                 Limpiar
             </a>
         </div>
+        <p class="mt-3 text-[11px] text-gray-400" data-segment-search-feedback>Busqueda por segmento inactiva.</p>
     </form>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -302,11 +305,16 @@
     const resealButton = root.querySelector('[data-action-button="reseal"]');
     const sealButton = root.querySelector('[data-action-button="seal"]');
     const actionFeedback = root.querySelector('[data-action-feedback]');
+    const segmentSearchForm = root.querySelector('[data-segment-search-form]');
+    const segmentSearchInput = root.querySelector('[data-segment-search-input]');
+    const segmentSearchClear = root.querySelector('[data-segment-search-clear]');
+    const segmentSearchFeedback = root.querySelector('[data-segment-search-feedback]');
     const eventsBody = root.querySelector('[data-recent-events-body]');
     const sealedSegmentsBody = root.querySelector('[data-sealed-segments-body]');
     const refreshIntervalMs = 10000;
     let refreshTimer = null;
     let lastPayload = null;
+    let currentSearchSegmentId = initialSegmentId;
     let pendingAutoOpenSegmentId = initialSegmentId;
     const segmentDetailsCache = new Map();
     const expandedSegmentIds = new Set();
@@ -344,6 +352,57 @@
             return;
         }
         actionFeedback.classList.add('text-gray-400');
+    };
+
+    const setSegmentSearchFeedback = (detail, tone = 'neutral') => {
+        if (!segmentSearchFeedback) return;
+        segmentSearchFeedback.textContent = detail || 'Busqueda por segmento inactiva.';
+        segmentSearchFeedback.className = 'mt-3 text-[11px]';
+        if (tone === 'success') {
+            segmentSearchFeedback.classList.add('text-green-300');
+            return;
+        }
+        if (tone === 'error') {
+            segmentSearchFeedback.classList.add('text-red-300');
+            return;
+        }
+        segmentSearchFeedback.classList.add('text-gray-400');
+    };
+
+    const normalizeSegmentSearch = (value) => String(value || '').trim();
+
+    const applySearchToUrl = () => {
+        const url = new URL(window.location.href);
+        if (currentSearchSegmentId) {
+            url.searchParams.set('segment_id', currentSearchSegmentId);
+        } else {
+            url.searchParams.delete('segment_id');
+        }
+        window.history.replaceState({}, '', url.toString());
+    };
+
+    const buildRefreshUrl = () => {
+        const url = new URL(jsonUrl, window.location.origin);
+        if (currentSearchSegmentId) {
+            url.searchParams.set('segment_id', currentSearchSegmentId);
+        }
+        return url.toString();
+    };
+
+    const findMatchingSegmentId = (payload, requestedSegmentId) => {
+        const query = normalizeSegmentSearch(requestedSegmentId).toLowerCase();
+        if (!query) return '';
+        const activeSegmentId = normalizeSegmentSearch(payload?.limbo?.segment_id);
+        if (activeSegmentId && activeSegmentId.toLowerCase().includes(query)) {
+            return activeSegmentId;
+        }
+        const sealedSegments = Array.isArray(payload?.sealed_segments) ? payload.sealed_segments : [];
+        const exactMatch = sealedSegments.find((segment) => normalizeSegmentSearch(segment.segment_id).toLowerCase() === query);
+        if (exactMatch) {
+            return normalizeSegmentSearch(exactMatch.segment_id);
+        }
+        const partialMatch = sealedSegments.find((segment) => normalizeSegmentSearch(segment.segment_id).toLowerCase().includes(query));
+        return partialMatch ? normalizeSegmentSearch(partialMatch.segment_id) : '';
     };
 
     const formatTimestamp = (value) => {
@@ -678,7 +737,7 @@
     const refresh = async () => {
         try {
             if (refreshButton) refreshButton.disabled = true;
-            const response = await fetch(jsonUrl, {
+            const response = await fetch(buildRefreshUrl(), {
                 method: 'GET',
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
@@ -688,10 +747,27 @@
             }
             const payload = await response.json();
             applyPayload(payload);
-            if (pendingAutoOpenSegmentId) {
-                const requestedSegmentId = pendingAutoOpenSegmentId;
+            if (segmentSearchInput && segmentSearchInput.value !== currentSearchSegmentId) {
+                segmentSearchInput.value = currentSearchSegmentId;
+            }
+            const requestedSegmentId = normalizeSegmentSearch(payload.requested_segment_id || currentSearchSegmentId);
+            const matchedSegmentId = findMatchingSegmentId(payload, requestedSegmentId);
+            if (requestedSegmentId) {
+                if (matchedSegmentId) {
+                    pendingAutoOpenSegmentId = '';
+                    await ensureSegmentExpanded(matchedSegmentId);
+                    const activeSegmentId = normalizeSegmentSearch(payload?.limbo?.segment_id);
+                    if (matchedSegmentId === activeSegmentId) {
+                        setSegmentSearchFeedback(`Segmento activo localizado: ${matchedSegmentId}`, 'success');
+                    } else {
+                        setSegmentSearchFeedback(`Segmento historico localizado: ${matchedSegmentId}`, 'success');
+                    }
+                } else if (pendingAutoOpenSegmentId || requestedSegmentId === currentSearchSegmentId) {
+                    setSegmentSearchFeedback(`No se encontro un segmento para "${requestedSegmentId}" en el payload actual.`, 'error');
+                }
+            } else {
                 pendingAutoOpenSegmentId = '';
-                await ensureSegmentExpanded(requestedSegmentId);
+                setSegmentSearchFeedback('Busqueda por segmento inactiva.', 'neutral');
             }
         } catch (error) {
             setStatusBanner('error', `No se pudo refrescar el limbo: ${error}`);
@@ -699,6 +775,38 @@
             if (refreshButton) refreshButton.disabled = false;
         }
     };
+
+    if (segmentSearchForm) {
+        segmentSearchForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            currentSearchSegmentId = normalizeSegmentSearch(segmentSearchInput?.value);
+            pendingAutoOpenSegmentId = currentSearchSegmentId;
+            applySearchToUrl();
+            setSegmentSearchFeedback(
+                currentSearchSegmentId
+                    ? `Buscando segmento: ${currentSearchSegmentId}`
+                    : 'Busqueda por segmento inactiva.',
+                'neutral',
+            );
+            await refresh();
+        });
+    }
+
+    if (segmentSearchClear) {
+        segmentSearchClear.addEventListener('click', async (event) => {
+            event.preventDefault();
+            currentSearchSegmentId = '';
+            pendingAutoOpenSegmentId = '';
+            if (segmentSearchInput) {
+                segmentSearchInput.value = '';
+            }
+            applySearchToUrl();
+            segmentDetailsCache.clear();
+            expandedSegmentIds.clear();
+            setSegmentSearchFeedback('Busqueda por segmento inactiva.', 'neutral');
+            await refresh();
+        });
+    }
 
     const withButtonsDisabled = (disabled) => {
         [refreshButton, reconcileButton, resealButton].forEach((button) => {

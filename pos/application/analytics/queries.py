@@ -663,10 +663,11 @@ def _build_sealed_segment_history(
     return history
 
 
-def build_offline_limbo_payload() -> dict:
+def build_offline_limbo_payload(requested_segment_id: str = '') -> dict:
     context = build_offline_limbo_context()
     return {
         **context,
+        'requested_segment_id': str(requested_segment_id or '').strip(),
         'recent_events': [
             {
                 **event,

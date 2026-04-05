@@ -64,7 +64,7 @@ def dashboard_offline_limbo_json(request):
     api_error = _require_admin_dashboard_api_access(request)
     if api_error:
         return api_error
-    return JsonResponse(build_offline_limbo_payload())
+    return JsonResponse(build_offline_limbo_payload(request.GET.get('segment_id', '')))
 
 
 def dashboard_offline_limbo_segment_json(request):

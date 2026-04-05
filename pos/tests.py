@@ -1571,6 +1571,21 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertContains(response, 'value="sales-20260404-011"')
         self.assertContains(response, 'data-initial-segment-id="sales-20260404-011"')
 
+    def test_dashboard_offline_limbo_json_preserves_requested_segment_id(self):
+        self.client.force_login(self.admin_user)
+
+        with override_settings(
+            OFFLINE_JOURNAL_ENABLED=False,
+            OFFLINE_JOURNAL_ROOT='',
+        ):
+            response = self.client.get(
+                reverse('dashboard_offline_limbo_json'),
+                {'segment_id': 'sales-20260404-011'},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['requested_segment_id'], 'sales-20260404-011')
+
     def test_dashboard_offline_limbo_renders_sealed_segment_history(self):
         with TemporaryDirectory() as temp_dir:
             runtime = SegmentedJournalRuntime(
