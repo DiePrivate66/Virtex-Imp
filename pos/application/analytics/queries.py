@@ -5,7 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
-from django.db.models import Avg, Count, F, Sum
+from django.db.models import Avg, Case, Count, Exists, F, IntegerField, OuterRef, Sum, Value, When
 from django.db.models.functions import ExtractHour, TruncDate
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -43,6 +43,12 @@ OFFLINE_AUDIT_FOOTER_PRESENCE_OPTIONS = (
     ('', 'Todos'),
     ('present', 'Footer presente'),
     ('missing', 'Footer ausente'),
+)
+
+OFFLINE_AUDIT_SORT_OPTIONS = (
+    ('recent', 'Mas recientes'),
+    ('footer_missing', 'Footer missing primero'),
+    ('unreviewed', 'Sin revisar primero'),
 )
 
 
@@ -186,6 +192,7 @@ def _build_offline_audited_actions(
     segment_status: str = '',
     audit_result: str = '',
     footer_presence: str = '',
+    sort_order: str = 'recent',
 ):
     base_queryset = (
         AuditLog.objects.filter(
@@ -197,7 +204,6 @@ def _build_offline_audited_actions(
             created_at__date__lte=hasta,
         )
         .select_related('organization', 'location', 'actor_user')
-        .order_by('-created_at')
     )
     organization_options = list(
         base_queryset.exclude(organization__isnull=True)
@@ -285,6 +291,38 @@ def _build_offline_audited_actions(
     else:
         normalized_audit_result = ''
 
+    normalized_sort_order = str(sort_order or '').strip()
+    if normalized_sort_order not in {'recent', 'footer_missing', 'unreviewed'}:
+        normalized_sort_order = 'recent'
+
+    review_exists_queryset = AuditLog.objects.filter(
+        target_model='OfflineJournalSegment',
+        target_id=OuterRef('target_id'),
+        event_type='offline.segment_operational_review_marked',
+    )
+    queryset = queryset.annotate(
+        segment_has_review=Exists(review_exists_queryset),
+        footer_missing_priority=Case(
+            When(
+                event_type='offline.segment_footer_revalidated',
+                payload_json__footer_present=True,
+                then=Value(1),
+            ),
+            When(
+                event_type='offline.segment_operational_review_marked',
+                then=Value(1),
+            ),
+            default=Value(0),
+            output_field=IntegerField(),
+        ),
+    )
+    if normalized_sort_order == 'footer_missing':
+        queryset = queryset.order_by('footer_missing_priority', '-created_at', '-id')
+    elif normalized_sort_order == 'unreviewed':
+        queryset = queryset.order_by('segment_has_review', '-created_at', '-id')
+    else:
+        queryset = queryset.order_by('-created_at', '-id')
+
     items = list(queryset[:10])
     for item in items:
         item.offline_segment_status = str((item.payload_json or {}).get('segment_status') or '').strip()
@@ -303,6 +341,7 @@ def _build_offline_audited_actions(
         'selected_segment_status': normalized_segment_status,
         'selected_audit_result': normalized_audit_result,
         'selected_footer_presence': normalized_footer_presence,
+        'selected_sort_order': normalized_sort_order,
         'time_window_options': OFFLINE_AUDIT_TIME_WINDOW_OPTIONS,
         'action_type_options': OFFLINE_AUDIT_EVENT_TYPE_OPTIONS,
         'organization_options': organization_options,
@@ -311,6 +350,7 @@ def _build_offline_audited_actions(
         'segment_status_options': segment_status_options,
         'audit_result_options': OFFLINE_AUDIT_RESULT_OPTIONS,
         'footer_presence_options': OFFLINE_AUDIT_FOOTER_PRESENCE_OPTIONS,
+        'sort_options': OFFLINE_AUDIT_SORT_OPTIONS,
     }
 
 
@@ -327,6 +367,7 @@ def build_analytics_dashboard_context(
     offline_action_segment_status: str = '',
     offline_action_result: str = '',
     offline_action_footer_presence: str = '',
+    offline_action_sort: str = 'recent',
 ):
     hoy = timezone.localdate()
     desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
@@ -402,6 +443,7 @@ def build_analytics_dashboard_context(
         segment_status=offline_action_segment_status,
         audit_result=offline_action_result,
         footer_presence=offline_action_footer_presence,
+        sort_order=offline_action_sort,
     )
 
     return {
@@ -449,6 +491,7 @@ def build_analytics_dashboard_context(
         'offline_audited_action_filter_segment_status': offline_audit_bundle['selected_segment_status'],
         'offline_audited_action_filter_result': offline_audit_bundle['selected_audit_result'],
         'offline_audited_action_filter_footer_presence': offline_audit_bundle['selected_footer_presence'],
+        'offline_audited_action_filter_sort': offline_audit_bundle['selected_sort_order'],
         'offline_audited_action_time_window_options': offline_audit_bundle['time_window_options'],
         'offline_audited_action_type_options': offline_audit_bundle['action_type_options'],
         'offline_audited_action_organization_options': offline_audit_bundle['organization_options'],
@@ -457,6 +500,7 @@ def build_analytics_dashboard_context(
         'offline_audited_action_segment_status_options': offline_audit_bundle['segment_status_options'],
         'offline_audited_action_result_options': offline_audit_bundle['audit_result_options'],
         'offline_audited_action_footer_presence_options': offline_audit_bundle['footer_presence_options'],
+        'offline_audited_action_sort_options': offline_audit_bundle['sort_options'],
     }
 
 

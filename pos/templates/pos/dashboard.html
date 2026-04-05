@@ -268,7 +268,7 @@
             <input type="hidden" name="periodo" value="{{ periodo }}">
             {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
             {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
-            <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-10 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-11 gap-3">
                 <div>
                     <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Segment ID</label>
                     <input
@@ -394,6 +394,19 @@
                     >
                         {% for value, label in offline_audited_action_footer_presence_options %}
                         <option value="{{ value }}" {% if offline_audited_action_filter_footer_presence == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Orden Operativa</label>
+                    <select
+                        name="offline_action_sort"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                    >
+                        {% for value, label in offline_audited_action_sort_options %}
+                        <option value="{{ value }}" {% if offline_audited_action_filter_sort == value %}selected{% endif %}>
                             {{ label }}
                         </option>
                         {% endfor %}

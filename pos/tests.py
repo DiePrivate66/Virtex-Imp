@@ -1288,6 +1288,7 @@ class AnalyticsReplayTimelineTests(TestCase):
             offline_action_segment_status='sealed',
             offline_action_result='footer_present',
             offline_action_footer_presence='present',
+            offline_action_sort='recent',
         )
 
         self.assertEqual(context['offline_audited_actions_count'], 1)
@@ -1304,6 +1305,7 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(context['offline_audited_action_filter_segment_status'], 'sealed')
         self.assertEqual(context['offline_audited_action_filter_result'], 'footer_present')
         self.assertEqual(context['offline_audited_action_filter_footer_presence'], 'present')
+        self.assertEqual(context['offline_audited_action_filter_sort'], 'recent')
         self.assertTrue(
             any(
                 option['organization_id'] == self.location.organization.id
@@ -1337,6 +1339,89 @@ class AnalyticsReplayTimelineTests(TestCase):
                 for value, _label in context['offline_audited_action_footer_presence_options']
             )
         )
+        self.assertTrue(
+            any(
+                value == 'unreviewed'
+                for value, _label in context['offline_audited_action_sort_options']
+            )
+        )
+
+    def test_dashboard_context_orders_offline_audited_actions_by_footer_missing_first(self):
+        missing_footer = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-041',
+            payload_json={'segment_status': 'sealed', 'footer_present': False, 'audit_result': 'footer_missing'},
+            correlation_id='sales-20260404-041',
+        )
+        footer_ok = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-042',
+            payload_json={'segment_status': 'sealed', 'footer_present': True, 'audit_result': 'footer_present'},
+            correlation_id='sales-20260404-042',
+        )
+        AuditLog.objects.filter(id=missing_footer.id).update(
+            created_at=timezone.now() - timedelta(hours=2),
+        )
+
+        context = build_analytics_dashboard_context(
+            periodo='semana',
+            offline_action_sort='footer_missing',
+        )
+
+        self.assertEqual(context['offline_audited_action_filter_sort'], 'footer_missing')
+        self.assertEqual(context['offline_audited_actions'][0].id, missing_footer.id)
+        self.assertEqual(context['offline_audited_actions'][1].id, footer_ok.id)
+
+    def test_dashboard_context_orders_offline_audited_actions_by_unreviewed_first(self):
+        unreviewed = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-051',
+            payload_json={'segment_status': 'sealed', 'footer_present': True, 'audit_result': 'footer_present'},
+            correlation_id='sales-20260404-051',
+        )
+        reviewed = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-052',
+            payload_json={'segment_status': 'sealed', 'footer_present': True, 'audit_result': 'footer_present'},
+            correlation_id='sales-20260404-052',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_operational_review_marked',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-052',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'review_marked'},
+            correlation_id='sales-20260404-052',
+        )
+        AuditLog.objects.filter(id=unreviewed.id).update(
+            created_at=timezone.now() - timedelta(hours=2),
+        )
+
+        context = build_analytics_dashboard_context(
+            periodo='semana',
+            offline_action_sort='unreviewed',
+        )
+
+        self.assertEqual(context['offline_audited_action_filter_sort'], 'unreviewed')
+        self.assertEqual(context['offline_audited_actions'][0].target_id, 'sales-20260404-051')
 
     def test_dashboard_renders_offline_audited_actions_table(self):
         audit = AuditLog.objects.create(
@@ -1399,6 +1484,7 @@ class AnalyticsReplayTimelineTests(TestCase):
                 'offline_action_segment_status': 'sealed',
                 'offline_action_result': 'footer_present',
                 'offline_action_footer_presence': 'present',
+                'offline_action_sort': 'footer_missing',
             },
         )
 
@@ -1412,6 +1498,7 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'Estado Del Segmento')
         self.assertContains(response, 'Resultado AuditLog')
         self.assertContains(response, 'Presencia De Footer')
+        self.assertContains(response, 'Orden Operativa')
         self.assertContains(response, 'Limpiar')
         self.assertContains(response, 'value="20260404-031"')
         self.assertContains(response, 'value="24h"')
@@ -1422,6 +1509,7 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'value="sealed"')
         self.assertContains(response, 'value="footer_present"')
         self.assertContains(response, 'value="present"')
+        self.assertContains(response, 'value="footer_missing"')
 
     def test_audit_log_admin_change_view_is_available_for_offline_audited_action(self):
         audit = AuditLog.objects.create(

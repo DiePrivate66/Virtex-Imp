@@ -366,6 +366,7 @@ La base durable local ya no esta en cero:
 - el resultado del registro central (`recorded`, `audit_log_id`, `event_type` u omision explicita) ya se persiste dentro de `ops_metadata` para que el detalle expandido del segmento lo siga mostrando despues de cualquier refresh
 - el dashboard principal de analytics ya expone una tabla de `ACCIONES OFFLINE AUDITADAS` filtrada por el periodo activo, usando `AuditLog` como fuente central para revisar operaciones offline sin abrir segmento por segmento
 - esa tabla ahora soporta filtros operativos por ventana temporal secundaria, tipo de accion, organizacion, sucursal, actor, estado del segmento, presencia real de footer y resultado operativo registrado en `AuditLog`, preservando el periodo activo del dashboard para que la revision siga siendo contextual
+- esa misma tabla ya permite ordenacion operativa por `Mas recientes`, `Footer missing primero` y `Sin revisar primero`, para priorizar incidentes sin depender del orden cronologico puro
 - esa misma tabla ya permite busqueda rapida por `segment_id` usando coincidencia parcial, para entrar a un incidente aunque solo se tenga un fragmento del identificador
 - cada fila de esa tabla ya enlaza tanto al dashboard de limbo offline con `segment_id` precargado como al endpoint JSON del detalle del segmento para inspeccion directa
 - esa misma fila ya enlaza tambien al change view administrativo de `AuditLog`, cerrando la navegacion entre analytics, limbo offline, JSON diagnostico y trazabilidad central

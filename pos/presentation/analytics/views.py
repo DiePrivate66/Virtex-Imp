@@ -44,6 +44,7 @@ def dashboard_analytics(request):
             offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
             offline_action_result=request.GET.get('offline_action_result', ''),
             offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
+            offline_action_sort=request.GET.get('offline_action_sort', 'recent'),
         ),
     )
 
