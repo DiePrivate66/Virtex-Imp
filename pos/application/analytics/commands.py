@@ -219,6 +219,10 @@ def _record_offline_segment_audit_log(
         'revalidate_footer': 'offline.segment_footer_revalidated',
         'mark_operational_review': 'offline.segment_operational_review_marked',
     }[action_name]
+    audit_result = _resolve_offline_segment_audit_result(
+        event_type=event_type,
+        detail_payload=detail_payload,
+    )
     relevant_ops_metadata = (
         dict((detail_payload.get('ops_metadata') or {}).get('last_footer_revalidation') or {})
         if action_name == 'revalidate_footer'
@@ -237,6 +241,7 @@ def _record_offline_segment_audit_log(
             'segment_status': str(detail_payload.get('status') or ''),
             'segment_detail': str(detail_payload.get('detail') or ''),
             'footer_present': bool(detail_payload.get('footer_present')),
+            'audit_result': audit_result,
             'rolling_crc32': str(detail_payload.get('rolling_crc32') or ''),
             'record_count': int(detail_payload.get('record_count') or 0),
             'segment_path': str(detail_payload.get('segment_path') or ''),
@@ -255,6 +260,12 @@ def _record_offline_segment_audit_log(
         'organization_id': audit_log.organization_id,
         'location_id': audit_log.location_id,
     }
+
+
+def _resolve_offline_segment_audit_result(*, event_type: str, detail_payload: dict) -> str:
+    if event_type == 'offline.segment_footer_revalidated':
+        return 'footer_present' if detail_payload.get('footer_present') else 'footer_missing'
+    return 'review_marked'
 
 
 def _resolve_offline_segment_audit_scope(*, detail_payload: dict, user):

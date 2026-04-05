@@ -201,7 +201,7 @@ Inspect the current limbo directly from the app:
 - when the segment exposes tenant scope (`organization_id/location_id`) or the acting user has a single active membership, both actions also write a centralized `AuditLog`; if scope cannot be resolved, the local action still succeeds and the response reports that the central log was skipped
 - the expanded UI detail now shows the central logging result directly, including `audit_log_id` when recorded or the explicit skip reason when tenant scope could not be resolved
 - the main analytics dashboard now includes an `ACCIONES OFFLINE AUDITADAS` table filtered by the active period so recent offline operations can be reviewed without opening each historical segment detail
-- that table now also supports operational filters by action type, organization, location, and actor while preserving the active analytics period
+- that table now also supports operational filters by action type, organization, location, actor, segment status, and the operational result recorded in `AuditLog` while preserving the active analytics period
 - each row in that table now provides direct navigation to `/dashboard/limbo-offline/?segment_id=<segment_id>` and to `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
 - the same row now also links to the Django admin change page for the corresponding `AuditLog`, so operators can move from dashboard analytics to central audit detail without manual lookup
 - when that `AuditLog` targets `OfflineJournalSegment`, the admin change page also exposes reverse links back to `/dashboard/limbo-offline/?segment_id=<segment_id>` and `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`

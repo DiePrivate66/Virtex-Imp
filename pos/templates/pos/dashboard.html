@@ -268,7 +268,7 @@
             <input type="hidden" name="periodo" value="{{ periodo }}">
             {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
             {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-3">
                 <div>
                     <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Tipo De Accion</label>
                     <select
@@ -333,6 +333,36 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Estado Del Segmento</label>
+                    <select
+                        name="offline_action_segment_status"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                    >
+                        <option value="">Todos</option>
+                        {% for value in offline_audited_action_segment_status_options %}
+                        <option
+                            value="{{ value }}"
+                            {% if offline_audited_action_filter_segment_status == value %}selected{% endif %}
+                        >
+                            {{ value }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Resultado AuditLog</label>
+                    <select
+                        name="offline_action_result"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                    >
+                        {% for value, label in offline_audited_action_result_options %}
+                        <option value="{{ value }}" {% if offline_audited_action_filter_result == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div class="flex items-end gap-2">
                     <button type="submit" class="bg-indigo-500 hover:bg-indigo-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
                         Filtrar
@@ -354,6 +384,7 @@
                         <th class="pb-2 font-black">Tipo</th>
                         <th class="pb-2 font-black">Segmento</th>
                         <th class="pb-2 font-black">Estado</th>
+                        <th class="pb-2 font-black">Resultado</th>
                         <th class="pb-2 font-black">Actor</th>
                         <th class="pb-2 font-black">Sucursal</th>
                         <th class="pb-2 font-black text-right">AuditLog</th>
@@ -379,6 +410,11 @@
                         </td>
                         <td class="py-3 text-gray-200 text-xs">
                             {{ action.payload_json.segment_status|default:"SIN_STATUS" }}
+                        </td>
+                        <td class="py-3 text-xs">
+                            <span class="px-2 py-1 rounded-md text-[10px] font-black {% if action.offline_audit_result == 'footer_present' %}bg-emerald-900/40 text-emerald-300{% elif action.offline_audit_result == 'footer_missing' %}bg-rose-900/40 text-rose-300{% else %}bg-violet-900/40 text-violet-300{% endif %}">
+                                {{ action.offline_audit_result_label }}
+                            </span>
                         </td>
                         <td class="py-3 text-gray-300 text-xs">
                             {% if action.actor_user %}
