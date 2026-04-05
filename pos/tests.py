@@ -1601,6 +1601,68 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertNotContains(response, 'sales-20260404-071')
         self.assertContains(response, reverse('dashboard_analytics'))
         self.assertContains(response, 'value="footer_missing"')
+        self.assertContains(response, reverse('dashboard_offline_incidents_export_json'))
+        self.assertContains(response, reverse('dashboard_offline_incidents_export_csv'))
+
+    def test_offline_critical_incidents_json_export_returns_filtered_rows(self):
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-081',
+            payload_json={'segment_status': 'sealed', 'footer_present': True, 'audit_result': 'footer_present'},
+            correlation_id='sales-20260404-081',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-082',
+            payload_json={'segment_status': 'sealed', 'footer_present': False, 'audit_result': 'footer_missing'},
+            correlation_id='sales-20260404-082',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incidents_export_json'),
+            {
+                'offline_action_segment_id': '082',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['critical_only'])
+        self.assertEqual(payload['count'], 1)
+        self.assertEqual(payload['items'][0]['segment_id'], 'sales-20260404-082')
+        self.assertEqual(payload['items'][0]['audit_result'], 'footer_missing')
+
+    def test_offline_critical_incidents_csv_export_returns_filtered_rows(self):
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_operational_review_marked',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-091',
+            payload_json={'segment_status': 'corrupt', 'audit_result': 'review_marked'},
+            correlation_id='sales-20260404-091',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard_offline_incidents_export_csv'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn('attachment; filename="offline-critical-incidents.csv"', response['Content-Disposition'])
+        content = response.content.decode('utf-8')
+        self.assertIn('audit_log_id,created_at,event_type,segment_id,segment_status,audit_result,footer_present,organization_name,location_name,actor_username,critical,segment_has_review', content)
+        self.assertIn('sales-20260404-091', content)
+        self.assertIn('review_marked', content)
 
     def test_audit_log_admin_change_view_is_available_for_offline_audited_action(self):
         audit = AuditLog.objects.create(

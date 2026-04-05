@@ -77,6 +77,16 @@ urlpatterns = [
     # Analytics
     path('dashboard/', analytics_views.dashboard_analytics, name='dashboard_analytics'),
     path('dashboard/incidentes-offline/', analytics_views.dashboard_offline_incidents, name='dashboard_offline_incidents'),
+    path(
+        'dashboard/incidentes-offline/export.json',
+        analytics_views.dashboard_offline_incidents_export_json,
+        name='dashboard_offline_incidents_export_json',
+    ),
+    path(
+        'dashboard/incidentes-offline/export.csv',
+        analytics_views.dashboard_offline_incidents_export_csv,
+        name='dashboard_offline_incidents_export_csv',
+    ),
     path('dashboard/limbo-offline/', analytics_views.dashboard_offline_limbo, name='dashboard_offline_limbo'),
     path('dashboard/limbo-offline/json/', analytics_views.dashboard_offline_limbo_json, name='dashboard_offline_limbo_json'),
     path(

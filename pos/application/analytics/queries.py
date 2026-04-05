@@ -341,12 +341,7 @@ def _build_offline_audited_actions(
     else:
         queryset = queryset.order_by('-created_at', '-id')
 
-    items = list(queryset[:10])
-    for item in items:
-        item.offline_segment_status = str((item.payload_json or {}).get('segment_status') or '').strip()
-        item.offline_audit_result = _resolve_offline_audit_result(item.event_type, item.payload_json)
-        item.offline_audit_result_label = _resolve_offline_audit_result_label(item.offline_audit_result)
-        item.offline_is_critical = bool(getattr(item, 'critical_priority', 0))
+    items = [_decorate_offline_audit_item(item) for item in queryset[:10]]
 
     return {
         'queryset': queryset,
@@ -398,6 +393,37 @@ def _build_offline_audit_context_fields(offline_audit_bundle: dict) -> dict:
         'offline_audited_action_footer_presence_options': offline_audit_bundle['footer_presence_options'],
         'offline_audited_action_sort_options': offline_audit_bundle['sort_options'],
         'offline_audited_actions_critical_only': offline_audit_bundle['critical_only'],
+    }
+
+
+def _decorate_offline_audit_item(item):
+    item.offline_segment_status = str((item.payload_json or {}).get('segment_status') or '').strip()
+    item.offline_audit_result = _resolve_offline_audit_result(item.event_type, item.payload_json)
+    item.offline_audit_result_label = _resolve_offline_audit_result_label(item.offline_audit_result)
+    item.offline_is_critical = bool(getattr(item, 'critical_priority', 0))
+    return item
+
+
+def _serialize_offline_audit_item(item) -> dict:
+    payload = dict(item.payload_json or {})
+    return {
+        'audit_log_id': item.id,
+        'created_at': timezone.localtime(item.created_at).isoformat(),
+        'event_type': item.event_type,
+        'segment_id': str(item.target_id or ''),
+        'target_model': str(item.target_model or ''),
+        'segment_status': item.offline_segment_status,
+        'audit_result': item.offline_audit_result,
+        'audit_result_label': item.offline_audit_result_label,
+        'footer_present': bool(payload.get('footer_present')),
+        'organization_id': item.organization_id,
+        'organization_name': item.organization.name if item.organization_id and item.organization else '',
+        'location_id': item.location_id,
+        'location_name': item.location.name if item.location_id and item.location else '',
+        'actor_user_id': item.actor_user_id,
+        'actor_username': item.actor_user.username if item.actor_user_id and item.actor_user else '',
+        'critical': bool(item.offline_is_critical),
+        'segment_has_review': bool(getattr(item, 'segment_has_review', False)),
     }
 
 
@@ -573,6 +599,50 @@ def build_offline_critical_incidents_context(
     }
     context.update(_build_offline_audit_context_fields(offline_audit_bundle))
     return context
+
+
+def build_offline_critical_incidents_export_payload(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_action_segment_id: str = '',
+    offline_action_time_window: str = '',
+    offline_action_type: str = '',
+    offline_action_organization: str = '',
+    offline_action_location: str = '',
+    offline_action_actor: str = '',
+    offline_action_segment_status: str = '',
+    offline_action_result: str = '',
+    offline_action_footer_presence: str = '',
+    offline_action_sort: str = 'footer_missing',
+) -> dict:
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    offline_audit_bundle = _build_offline_audited_actions(
+        desde,
+        hasta,
+        segment_id=offline_action_segment_id,
+        time_window=offline_action_time_window,
+        action_type=offline_action_type,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+        segment_status=offline_action_segment_status,
+        audit_result=offline_action_result,
+        footer_presence=offline_action_footer_presence,
+        sort_order=offline_action_sort,
+        critical_only=True,
+    )
+    items = [_decorate_offline_audit_item(item) for item in offline_audit_bundle['queryset']]
+    return {
+        'periodo': periodo,
+        'desde': str(desde),
+        'hasta': str(hasta),
+        'critical_only': True,
+        'sort_order': offline_audit_bundle['selected_sort_order'],
+        'count': len(items),
+        'items': [_serialize_offline_audit_item(item) for item in items],
+    }
 
 
 def build_offline_limbo_context() -> dict:

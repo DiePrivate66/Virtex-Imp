@@ -12,6 +12,20 @@
             </p>
         </div>
         <div class="flex items-center gap-3">
+            {% if offline_actions_export_json_href and offline_actions_export_csv_href %}
+            <a
+                href="{{ offline_actions_export_json_href }}"
+                class="bg-indigo-900/50 hover:bg-indigo-800/50 text-indigo-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Export JSON
+            </a>
+            <a
+                href="{{ offline_actions_export_csv_href }}"
+                class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Export CSV
+            </a>
+            {% endif %}
             <a
                 href="{{ offline_actions_secondary_href }}"
                 class="bg-gray-800 hover:bg-gray-700 text-gray-100 text-xs font-black px-4 py-2 rounded-lg transition"

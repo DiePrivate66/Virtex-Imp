@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import csv
 import json
+from io import StringIO
 from urllib.parse import urlencode
 
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
@@ -12,6 +14,7 @@ from pos.application.analytics import (
     OfflineLimboActionError,
     build_analytics_dashboard_context,
     build_offline_critical_incidents_context,
+    build_offline_critical_incidents_export_payload,
     build_offline_limbo_context,
     build_offline_limbo_payload,
     build_offline_segment_detail_payload,
@@ -91,9 +94,64 @@ def dashboard_offline_incidents(request):
             subtitle='Solo segmentos con footer faltante o estado distinto de sealed.',
             force_render=True,
             critical_view=True,
+            export_query_params=_build_offline_actions_query_params_from_context(context),
         )
     )
     return render(request, 'pos/offline_incidents.html', context)
+
+
+def dashboard_offline_incidents_export_json(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    return JsonResponse(_build_offline_critical_incidents_export_payload_from_request(request))
+
+
+def dashboard_offline_incidents_export_csv(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    payload = _build_offline_critical_incidents_export_payload_from_request(request)
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            'audit_log_id',
+            'created_at',
+            'event_type',
+            'segment_id',
+            'segment_status',
+            'audit_result',
+            'footer_present',
+            'organization_name',
+            'location_name',
+            'actor_username',
+            'critical',
+            'segment_has_review',
+        ]
+    )
+    for item in payload['items']:
+        writer.writerow(
+            [
+                item['audit_log_id'],
+                item['created_at'],
+                item['event_type'],
+                item['segment_id'],
+                item['segment_status'],
+                item['audit_result'],
+                'YES' if item['footer_present'] else 'NO',
+                item['organization_name'],
+                item['location_name'],
+                item['actor_username'],
+                'YES' if item['critical'] else 'NO',
+                'YES' if item['segment_has_review'] else 'NO',
+            ]
+        )
+    response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename=\"offline-critical-incidents.csv\"'
+    return response
 
 
 def dashboard_offline_limbo(request):
@@ -306,9 +364,10 @@ def _build_offline_actions_panel_context(
     subtitle: str,
     force_render: bool,
     critical_view: bool,
+    export_query_params=None,
 ):
     period_query = urlencode(_build_period_query_params(periodo, desde, hasta))
-    return {
+    context = {
         'offline_actions_title': title,
         'offline_actions_subtitle': subtitle,
         'offline_actions_force_render': force_render,
@@ -317,6 +376,15 @@ def _build_offline_actions_panel_context(
         'offline_actions_secondary_href': f"{reverse('dashboard_analytics' if critical_view else 'dashboard_offline_incidents')}?{period_query}",
         'offline_actions_secondary_label': 'Volver a analytics' if critical_view else 'Solo criticos',
     }
+    if critical_view and export_query_params:
+        export_query = urlencode(export_query_params)
+        context.update(
+            {
+                'offline_actions_export_json_href': f"{reverse('dashboard_offline_incidents_export_json')}?{export_query}",
+                'offline_actions_export_csv_href': f"{reverse('dashboard_offline_incidents_export_csv')}?{export_query}",
+            }
+        )
+    return context
 
 
 def _build_period_query_params(periodo, desde, hasta):
@@ -326,3 +394,41 @@ def _build_period_query_params(periodo, desde, hasta):
     if hasta:
         params['hasta'] = str(hasta)
     return params
+
+
+def _build_offline_actions_query_params_from_context(context):
+    params = _build_period_query_params(context['periodo'], context['desde'], context['hasta'])
+    for field_name in (
+        'offline_audited_action_filter_segment_id',
+        'offline_audited_action_filter_time_window',
+        'offline_audited_action_filter_type',
+        'offline_audited_action_filter_organization',
+        'offline_audited_action_filter_location',
+        'offline_audited_action_filter_actor',
+        'offline_audited_action_filter_segment_status',
+        'offline_audited_action_filter_result',
+        'offline_audited_action_filter_footer_presence',
+        'offline_audited_action_filter_sort',
+    ):
+        value = str(context.get(field_name, '') or '').strip()
+        if value:
+            params[field_name.replace('offline_audited_action_filter_', 'offline_action_')] = value
+    return params
+
+
+def _build_offline_critical_incidents_export_payload_from_request(request):
+    return build_offline_critical_incidents_export_payload(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_action_segment_id=request.GET.get('offline_action_segment_id', ''),
+        offline_action_time_window=request.GET.get('offline_action_time_window', ''),
+        offline_action_type=request.GET.get('offline_action_type', ''),
+        offline_action_organization=request.GET.get('offline_action_organization', ''),
+        offline_action_location=request.GET.get('offline_action_location', ''),
+        offline_action_actor=request.GET.get('offline_action_actor', ''),
+        offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
+        offline_action_result=request.GET.get('offline_action_result', ''),
+        offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
+        offline_action_sort=request.GET.get('offline_action_sort', 'footer_missing'),
+    )
