@@ -443,6 +443,20 @@
         if (detail.error) {
             return `<p class="text-sm text-red-300">${escapeHtml(detail.error)}</p>`;
         }
+        const renderAuditInfo = (auditLog, emptyLabel) => {
+            const audit = auditLog || {};
+            if (!audit.recorded) {
+                return `
+                    <p class="text-gray-200">Registro central: <span class="font-black">OMITIDO</span></p>
+                    <p class="text-gray-400">${escapeHtml(audit.detail || emptyLabel)}</p>
+                `;
+            }
+            return `
+                <p class="text-gray-200">Registro central: <span class="font-black">OK</span></p>
+                <p class="text-gray-200">AuditLog ID: <span class="font-black">${escapeHtml(audit.audit_log_id || 'N/A')}</span></p>
+                <p class="text-gray-200">Event Type: <span class="font-black">${escapeHtml(audit.event_type || 'N/A')}</span></p>
+            `;
+        };
         const recentEvents = Array.isArray(detail.recent_events) ? detail.recent_events : [];
         const eventRows = recentEvents.length
             ? recentEvents.map((event) => `
@@ -457,6 +471,8 @@
         const ops = detail.ops_metadata || {};
         const review = ops.operational_review || {};
         const revalidation = ops.last_footer_revalidation || {};
+        const reviewAuditHtml = renderAuditInfo(review.audit_log, 'Sin registro central de revision.');
+        const revalidationAuditHtml = renderAuditInfo(revalidation.audit_log, 'Sin registro central de revalidacion.');
         return `
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 <div class="bg-gray-900/60 rounded-xl p-4">
@@ -508,6 +524,7 @@
                         <p class="text-gray-200">Revisado por: <span class="font-black">${escapeHtml(review.reviewed_by || 'SIN_REGISTRO')}</span></p>
                         <p class="text-gray-200">Status al revisar: <span class="font-black">${escapeHtml(review.status_at_review || 'SIN_REGISTRO')}</span></p>
                         <p class="text-gray-400">${escapeHtml(review.detail_at_review || 'Sin revision operativa registrada.')}</p>
+                        ${reviewAuditHtml}
                     </div>
                 </div>
                 <div class="bg-gray-900/60 rounded-xl p-4">
@@ -528,6 +545,7 @@
                         <p class="text-gray-200">Footer presente: <span class="font-black">${revalidation.footer_present ? 'YES' : 'NO'}</span></p>
                         <p class="text-gray-200">CRC32: <span class="font-black">${escapeHtml(revalidation.segment_crc32 || 'SIN_REGISTRO')}</span></p>
                         <p class="text-gray-400">${escapeHtml(revalidation.detail || 'Sin revalidacion registrada.')}</p>
+                        ${revalidationAuditHtml}
                     </div>
                 </div>
             </div>
@@ -695,11 +713,19 @@
                 try {
                     setActionFeedback(`Ejecutando ${actionName} sobre ${segmentId}...`, 'neutral');
                     if (actionName === 'revalidate') {
-                        await runSegmentAction(segmentRevalidateUrl, segmentId, 'revalidacion footer');
-                        setActionFeedback(`Footer revalidado para ${segmentId}.`, 'success');
+                        const payload = await runSegmentAction(segmentRevalidateUrl, segmentId, 'revalidacion footer');
+                        const auditLog = payload.audit_log || {};
+                        const suffix = auditLog.recorded
+                            ? ` AuditLog #${auditLog.audit_log_id} registrado.`
+                            : ` Registro central omitido: ${auditLog.detail || 'sin tenant resoluble'}.`;
+                        setActionFeedback(`Footer revalidado para ${segmentId}.${suffix}`, 'success');
                     } else {
-                        await runSegmentAction(segmentReviewUrl, segmentId, 'revision operativa');
-                        setActionFeedback(`Revision operativa registrada para ${segmentId}.`, 'success');
+                        const payload = await runSegmentAction(segmentReviewUrl, segmentId, 'revision operativa');
+                        const auditLog = payload.audit_log || {};
+                        const suffix = auditLog.recorded
+                            ? ` AuditLog #${auditLog.audit_log_id} registrado.`
+                            : ` Registro central omitido: ${auditLog.detail || 'sin tenant resoluble'}.`;
+                        setActionFeedback(`Revision operativa registrada para ${segmentId}.${suffix}`, 'success');
                     }
                 } catch (error) {
                     setActionFeedback(`No se pudo ejecutar ${actionName} en ${segmentId}: ${error}`, 'error');

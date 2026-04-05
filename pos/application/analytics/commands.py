@@ -143,11 +143,12 @@ def execute_offline_segment_action(
         snapshot_path = Path(detail_payload['snapshot_path'])
         snapshot = load_snapshot_payload(snapshot_path)
         ops_metadata = dict(snapshot.get('ops_metadata') or {})
+        metadata_key = 'last_footer_revalidation' if action_name == 'revalidate_footer' else 'operational_review'
         actor_username = user.get_username() if user and hasattr(user, 'get_username') else ''
         actor_user_id = getattr(user, 'id', None)
 
         if action_name == 'revalidate_footer':
-            ops_metadata['last_footer_revalidation'] = {
+            ops_metadata[metadata_key] = {
                 'revalidated_at': timezone.now().isoformat(),
                 'revalidated_by': actor_username,
                 'revalidated_by_id': actor_user_id,
@@ -158,7 +159,7 @@ def execute_offline_segment_action(
             }
             detail = 'Footer historico revalidado y registrado en metadata operativa.'
         else:
-            ops_metadata['operational_review'] = {
+            ops_metadata[metadata_key] = {
                 'reviewed_at': timezone.now().isoformat(),
                 'reviewed_by': actor_username,
                 'reviewed_by_id': actor_user_id,
@@ -178,6 +179,14 @@ def execute_offline_segment_action(
             ip_address=ip_address,
             user_agent=user_agent,
         )
+        snapshot = load_snapshot_payload(snapshot_path)
+        ops_metadata = dict(snapshot.get('ops_metadata') or {})
+        metadata_entry = dict(ops_metadata.get(metadata_key) or {})
+        metadata_entry['audit_log'] = audit_log_payload
+        ops_metadata[metadata_key] = metadata_entry
+        snapshot['ops_metadata'] = ops_metadata
+        persist_snapshot_payload(snapshot_path, snapshot)
+        refreshed = build_offline_segment_detail_payload(segment_id)
         refreshed['action'] = {
             'name': action_name,
             'performed': True,

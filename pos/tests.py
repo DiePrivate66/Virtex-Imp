@@ -1592,6 +1592,11 @@ class OfflineLimboDashboardTests(TestCase):
             self.admin_user.get_username(),
         )
         self.assertTrue(payload['ops_metadata']['last_footer_revalidation']['footer_present'])
+        self.assertTrue(payload['ops_metadata']['last_footer_revalidation']['audit_log']['recorded'])
+        self.assertEqual(
+            payload['ops_metadata']['last_footer_revalidation']['audit_log']['audit_log_id'],
+            payload['audit_log']['audit_log_id'],
+        )
         audit_log = AuditLog.objects.get(id=payload['audit_log']['audit_log_id'])
         self.assertEqual(audit_log.organization_id, self.location.organization_id)
         self.assertEqual(audit_log.location_id, self.location.id)
@@ -1647,6 +1652,11 @@ class OfflineLimboDashboardTests(TestCase):
             self.admin_user.get_username(),
         )
         self.assertEqual(payload['ops_metadata']['operational_review']['status_at_review'], 'sealed')
+        self.assertTrue(payload['ops_metadata']['operational_review']['audit_log']['recorded'])
+        self.assertEqual(
+            payload['ops_metadata']['operational_review']['audit_log']['audit_log_id'],
+            payload['audit_log']['audit_log_id'],
+        )
         audit_log = AuditLog.objects.get(id=payload['audit_log']['audit_log_id'])
         self.assertEqual(audit_log.organization_id, self.location.organization_id)
         self.assertEqual(audit_log.location_id, self.location.id)
@@ -1690,6 +1700,8 @@ class OfflineLimboDashboardTests(TestCase):
         payload = response.json()
         self.assertFalse(payload['audit_log']['recorded'])
         self.assertIn('organization', payload['audit_log']['detail'])
+        self.assertFalse(payload['ops_metadata']['operational_review']['audit_log']['recorded'])
+        self.assertIn('organization', payload['ops_metadata']['operational_review']['audit_log']['detail'])
 
     def test_dashboard_offline_limbo_seal_json_seals_rotation_needed_segment(self):
         with TemporaryDirectory() as temp_dir:
