@@ -1568,6 +1568,8 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['initial_segment_id'], 'sales-20260404-011')
         self.assertContains(response, 'Buscar Segment ID')
+        self.assertContains(response, 'Abrir JSON')
+        self.assertContains(response, 'Ctrl+Enter abre el JSON del segmento exacto.')
         self.assertContains(response, 'value="sales-20260404-011"')
         self.assertContains(response, 'data-initial-segment-id="sales-20260404-011"')
 

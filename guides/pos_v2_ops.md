@@ -208,6 +208,7 @@ Inspect the current limbo directly from the app:
 - when that `AuditLog` targets `OfflineJournalSegment`, the admin change page also exposes reverse links back to `/dashboard/limbo-offline/?segment_id=<segment_id>` and `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
 - the `Limbo Offline` page now also exposes a direct GET search by `segment_id`, so a sealed segment can be opened without first navigating from analytics or admin
 - that same search now also rides on the periodic JSON refresh: the browser keeps the active `segment_id` in the URL, sends it to `/dashboard/limbo-offline/json/`, and expands the matching segment without a full page reload
+- the same search box now also supports exact historical JSON jump with `Ctrl+Enter` or the explicit `Abrir JSON` button, so operators can open the segment detail payload directly from keyboard
 - Both actions run under the same runtime file lock used by the writer, so they do not race appends from the shadow capture path
 - Sealed history depth is controlled by `OFFLINE_JOURNAL_HISTORY_LIMIT` and defaults to `5`
 - Historical segment detail is loaded on demand from the UI, so sealed-history inspection does not bloat the periodic limbo refresh payload

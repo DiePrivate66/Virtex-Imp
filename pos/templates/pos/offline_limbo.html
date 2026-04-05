@@ -59,7 +59,7 @@
     </div>
 
     <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-6" data-segment-search-form>
-        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto] gap-3 items-end">
+        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-3 items-end">
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Buscar Segment ID</label>
                 <input
@@ -70,9 +70,17 @@
                     data-segment-search-input
                     class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
                 >
+                <p class="mt-2 text-[10px] text-gray-500">Enter busca. Ctrl+Enter abre el JSON del segmento exacto.</p>
             </div>
             <button type="submit" class="bg-indigo-500 hover:bg-indigo-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
                 Buscar
+            </button>
+            <button
+                type="button"
+                data-segment-search-open-json
+                class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-200 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Abrir JSON
             </button>
             <a
                 href="{% url 'dashboard_offline_limbo' %}"
@@ -307,6 +315,7 @@
     const actionFeedback = root.querySelector('[data-action-feedback]');
     const segmentSearchForm = root.querySelector('[data-segment-search-form]');
     const segmentSearchInput = root.querySelector('[data-segment-search-input]');
+    const segmentSearchOpenJson = root.querySelector('[data-segment-search-open-json]');
     const segmentSearchClear = root.querySelector('[data-segment-search-clear]');
     const segmentSearchFeedback = root.querySelector('[data-segment-search-feedback]');
     const eventsBody = root.querySelector('[data-recent-events-body]');
@@ -403,6 +412,35 @@
         }
         const partialMatch = sealedSegments.find((segment) => normalizeSegmentSearch(segment.segment_id).toLowerCase().includes(query));
         return partialMatch ? normalizeSegmentSearch(partialMatch.segment_id) : '';
+    };
+
+    const findExactSegmentId = (payload, requestedSegmentId) => {
+        const query = normalizeSegmentSearch(requestedSegmentId).toLowerCase();
+        if (!query) return '';
+        const activeSegmentId = normalizeSegmentSearch(payload?.limbo?.segment_id);
+        if (activeSegmentId && activeSegmentId.toLowerCase() === query) {
+            return activeSegmentId;
+        }
+        const sealedSegments = Array.isArray(payload?.sealed_segments) ? payload.sealed_segments : [];
+        const exactMatch = sealedSegments.find((segment) => normalizeSegmentSearch(segment.segment_id).toLowerCase() === query);
+        return exactMatch ? normalizeSegmentSearch(exactMatch.segment_id) : '';
+    };
+
+    const openExactSegmentJson = () => {
+        const requestedSegmentId = normalizeSegmentSearch(segmentSearchInput?.value);
+        if (!requestedSegmentId) {
+            setSegmentSearchFeedback('Ingresa un segment_id exacto para abrir el JSON historico.', 'error');
+            return;
+        }
+        const exactSegmentId = findExactSegmentId(lastPayload, requestedSegmentId);
+        if (!exactSegmentId) {
+            setSegmentSearchFeedback(`No existe una coincidencia exacta cargada para "${requestedSegmentId}".`, 'error');
+            return;
+        }
+        const detailUrl = new URL(segmentDetailUrl, window.location.origin);
+        detailUrl.searchParams.set('segment_id', exactSegmentId);
+        window.open(detailUrl.toString(), '_blank', 'noopener');
+        setSegmentSearchFeedback(`JSON abierto para ${exactSegmentId}.`, 'success');
     };
 
     const formatTimestamp = (value) => {
@@ -789,6 +827,21 @@
                 'neutral',
             );
             await refresh();
+        });
+    }
+
+    if (segmentSearchInput) {
+        segmentSearchInput.addEventListener('keydown', async (event) => {
+            if (event.key === 'Enter' && event.ctrlKey) {
+                event.preventDefault();
+                openExactSegmentJson();
+            }
+        });
+    }
+
+    if (segmentSearchOpenJson) {
+        segmentSearchOpenJson.addEventListener('click', () => {
+            openExactSegmentJson();
         });
     }
 
