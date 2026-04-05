@@ -198,6 +198,7 @@ Inspect the current limbo directly from the app:
 - Historical segment actions:
   - `POST /dashboard/limbo-offline/segment/revalidate/` revalidates footer state for a sealed historical segment and stores the result in `ops_metadata`
   - `POST /dashboard/limbo-offline/segment/review/` marks a sealed historical segment as operationally reviewed in `ops_metadata`
+  - when the segment exposes tenant scope (`organization_id/location_id`) or the acting user has a single active membership, both actions also write a centralized `AuditLog`; if scope cannot be resolved, the local action still succeeds and the response reports that the central log was skipped
 - Both actions run under the same runtime file lock used by the writer, so they do not race appends from the shadow capture path
 - Sealed history depth is controlled by `OFFLINE_JOURNAL_HISTORY_LIMIT` and defaults to `5`
 - Historical segment detail is loaded on demand from the UI, so sealed-history inspection does not bloat the periodic limbo refresh payload

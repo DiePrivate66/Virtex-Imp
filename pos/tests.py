@@ -1554,6 +1554,8 @@ class OfflineLimboDashboardTests(TestCase):
             runtime.append_sale_event(
                 event_id='evt-offline-revalidate-1',
                 payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
                     'sale_total': '5.25',
                     'payment_status': 'PAID',
                     'payment_reference': 'OFFLINE-REVALIDATE-001',
@@ -1575,17 +1577,28 @@ class OfflineLimboDashboardTests(TestCase):
                     reverse('dashboard_offline_limbo_segment_revalidate_json'),
                     data=json.dumps({'segment_id': sealed_snapshot['segment_id']}),
                     content_type='application/json',
+                    HTTP_USER_AGENT='offline-limbo-tests',
+                    REMOTE_ADDR='127.0.0.9',
                 )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload['action']['name'], 'revalidate_footer')
         self.assertTrue(payload['action']['performed'])
+        self.assertTrue(payload['audit_log']['recorded'])
+        self.assertEqual(payload['audit_log']['event_type'], 'offline.segment_footer_revalidated')
         self.assertEqual(
             payload['ops_metadata']['last_footer_revalidation']['revalidated_by'],
             self.admin_user.get_username(),
         )
         self.assertTrue(payload['ops_metadata']['last_footer_revalidation']['footer_present'])
+        audit_log = AuditLog.objects.get(id=payload['audit_log']['audit_log_id'])
+        self.assertEqual(audit_log.organization_id, self.location.organization_id)
+        self.assertEqual(audit_log.location_id, self.location.id)
+        self.assertEqual(audit_log.actor_user_id, self.admin_user.id)
+        self.assertEqual(audit_log.event_type, 'offline.segment_footer_revalidated')
+        self.assertEqual(audit_log.ip_address, '127.0.0.9')
+        self.assertEqual(audit_log.user_agent, 'offline-limbo-tests')
 
     def test_dashboard_offline_limbo_segment_review_json_records_operational_review(self):
         with TemporaryDirectory() as temp_dir:
@@ -1598,6 +1611,8 @@ class OfflineLimboDashboardTests(TestCase):
             runtime.append_sale_event(
                 event_id='evt-offline-review-1',
                 payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
                     'sale_total': '5.95',
                     'payment_status': 'PAID',
                     'payment_reference': 'OFFLINE-REVIEW-001',
@@ -1625,11 +1640,56 @@ class OfflineLimboDashboardTests(TestCase):
         payload = response.json()
         self.assertEqual(payload['action']['name'], 'mark_operational_review')
         self.assertTrue(payload['action']['performed'])
+        self.assertTrue(payload['audit_log']['recorded'])
+        self.assertEqual(payload['audit_log']['event_type'], 'offline.segment_operational_review_marked')
         self.assertEqual(
             payload['ops_metadata']['operational_review']['reviewed_by'],
             self.admin_user.get_username(),
         )
         self.assertEqual(payload['ops_metadata']['operational_review']['status_at_review'], 'sealed')
+        audit_log = AuditLog.objects.get(id=payload['audit_log']['audit_log_id'])
+        self.assertEqual(audit_log.organization_id, self.location.organization_id)
+        self.assertEqual(audit_log.location_id, self.location.id)
+        self.assertEqual(audit_log.event_type, 'offline.segment_operational_review_marked')
+
+    def test_dashboard_offline_limbo_segment_action_skips_audit_log_when_scope_is_unresolved(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-review-noscope-1',
+                payload={
+                    'sale_total': '2.50',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-REVIEW-NOSCOPE-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-review-noscope-001',
+            )
+            sealed_snapshot = runtime.seal_active_segment()
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+            ):
+                response = self.client.post(
+                    reverse('dashboard_offline_limbo_segment_review_json'),
+                    data=json.dumps({'segment_id': sealed_snapshot['segment_id']}),
+                    content_type='application/json',
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload['audit_log']['recorded'])
+        self.assertIn('organization', payload['audit_log']['detail'])
 
     def test_dashboard_offline_limbo_seal_json_seals_rotation_needed_segment(self):
         with TemporaryDirectory() as temp_dir:

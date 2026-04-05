@@ -220,6 +220,8 @@ def _execute_offline_segment_action_json(request, *, action: str):
                 action=action,
                 segment_id=segment_id,
                 user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR', ''),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
             )
         )
     except OfflineLimboActionError as exc:

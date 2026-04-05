@@ -361,6 +361,8 @@ def _build_recent_offline_events(records, *, limit: int) -> list[dict]:
                 'capture_event_type': str(payload.get('capture_event_type') or ''),
                 'sale_origin': str(payload.get('sale_origin') or ''),
                 'journal_capture_source': str(payload.get('journal_capture_source') or ''),
+                'organization_id': payload.get('organization_id'),
+                'location_id': payload.get('location_id'),
                 'payment_status': str(payload.get('payment_status') or ''),
                 'payment_reference': str(payload.get('payment_reference') or ''),
                 'sale_total': str(payload.get('sale_total') or ''),

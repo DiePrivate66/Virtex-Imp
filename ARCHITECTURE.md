@@ -362,6 +362,7 @@ La base durable local ya no esta en cero:
 - la pantalla tambien expone `seal_active_segment` como accion controlada, pero solo cuando el payload marca `rotation_needed=true`; no es un boton de sellado arbitrario
 - cada segmento sellado historico ya puede abrir detalle expandible on-demand desde la misma pantalla, cargado por JSON admin-only para no inflar el polling del resumen general
 - desde ese detalle expandido ya existen acciones controladas por segmento historico para revalidar footer y marcar revision operativa; ambas persisten metadata local en el `.snapshot` sin tocar la autoridad del journal
+- esas mismas acciones tambien intentan registrar `AuditLog` centralizado usando `organization/location` inferidos del payload del segmento o, en su defecto, una membresia activa unica del usuario; si no se puede resolver tenant, la accion local sigue siendo valida y el sistema lo reporta sin crear un log ambiguo
 - el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
 - el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
 - `manage.py offline_writer`, `manage.py offline_journal` y `manage.py offline_limbo` ya exponen append canonico, inspeccion, reconciliacion, re-sellado y lectura del summary de limbo sin depender aun del runtime Electron
