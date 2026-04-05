@@ -202,6 +202,7 @@ Inspect the current limbo directly from the app:
 - the expanded UI detail now shows the central logging result directly, including `audit_log_id` when recorded or the explicit skip reason when tenant scope could not be resolved
 - the main analytics dashboard now includes an `ACCIONES OFFLINE AUDITADAS` table filtered by the active period so recent offline operations can be reviewed without opening each historical segment detail
 - each row in that table now provides direct navigation to `/dashboard/limbo-offline/?segment_id=<segment_id>` and to `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
+- the same row now also links to the Django admin change page for the corresponding `AuditLog`, so operators can move from dashboard analytics to central audit detail without manual lookup
 - Both actions run under the same runtime file lock used by the writer, so they do not race appends from the shadow capture path
 - Sealed history depth is controlled by `OFFLINE_JOURNAL_HISTORY_LIMIT` and defaults to `5`
 - Historical segment detail is loaded on demand from the UI, so sealed-history inspection does not bloat the periodic limbo refresh payload

@@ -4,6 +4,7 @@ from pos.application.staff.commands import sync_employee_user
 
 from .models import (
     Asistencia,
+    AuditLog,
     CajaTurno,
     Categoria,
     Cliente,
@@ -204,6 +205,55 @@ class PrintJobAdmin(admin.ModelAdmin):
     list_filter = ("tipo", "estado", "created_at")
     search_fields = ("venta__id", "error")
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "created_at",
+        "event_type",
+        "organization",
+        "location",
+        "actor_user",
+        "target_model",
+        "target_id",
+        "requires_attention",
+    )
+    list_filter = ("event_type", "organization", "location", "requires_attention", "created_at")
+    search_fields = (
+        "id",
+        "event_type",
+        "target_model",
+        "target_id",
+        "correlation_id",
+        "actor_user__username",
+        "organization__name",
+        "location__name",
+    )
+    readonly_fields = (
+        "organization",
+        "location",
+        "actor_user",
+        "actor_staff",
+        "event_type",
+        "target_model",
+        "target_id",
+        "payload_json",
+        "ip_address",
+        "user_agent",
+        "correlation_id",
+        "requires_attention",
+        "resolved_at",
+        "resolved_by",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(LedgerAccount)

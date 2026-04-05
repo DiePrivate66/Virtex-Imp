@@ -1204,6 +1204,29 @@ class AnalyticsReplayTimelineTests(TestCase):
             response,
             f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-011',
         )
+        self.assertContains(
+            response,
+            reverse('admin:pos_auditlog_change', args=[audit.id]),
+        )
+
+    def test_audit_log_admin_change_view_is_available_for_offline_audited_action(self):
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-013',
+            payload_json={'segment_status': 'sealed'},
+            correlation_id='sales-20260404-013',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('admin:pos_auditlog_change', args=[audit.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'offline.segment_footer_revalidated')
+        self.assertContains(response, 'sales-20260404-013')
 
     def test_resolver_alerta_replay_marks_alert_resolved(self):
         venta = Venta.objects.create(
