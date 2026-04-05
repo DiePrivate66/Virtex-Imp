@@ -128,6 +128,22 @@ def _build_attendance_data(desde, hasta):
     return data
 
 
+def _build_offline_audited_actions(desde, hasta):
+    queryset = (
+        AuditLog.objects.filter(
+            event_type__in=[
+                'offline.segment_footer_revalidated',
+                'offline.segment_operational_review_marked',
+            ],
+            created_at__date__gte=desde,
+            created_at__date__lte=hasta,
+        )
+        .select_related('organization', 'location', 'actor_user')
+        .order_by('-created_at')
+    )
+    return queryset, list(queryset[:10])
+
+
 def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None, hasta_param=None):
     hoy = timezone.localdate()
     desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
@@ -191,6 +207,7 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
     refund_adjustments_open_total = (
         refund_adjustments_queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0')
     )
+    offline_audited_actions_queryset, offline_audited_actions = _build_offline_audited_actions(desde, hasta)
 
     return {
         'periodo': periodo,
@@ -226,6 +243,8 @@ def build_analytics_dashboard_context(periodo: str = 'semana', desde_param=None,
         'refund_adjustments_open': refund_adjustments_open,
         'refund_adjustments_open_count': refund_adjustments_queryset.count(),
         'refund_adjustments_open_total': refund_adjustments_open_total,
+        'offline_audited_actions': offline_audited_actions,
+        'offline_audited_actions_count': offline_audited_actions_queryset.count(),
     }
 
 

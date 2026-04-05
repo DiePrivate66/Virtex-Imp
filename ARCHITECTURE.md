@@ -364,6 +364,7 @@ La base durable local ya no esta en cero:
 - desde ese detalle expandido ya existen acciones controladas por segmento historico para revalidar footer y marcar revision operativa; ambas persisten metadata local en el `.snapshot` sin tocar la autoridad del journal
 - esas mismas acciones tambien intentan registrar `AuditLog` centralizado usando `organization/location` inferidos del payload del segmento o, en su defecto, una membresia activa unica del usuario; si no se puede resolver tenant, la accion local sigue siendo valida y el sistema lo reporta sin crear un log ambiguo
 - el resultado del registro central (`recorded`, `audit_log_id`, `event_type` u omision explicita) ya se persiste dentro de `ops_metadata` para que el detalle expandido del segmento lo siga mostrando despues de cualquier refresh
+- el dashboard principal de analytics ya expone una tabla de `ACCIONES OFFLINE AUDITADAS` filtrada por el periodo activo, usando `AuditLog` como fuente central para revisar operaciones offline sin abrir segmento por segmento
 - el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
 - el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
 - `manage.py offline_writer`, `manage.py offline_journal` y `manage.py offline_limbo` ya exponen append canonico, inspeccion, reconciliacion, re-sellado y lectura del summary de limbo sin depender aun del runtime Electron
