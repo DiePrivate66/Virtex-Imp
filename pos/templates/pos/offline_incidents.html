@@ -33,4 +33,99 @@
 
     {% include 'pos/partials/offline_audited_actions_panel.html' %}
 </div>
+<script>
+(() => {
+    const selectAll = document.querySelector('[data-offline-bulk-select-all]');
+    if (!selectAll) {
+        return;
+    }
+
+    const rowCheckboxes = Array.from(document.querySelectorAll('[data-offline-bulk-segment]'));
+    const feedback = document.querySelector('[data-offline-bulk-feedback]');
+    const countNode = document.querySelector('[data-offline-bulk-count]');
+    const actionButtons = Array.from(document.querySelectorAll('[data-offline-bulk-action-btn]'));
+    const csrfToken = '{{ csrf_token }}';
+
+    function selectedSegments() {
+        return rowCheckboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.value);
+    }
+
+    function renderFeedback(message, level) {
+        if (!feedback) {
+            return;
+        }
+        feedback.classList.remove('hidden', 'border-green-700/50', 'bg-green-950/40', 'text-green-200', 'border-yellow-700/50', 'bg-yellow-950/40', 'text-yellow-200');
+        if (level === 'success') {
+            feedback.classList.add('border-green-700/50', 'bg-green-950/40', 'text-green-200');
+        } else {
+            feedback.classList.add('border-yellow-700/50', 'bg-yellow-950/40', 'text-yellow-200');
+        }
+        feedback.textContent = message;
+    }
+
+    function updateSelectionState() {
+        const selected = selectedSegments();
+        if (countNode) {
+            countNode.textContent = String(selected.length);
+        }
+        selectAll.checked = selected.length > 0 && selected.length === rowCheckboxes.length;
+        selectAll.indeterminate = selected.length > 0 && selected.length < rowCheckboxes.length;
+    }
+
+    async function executeBulkAction(button) {
+        const segmentIds = selectedSegments();
+        if (!segmentIds.length) {
+            renderFeedback('Selecciona al menos un segmento para ejecutar la accion masiva.', 'warning');
+            return;
+        }
+
+        actionButtons.forEach((candidate) => {
+            candidate.disabled = true;
+            candidate.classList.add('opacity-60', 'cursor-not-allowed');
+        });
+
+        try {
+            const response = await fetch(button.dataset.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                body: JSON.stringify({ segment_ids: segmentIds }),
+            });
+            const payload = await response.json();
+            const action = payload.action || {};
+            const message = `Procesados=${action.processed || 0} · OK=${action.succeeded || 0} · FAIL=${action.failed || 0}`;
+            renderFeedback(message, action.succeeded > 0 ? 'success' : 'warning');
+            if (action.succeeded > 0) {
+                window.setTimeout(() => window.location.reload(), 900);
+            }
+        } catch (error) {
+            renderFeedback('No se pudo ejecutar la accion masiva.', 'warning');
+        } finally {
+            actionButtons.forEach((candidate) => {
+                candidate.disabled = false;
+                candidate.classList.remove('opacity-60', 'cursor-not-allowed');
+            });
+        }
+    }
+
+    selectAll.addEventListener('change', () => {
+        rowCheckboxes.forEach((checkbox) => {
+            checkbox.checked = selectAll.checked;
+        });
+        updateSelectionState();
+    });
+
+    rowCheckboxes.forEach((checkbox) => {
+        checkbox.addEventListener('change', updateSelectionState);
+    });
+
+    actionButtons.forEach((button) => {
+        button.addEventListener('click', () => executeBulkAction(button));
+    });
+
+    updateSelectionState();
+})();
+</script>
 {% endblock %}

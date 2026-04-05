@@ -87,6 +87,16 @@ urlpatterns = [
         analytics_views.dashboard_offline_incidents_export_csv,
         name='dashboard_offline_incidents_export_csv',
     ),
+    path(
+        'dashboard/incidentes-offline/bulk/revalidate/',
+        analytics_views.dashboard_offline_incidents_bulk_revalidate_json,
+        name='dashboard_offline_incidents_bulk_revalidate_json',
+    ),
+    path(
+        'dashboard/incidentes-offline/bulk/review/',
+        analytics_views.dashboard_offline_incidents_bulk_review_json,
+        name='dashboard_offline_incidents_bulk_review_json',
+    ),
     path('dashboard/limbo-offline/', analytics_views.dashboard_offline_limbo, name='dashboard_offline_limbo'),
     path('dashboard/limbo-offline/json/', analytics_views.dashboard_offline_limbo_json, name='dashboard_offline_limbo_json'),
     path(

@@ -1603,6 +1603,8 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'value="footer_missing"')
         self.assertContains(response, reverse('dashboard_offline_incidents_export_json'))
         self.assertContains(response, reverse('dashboard_offline_incidents_export_csv'))
+        self.assertContains(response, 'Revalidar Seleccionados')
+        self.assertContains(response, 'Marcar Revision')
 
     def test_offline_critical_incidents_json_export_returns_filtered_rows(self):
         AuditLog.objects.create(
@@ -2254,6 +2256,130 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(audit_log.location_id, self.location.id)
         self.assertEqual(audit_log.event_type, 'offline.segment_operational_review_marked')
         self.assertEqual(audit_log.payload_json.get('audit_result'), 'review_marked')
+
+    def test_dashboard_offline_incidents_bulk_revalidate_json_processes_multiple_segments(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-bulk-revalidate-1',
+                payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
+                    'sale_total': '5.25',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-BULK-REVALIDATE-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-bulk-revalidate-001',
+            )
+            first_segment = runtime.seal_active_segment()
+            runtime.append_sale_event(
+                event_id='evt-offline-bulk-revalidate-2',
+                payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
+                    'sale_total': '6.15',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-BULK-REVALIDATE-002',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-bulk-revalidate-002',
+            )
+            second_segment = runtime.seal_active_segment()
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+            ):
+                response = self.client.post(
+                    reverse('dashboard_offline_incidents_bulk_revalidate_json'),
+                    data=json.dumps({'segment_ids': [first_segment['segment_id'], second_segment['segment_id']]}),
+                    content_type='application/json',
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'revalidate_footer')
+        self.assertEqual(payload['action']['processed'], 2)
+        self.assertEqual(payload['action']['succeeded'], 2)
+        self.assertEqual(payload['action']['failed'], 0)
+        self.assertTrue(all(result['ok'] for result in payload['results']))
+        self.assertEqual(
+            AuditLog.objects.filter(event_type='offline.segment_footer_revalidated').count(),
+            2,
+        )
+
+    def test_dashboard_offline_incidents_bulk_review_json_reports_partial_failure(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-bulk-review-1',
+                payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
+                    'sale_total': '4.80',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-BULK-REVIEW-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-bulk-review-001',
+            )
+            sealed_segment = runtime.seal_active_segment()
+            runtime.append_sale_event(
+                event_id='evt-offline-bulk-review-2',
+                payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
+                    'sale_total': '3.60',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-BULK-REVIEW-002',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-bulk-review-002',
+            )
+            active_segment_id = runtime.get_limbo_view()['segment_id']
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+            ):
+                response = self.client.post(
+                    reverse('dashboard_offline_incidents_bulk_review_json'),
+                    data=json.dumps({'segment_ids': [sealed_segment['segment_id'], active_segment_id]}),
+                    content_type='application/json',
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'mark_operational_review')
+        self.assertEqual(payload['action']['processed'], 2)
+        self.assertEqual(payload['action']['succeeded'], 1)
+        self.assertEqual(payload['action']['failed'], 1)
+        self.assertTrue(payload['results'][0]['ok'])
+        self.assertFalse(payload['results'][1]['ok'])
+        self.assertIn('segmento activo', payload['results'][1]['detail'])
 
     def test_dashboard_offline_limbo_segment_action_skips_audit_log_when_scope_is_unresolved(self):
         with TemporaryDirectory() as temp_dir:

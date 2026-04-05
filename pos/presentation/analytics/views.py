@@ -19,6 +19,7 @@ from pos.application.analytics import (
     build_offline_limbo_payload,
     build_offline_segment_detail_payload,
     execute_offline_limbo_action,
+    execute_offline_segment_bulk_action,
     execute_offline_segment_action,
 )
 from pos.application.sales import (
@@ -152,6 +153,14 @@ def dashboard_offline_incidents_export_csv(request):
     response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename=\"offline-critical-incidents.csv\"'
     return response
+
+
+def dashboard_offline_incidents_bulk_revalidate_json(request):
+    return _execute_offline_segment_bulk_action_json(request, action='revalidate_footer')
+
+
+def dashboard_offline_incidents_bulk_review_json(request):
+    return _execute_offline_segment_bulk_action_json(request, action='mark_operational_review')
 
 
 def dashboard_offline_limbo(request):
@@ -382,6 +391,8 @@ def _build_offline_actions_panel_context(
             {
                 'offline_actions_export_json_href': f"{reverse('dashboard_offline_incidents_export_json')}?{export_query}",
                 'offline_actions_export_csv_href': f"{reverse('dashboard_offline_incidents_export_csv')}?{export_query}",
+                'offline_actions_bulk_revalidate_href': reverse('dashboard_offline_incidents_bulk_revalidate_json'),
+                'offline_actions_bulk_review_href': reverse('dashboard_offline_incidents_bulk_review_json'),
             }
         )
     return context
@@ -432,3 +443,39 @@ def _build_offline_critical_incidents_export_payload_from_request(request):
         offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
         offline_action_sort=request.GET.get('offline_action_sort', 'footer_missing'),
     )
+
+
+def _execute_offline_segment_bulk_action_json(request, *, action: str):
+    api_error = _require_admin_dashboard_api_access(request)
+    if api_error:
+        return api_error
+    if request.method != 'POST':
+        return JsonResponse({'detail': 'method not allowed'}, status=405)
+    try:
+        body = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'detail': 'json body invalido'}, status=400)
+
+    segment_ids = body.get('segment_ids') or []
+    try:
+        payload = execute_offline_segment_bulk_action(
+            action=action,
+            segment_ids=segment_ids,
+            user=request.user,
+            ip_address=request.META.get('REMOTE_ADDR', ''),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+    except OfflineLimboActionError as exc:
+        return JsonResponse(
+            {
+                'detail': str(exc),
+                'action': {
+                    'name': action,
+                    'performed': False,
+                },
+            },
+            status=409,
+        )
+
+    status_code = 200 if payload['action']['succeeded'] > 0 else 409
+    return JsonResponse(payload, status=status_code)

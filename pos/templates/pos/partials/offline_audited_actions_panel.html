@@ -198,11 +198,53 @@
             </div>
         </div>
     </form>
+    {% if offline_actions_critical_view and offline_audited_actions_count %}
+    <div class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-4">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+                <p class="text-indigo-200 text-[10px] uppercase tracking-widest font-black">Acciones Masivas</p>
+                <p class="text-gray-300 text-xs mt-1">
+                    Seleccionados: <span class="font-black" data-offline-bulk-count>0</span>
+                </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <button
+                    type="button"
+                    data-offline-bulk-action-btn
+                    data-endpoint="{{ offline_actions_bulk_revalidate_href }}"
+                    data-action-label="revalidate"
+                    class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-100 text-xs font-black px-4 py-2 rounded-lg transition"
+                >
+                    Revalidar Seleccionados
+                </button>
+                <button
+                    type="button"
+                    data-offline-bulk-action-btn
+                    data-endpoint="{{ offline_actions_bulk_review_href }}"
+                    data-action-label="review"
+                    class="bg-violet-900/50 hover:bg-violet-800/50 text-violet-100 text-xs font-black px-4 py-2 rounded-lg transition"
+                >
+                    Marcar Revision
+                </button>
+            </div>
+        </div>
+        <div data-offline-bulk-feedback class="hidden mt-3 rounded-xl border px-4 py-3 text-sm"></div>
+    </div>
+    {% endif %}
     {% if offline_audited_actions_count %}
     <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse">
             <thead>
                 <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                    {% if offline_actions_critical_view %}
+                    <th class="pb-2 font-black">
+                        <input
+                            type="checkbox"
+                            data-offline-bulk-select-all
+                            class="h-4 w-4 rounded border-gray-600 bg-gray-900 text-indigo-500 focus:ring-indigo-400"
+                        >
+                    </th>
+                    {% endif %}
                     <th class="pb-2 font-black">Hora</th>
                     <th class="pb-2 font-black">Tipo</th>
                     <th class="pb-2 font-black">Segmento</th>
@@ -217,6 +259,16 @@
             <tbody class="text-sm">
                 {% for action in offline_audited_actions %}
                 <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
+                    {% if offline_actions_critical_view %}
+                    <td class="py-3 text-xs">
+                        <input
+                            type="checkbox"
+                            value="{{ action.target_id }}"
+                            data-offline-bulk-segment
+                            class="h-4 w-4 rounded border-gray-600 bg-gray-900 text-indigo-500 focus:ring-indigo-400"
+                        >
+                    </td>
+                    {% endif %}
                     <td class="py-3 text-gray-300 text-xs">{{ action.created_at|date:"d/m H:i" }}</td>
                     <td class="py-3 text-xs">
                         <span class="px-2 py-1 rounded-md text-[10px] font-black {% if action.event_type == 'offline.segment_footer_revalidated' %}bg-sky-900/40 text-sky-300{% else %}bg-violet-900/40 text-violet-300{% endif %}">

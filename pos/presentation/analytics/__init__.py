@@ -1,6 +1,8 @@
 from .views import (
     dashboard_analytics,
     dashboard_offline_incidents,
+    dashboard_offline_incidents_bulk_revalidate_json,
+    dashboard_offline_incidents_bulk_review_json,
     dashboard_offline_incidents_export_csv,
     dashboard_offline_incidents_export_json,
     dashboard_offline_limbo,
@@ -19,6 +21,8 @@ from .views import (
 __all__ = [
     'dashboard_analytics',
     'dashboard_offline_incidents',
+    'dashboard_offline_incidents_bulk_revalidate_json',
+    'dashboard_offline_incidents_bulk_review_json',
     'dashboard_offline_incidents_export_csv',
     'dashboard_offline_incidents_export_json',
     'dashboard_offline_limbo',
