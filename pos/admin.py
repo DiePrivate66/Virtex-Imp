@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
+from urllib.parse import quote
 
 from pos.application.staff.commands import sync_employee_user
 
@@ -247,6 +250,7 @@ class AuditLogAdmin(admin.ModelAdmin):
         "resolved_at",
         "resolved_by",
         "created_at",
+        "offline_navigation_links",
     )
 
     def has_add_permission(self, request):
@@ -254,6 +258,22 @@ class AuditLogAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    @admin.display(description="Offline navigation")
+    def offline_navigation_links(self, obj):
+        if not obj or obj.target_model != "OfflineJournalSegment" or not obj.target_id:
+            return "No aplica"
+        encoded_segment_id = quote(str(obj.target_id), safe="")
+        limbo_url = f'{reverse("dashboard_offline_limbo")}?segment_id={encoded_segment_id}'
+        json_url = f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={encoded_segment_id}'
+        return format_html(
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+            '<a href="{}" target="_blank" rel="noopener">Abrir Limbo</a>'
+            '<a href="{}" target="_blank" rel="noopener">Abrir JSON</a>'
+            "</div>",
+            limbo_url,
+            json_url,
+        )
 
 
 @admin.register(LedgerAccount)

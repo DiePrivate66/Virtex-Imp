@@ -367,6 +367,7 @@ La base durable local ya no esta en cero:
 - el dashboard principal de analytics ya expone una tabla de `ACCIONES OFFLINE AUDITADAS` filtrada por el periodo activo, usando `AuditLog` como fuente central para revisar operaciones offline sin abrir segmento por segmento
 - cada fila de esa tabla ya enlaza tanto al dashboard de limbo offline con `segment_id` precargado como al endpoint JSON del detalle del segmento para inspeccion directa
 - esa misma fila ya enlaza tambien al change view administrativo de `AuditLog`, cerrando la navegacion entre analytics, limbo offline, JSON diagnostico y trazabilidad central
+- el `AuditLogAdmin` ya muestra enlaces inversos a `Limbo` y `JSON` cuando el `target_model` es `OfflineJournalSegment`, cerrando la navegacion en ambos sentidos
 - el sidecar ya se trata como optimizacion reparable; si queda atras respecto al journal, el journal manda y el arranque repara metadata
 - el re-sellado de segmentos abiertos ya puede reconstruirse desde sidecar cuando el footer pendiente no alcanzo a persistirse
 - `manage.py offline_writer`, `manage.py offline_journal` y `manage.py offline_limbo` ya exponen append canonico, inspeccion, reconciliacion, re-sellado y lectura del summary de limbo sin depender aun del runtime Electron

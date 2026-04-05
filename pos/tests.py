@@ -1227,6 +1227,32 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'offline.segment_footer_revalidated')
         self.assertContains(response, 'sales-20260404-013')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo")}?segment_id=sales-20260404-013',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-013',
+        )
+
+    def test_audit_log_admin_change_view_hides_offline_links_for_non_segment_targets(self):
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='sale.post_close_replay_alert',
+            target_model='Venta',
+            target_id='123',
+            payload_json={'queue_session_id': 'offline-dashboard-z'},
+            correlation_id='offline-dashboard-z',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('admin:pos_auditlog_change', args=[audit.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No aplica')
 
     def test_resolver_alerta_replay_marks_alert_resolved(self):
         venta = Venta.objects.create(
