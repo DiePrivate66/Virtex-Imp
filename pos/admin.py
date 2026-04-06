@@ -261,22 +261,35 @@ class AuditLogAdmin(admin.ModelAdmin):
 
     @admin.display(description="Offline navigation")
     def offline_navigation_links(self, obj):
-        if not obj or obj.target_model != "OfflineJournalSegment" or not obj.target_id:
+        if not obj or not obj.target_model or not obj.target_id:
             return "No aplica"
-        encoded_segment_id = quote(str(obj.target_id), safe="")
-        limbo_url = f'{reverse("dashboard_offline_limbo")}?segment_id={encoded_segment_id}'
-        html_url = f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id={encoded_segment_id}'
-        json_url = f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={encoded_segment_id}'
-        return format_html(
-            '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-            '<a href="{}" target="_blank" rel="noopener">Abrir Limbo</a>'
-            '<a href="{}" target="_blank" rel="noopener">Abrir HTML</a>'
-            '<a href="{}" target="_blank" rel="noopener">Abrir JSON</a>'
-            "</div>",
-            limbo_url,
-            html_url,
-            json_url,
-        )
+        if obj.target_model == "OfflineJournalSegment":
+            encoded_segment_id = quote(str(obj.target_id), safe="")
+            limbo_url = f'{reverse("dashboard_offline_limbo")}?segment_id={encoded_segment_id}'
+            html_url = f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id={encoded_segment_id}'
+            json_url = f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={encoded_segment_id}'
+            return format_html(
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+                '<a href="{}" target="_blank" rel="noopener">Abrir Limbo</a>'
+                '<a href="{}" target="_blank" rel="noopener">Abrir HTML</a>'
+                '<a href="{}" target="_blank" rel="noopener">Abrir JSON</a>'
+                "</div>",
+                limbo_url,
+                html_url,
+                json_url,
+            )
+        if obj.target_model == "OfflineJournalSegmentBatch":
+            batch_html_url = f'{reverse("dashboard_offline_incident_batch_detail")}?audit_log_id={obj.id}'
+            batch_json_url = f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={obj.id}'
+            return format_html(
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+                '<a href="{}" target="_blank" rel="noopener">Abrir Lote HTML</a>'
+                '<a href="{}" target="_blank" rel="noopener">Abrir Lote JSON</a>'
+                "</div>",
+                batch_html_url,
+                batch_json_url,
+            )
+        return "No aplica"
 
 
 @admin.register(LedgerAccount)

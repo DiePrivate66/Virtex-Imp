@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from io import StringIO
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
@@ -244,6 +244,7 @@ def dashboard_offline_incident_batch_detail(request):
 
     context = {
         'batch_detail': detail,
+        'batch_detail_segments': _build_offline_batch_segment_references(detail),
         'batch_detail_json_href': _build_offline_batch_json_href(
             detail['audit_log_id'],
             batch_id=detail['batch_id'],
@@ -767,6 +768,68 @@ def _build_offline_batch_back_href(request) -> str:
             params[key] = value
     base = reverse('dashboard_offline_incident_batches')
     return f"{base}?{urlencode(params)}" if params else base
+
+
+def _build_offline_batch_segment_references(detail: dict) -> list[dict]:
+    payload = dict(detail.get('payload_json') or {})
+    failed_details = list(detail.get('failed_details') or [])
+    segment_ids = []
+    seen = set()
+
+    def push(raw_segment_id):
+        normalized = str(raw_segment_id or '').strip()
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        segment_ids.append(normalized)
+
+    for raw_segment_id in payload.get('segment_ids') or []:
+        push(raw_segment_id)
+    for raw_segment_id in payload.get('successful_segment_ids') or []:
+        push(raw_segment_id)
+    for raw_segment_id in payload.get('failed_segment_ids') or []:
+        push(raw_segment_id)
+    for item in failed_details:
+        push((item or {}).get('segment_id'))
+
+    failed_map = {}
+    for item in failed_details:
+        segment_id = str((item or {}).get('segment_id') or '').strip()
+        if not segment_id:
+            continue
+        failed_map[segment_id] = str((item or {}).get('detail') or (item or {}).get('reason') or '').strip()
+
+    successful_ids = {
+        str(segment_id or '').strip()
+        for segment_id in (payload.get('successful_segment_ids') or [])
+        if str(segment_id or '').strip()
+    }
+    failed_ids = {
+        str(segment_id or '').strip()
+        for segment_id in (payload.get('failed_segment_ids') or [])
+        if str(segment_id or '').strip()
+    }
+
+    rows = []
+    for segment_id in segment_ids:
+        if segment_id in failed_ids:
+            batch_status = 'failed'
+        elif segment_id in successful_ids:
+            batch_status = 'succeeded'
+        else:
+            batch_status = 'listed'
+        encoded_segment_id = quote(segment_id, safe='')
+        rows.append(
+            {
+                'segment_id': segment_id,
+                'batch_status': batch_status,
+                'detail': failed_map.get(segment_id, ''),
+                'limbo_href': f'{reverse("dashboard_offline_limbo")}?segment_id={encoded_segment_id}',
+                'html_href': f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id={encoded_segment_id}',
+                'json_href': f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={encoded_segment_id}',
+            }
+        )
+    return rows
 
 
 def _build_offline_segment_json_href(segment_id='') -> str:

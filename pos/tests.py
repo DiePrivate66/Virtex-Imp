@@ -1971,6 +1971,9 @@ class AnalyticsReplayTimelineTests(TestCase):
                 'processed': 9,
                 'succeeded': 8,
                 'failed': 1,
+                'segment_ids': ['sales-001', 'sales-002'],
+                'successful_segment_ids': ['sales-002'],
+                'failed_segment_ids': ['sales-001'],
                 'failed_details': [{'segment_id': 'sales-001', 'detail': 'footer missing'}],
             },
             correlation_id='corr-detail-html-001',
@@ -1987,6 +1990,21 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, 'revalidate-batch-detail-html-001')
         self.assertContains(response, 'corr-detail-html-001')
         self.assertContains(response, 'footer missing')
+        self.assertContains(response, 'Segmentos Asociados')
+        self.assertContains(response, 'sales-001')
+        self.assertContains(response, 'sales-002')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id=sales-001',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo")}?segment_id=sales-001',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-001',
+        )
         self.assertContains(
             response,
             f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
@@ -1994,6 +2012,37 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(
             response,
             reverse('admin:pos_auditlog_change', args=[selected_batch.id]),
+        )
+
+    def test_audit_log_admin_change_view_links_offline_batch_navigation(self):
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_review_marked',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='review-batch-admin-001',
+            payload_json={
+                'processed': 2,
+                'succeeded': 2,
+                'failed': 0,
+                'segment_ids': ['sales-20260404-101', 'sales-20260404-102'],
+            },
+            correlation_id='review-batch-admin-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('admin:pos_auditlog_change', args=[audit.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'offline.segment_bulk_review_marked')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_incident_batch_detail")}?audit_log_id={audit.id}',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={audit.id}',
         )
 
     def test_offline_incident_batch_json_accepts_batch_id(self):

@@ -127,5 +127,70 @@
         <p class="text-gray-400 text-sm mt-4">No hay failed details registrados para este lote.</p>
         {% endif %}
     </div>
+
+    <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5 mt-6">
+        <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Segmentos Asociados</h2>
+        {% if batch_detail_segments %}
+        <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                        <th class="pb-2 font-black">Segmento</th>
+                        <th class="pb-2 font-black">Estado En Lote</th>
+                        <th class="pb-2 font-black">Detalle</th>
+                        <th class="pb-2 font-black text-right">Navegacion</th>
+                    </tr>
+                </thead>
+                <tbody class="text-sm">
+                    {% for item in batch_detail_segments %}
+                    <tr class="border-b border-gray-800/50">
+                        <td class="py-3 text-gray-200 break-all">{{ item.segment_id }}</td>
+                        <td class="py-3 text-xs">
+                            <span class="px-2 py-1 rounded-md text-[10px] font-black {% if item.batch_status == 'failed' %}bg-red-900/40 text-red-300{% elif item.batch_status == 'succeeded' %}bg-green-900/40 text-green-300{% else %}bg-gray-800 text-gray-300{% endif %}">
+                                {{ item.batch_status|upper }}
+                            </span>
+                        </td>
+                        <td class="py-3 text-gray-300">
+                            {% if item.detail %}
+                                {{ item.detail }}
+                            {% else %}
+                                SIN_DETALLE
+                            {% endif %}
+                        </td>
+                        <td class="py-3 text-right text-xs">
+                            <div class="flex justify-end gap-2">
+                                <a
+                                    href="{{ item.limbo_href }}"
+                                    class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                                >
+                                    Limbo
+                                </a>
+                                <a
+                                    href="{{ item.html_href }}"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="bg-sky-900/50 text-sky-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-sky-800/50 transition"
+                                >
+                                    HTML
+                                </a>
+                                <a
+                                    href="{{ item.json_href }}"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="bg-indigo-900/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                                >
+                                    JSON
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-400 text-sm mt-4">No hay segmentos asociados explicitamente en este lote.</p>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}
