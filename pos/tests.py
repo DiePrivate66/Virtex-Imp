@@ -1960,50 +1960,103 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(payload['payload_json']['processed'], 9)
 
     def test_offline_incident_batch_detail_renders_single_run_payload(self):
-        selected_batch = AuditLog.objects.create(
-            organization=self.location.organization,
-            location=self.location,
-            actor_user=self.user,
-            event_type='offline.segment_bulk_revalidated',
-            target_model='OfflineJournalSegmentBatch',
-            target_id='revalidate-batch-detail-html-001',
-            payload_json={
-                'processed': 9,
-                'succeeded': 8,
-                'failed': 1,
-                'segment_ids': ['sales-001', 'sales-002'],
-                'successful_segment_ids': ['sales-002'],
-                'failed_segment_ids': ['sales-001'],
-                'failed_details': [{'segment_id': 'sales-001', 'detail': 'footer missing'}],
-            },
-            correlation_id='corr-detail-html-001',
-        )
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='batch-detail-live-001',
+                payload={
+                    'sale_total': '4.50',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'BATCH-DETAIL-001',
+                    'journal_capture_source': 'test-suite',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='batch-detail-001',
+                queue_session_id='batch-detail-session',
+                session_seq_no=1,
+            )
+            sealed_segment_id = runtime.get_limbo_view()['segment_id']
+            runtime.seal_active_segment()
+            runtime.append_sale_event(
+                event_id='batch-detail-live-002',
+                payload={
+                    'sale_total': '9.25',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'BATCH-DETAIL-002',
+                    'journal_capture_source': 'test-suite',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='batch-detail-002',
+                queue_session_id='batch-detail-session',
+                session_seq_no=2,
+            )
+            open_segment_id = runtime.get_limbo_view()['segment_id']
 
-        self.client.force_login(self.user)
-        response = self.client.get(
-            reverse('dashboard_offline_incident_batch_detail'),
-            {'audit_log_id': str(selected_batch.id)},
-        )
+            selected_batch = AuditLog.objects.create(
+                organization=self.location.organization,
+                location=self.location,
+                actor_user=self.user,
+                event_type='offline.segment_bulk_revalidated',
+                target_model='OfflineJournalSegmentBatch',
+                target_id='revalidate-batch-detail-html-001',
+                payload_json={
+                    'processed': 2,
+                    'succeeded': 1,
+                    'failed': 1,
+                    'segment_ids': [sealed_segment_id, open_segment_id],
+                    'successful_segment_ids': [sealed_segment_id],
+                    'failed_segment_ids': [open_segment_id],
+                    'failed_details': [{'segment_id': open_segment_id, 'detail': 'segment still open'}],
+                },
+                correlation_id='corr-detail-html-001',
+            )
+
+            self.client.force_login(self.user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+            ):
+                response = self.client.get(
+                    reverse('dashboard_offline_incident_batch_detail'),
+                    {'audit_log_id': str(selected_batch.id)},
+                )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['batch_detail_segment_summary']['total_segments'], 2)
+        self.assertEqual(response.context['batch_detail_segment_summary']['resolved_segments'], 2)
+        self.assertEqual(response.context['batch_detail_segment_summary']['sealed_segments'], 1)
+        self.assertEqual(response.context['batch_detail_segment_summary']['open_segments'], 1)
+        self.assertEqual(response.context['batch_detail_segment_summary']['current_total_sales'], 2)
+        self.assertEqual(response.context['batch_detail_segment_summary']['current_amount_total'], '13.75')
         self.assertContains(response, 'DETALLE DE LOTE OFFLINE')
         self.assertContains(response, 'revalidate-batch-detail-html-001')
         self.assertContains(response, 'corr-detail-html-001')
-        self.assertContains(response, 'footer missing')
+        self.assertContains(response, 'segment still open')
+        self.assertContains(response, 'Estado Actual De Segmentos Asociados')
         self.assertContains(response, 'Segmentos Asociados')
-        self.assertContains(response, 'sales-001')
-        self.assertContains(response, 'sales-002')
+        self.assertContains(response, sealed_segment_id)
+        self.assertContains(response, open_segment_id)
+        self.assertContains(response, 'SEALED')
+        self.assertContains(response, 'OPEN')
         self.assertContains(
             response,
-            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id=sales-001',
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id={sealed_segment_id}',
         )
         self.assertContains(
             response,
-            f'{reverse("dashboard_offline_limbo")}?segment_id=sales-001',
+            f'{reverse("dashboard_offline_limbo")}?segment_id={open_segment_id}',
         )
         self.assertContains(
             response,
-            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-001',
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={open_segment_id}',
         )
         self.assertContains(
             response,

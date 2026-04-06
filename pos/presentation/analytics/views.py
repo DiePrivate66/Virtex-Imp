@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from decimal import Decimal, InvalidOperation
 from io import StringIO
 from urllib.parse import quote, urlencode
 
@@ -9,6 +10,7 @@ from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from pos.application.analytics import (
     OfflineLimboActionError,
@@ -242,9 +244,12 @@ def dashboard_offline_incident_batch_detail(request):
     except ValueError:
         return redirect('dashboard_offline_incident_batches')
 
+    batch_detail_segments = _build_offline_batch_segment_references(detail)
+    batch_detail_segments = _enrich_offline_batch_segments_with_live_state(batch_detail_segments)
     context = {
         'batch_detail': detail,
-        'batch_detail_segments': _build_offline_batch_segment_references(detail),
+        'batch_detail_segments': batch_detail_segments,
+        'batch_detail_segment_summary': _build_offline_batch_segment_live_summary(batch_detail_segments),
         'batch_detail_json_href': _build_offline_batch_json_href(
             detail['audit_log_id'],
             batch_id=detail['batch_id'],
@@ -830,6 +835,101 @@ def _build_offline_batch_segment_references(detail: dict) -> list[dict]:
             }
         )
     return rows
+
+
+def _enrich_offline_batch_segments_with_live_state(rows: list[dict]) -> list[dict]:
+    enriched_rows = []
+    refreshed_at = timezone.now().isoformat()
+    for row in rows:
+        try:
+            detail = build_offline_segment_detail_payload(row['segment_id'])
+        except ValueError as exc:
+            enriched_rows.append(
+                {
+                    **row,
+                    'live_available': False,
+                    'current_status': 'unavailable',
+                    'current_detail': str(exc),
+                    'current_footer_present': None,
+                    'current_total_sales': 0,
+                    'current_amount_total': '0.00',
+                    'current_reviewed': False,
+                    'current_refreshed_at': refreshed_at,
+                }
+            )
+            continue
+
+        summary = dict(detail.get('summary') or {})
+        ops_metadata = dict(detail.get('ops_metadata') or {})
+        enriched_rows.append(
+            {
+                **row,
+                'live_available': True,
+                'current_status': str(detail.get('status') or 'unavailable'),
+                'current_detail': str(detail.get('detail') or ''),
+                'current_footer_present': bool(detail.get('footer_present')),
+                'current_total_sales': int(summary.get('total_sales') or 0),
+                'current_amount_total': str(summary.get('amount_total') or '0.00'),
+                'current_reviewed': bool(ops_metadata.get('operational_review')),
+                'current_refreshed_at': str(detail.get('refreshed_at') or refreshed_at),
+            }
+        )
+    return enriched_rows
+
+
+def _build_offline_batch_segment_live_summary(rows: list[dict]) -> dict:
+    summary = {
+        'total_segments': len(rows),
+        'resolved_segments': 0,
+        'unavailable_segments': 0,
+        'sealed_segments': 0,
+        'footer_missing_segments': 0,
+        'integrity_error_segments': 0,
+        'open_segments': 0,
+        'footer_present_segments': 0,
+        'footer_absent_segments': 0,
+        'reviewed_segments': 0,
+        'unreviewed_segments': 0,
+        'current_total_sales': 0,
+        'current_amount_total': '0.00',
+        'refreshed_at': timezone.now().isoformat(),
+    }
+    amount_total = Decimal('0.00')
+    for row in rows:
+        if not row.get('live_available'):
+            summary['unavailable_segments'] += 1
+            continue
+
+        summary['resolved_segments'] += 1
+        current_status = str(row.get('current_status') or '')
+        if current_status == 'sealed':
+            summary['sealed_segments'] += 1
+        elif current_status == 'footer_missing':
+            summary['footer_missing_segments'] += 1
+        elif current_status == 'integrity_error':
+            summary['integrity_error_segments'] += 1
+        elif current_status == 'open':
+            summary['open_segments'] += 1
+
+        current_footer_present = row.get('current_footer_present')
+        if current_footer_present is True:
+            summary['footer_present_segments'] += 1
+        elif current_footer_present is False:
+            summary['footer_absent_segments'] += 1
+
+        if row.get('current_reviewed'):
+            summary['reviewed_segments'] += 1
+        else:
+            summary['unreviewed_segments'] += 1
+
+        summary['current_total_sales'] += int(row.get('current_total_sales') or 0)
+        try:
+            amount_total += Decimal(str(row.get('current_amount_total') or '0'))
+        except (InvalidOperation, TypeError, ValueError):
+            amount_total += Decimal('0.00')
+
+    summary['current_amount_total'] = f'{amount_total.quantize(Decimal("0.01")):.2f}'
+    return summary
 
 
 def _build_offline_segment_json_href(segment_id='') -> str:

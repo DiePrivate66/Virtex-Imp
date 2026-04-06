@@ -129,6 +129,67 @@
     </div>
 
     <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5 mt-6">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Estado Actual De Segmentos Asociados</h2>
+                <p class="text-gray-500 text-xs mt-2">
+                    Resumen live calculado contra el detalle offline actual de cada segmento asociado.
+                </p>
+            </div>
+            <p class="text-gray-600 text-[11px] font-bold">
+                Refrescado: {{ batch_detail_segment_summary.refreshed_at }}
+            </p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+            <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+                <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">TOTAL SEGMENTOS</p>
+                <p class="text-white text-4xl font-black mt-2">{{ batch_detail_segment_summary.total_segments }}</p>
+                <p class="text-gray-600 text-xs mt-1">Asociados al lote</p>
+            </div>
+            <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+                <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">LIVE RESUELTOS</p>
+                <p class="text-white text-4xl font-black mt-2">{{ batch_detail_segment_summary.resolved_segments }}</p>
+                <p class="text-gray-600 text-xs mt-1">No resueltos: {{ batch_detail_segment_summary.unavailable_segments }}</p>
+            </div>
+            <div class="bg-gradient-to-br from-emerald-900/20 to-emerald-900/5 rounded-2xl border border-emerald-800/30 p-5">
+                <p class="text-emerald-300 text-[10px] font-black uppercase tracking-widest">SEALED</p>
+                <p class="text-emerald-200 text-4xl font-black mt-2">{{ batch_detail_segment_summary.sealed_segments }}</p>
+                <p class="text-gray-600 text-xs mt-1">Footer presente: {{ batch_detail_segment_summary.footer_present_segments }}</p>
+            </div>
+            <div class="bg-gradient-to-br from-amber-900/20 to-amber-900/5 rounded-2xl border border-amber-800/30 p-5">
+                <p class="text-amber-300 text-[10px] font-black uppercase tracking-widest">FOOTER MISSING</p>
+                <p class="text-amber-200 text-4xl font-black mt-2">{{ batch_detail_segment_summary.footer_missing_segments }}</p>
+                <p class="text-gray-600 text-xs mt-1">Footer ausente: {{ batch_detail_segment_summary.footer_absent_segments }}</p>
+            </div>
+            <div class="bg-gradient-to-br from-red-900/30 to-red-900/10 rounded-2xl border border-red-800/30 p-5">
+                <p class="text-red-300 text-[10px] font-black uppercase tracking-widest">INTEGRITY ERROR</p>
+                <p class="text-red-300 text-4xl font-black mt-2">{{ batch_detail_segment_summary.integrity_error_segments }}</p>
+                <p class="text-gray-600 text-xs mt-1">Tail truncado o corrupto</p>
+            </div>
+            <div class="bg-gradient-to-br from-sky-900/20 to-sky-900/5 rounded-2xl border border-sky-800/30 p-5">
+                <p class="text-sky-300 text-[10px] font-black uppercase tracking-widest">ABIERTOS</p>
+                <p class="text-sky-200 text-4xl font-black mt-2">{{ batch_detail_segment_summary.open_segments }}</p>
+                <p class="text-gray-600 text-xs mt-1">Segmentos aun no sellados</p>
+            </div>
+            <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+                <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">REVISIONES</p>
+                <p class="text-white text-4xl font-black mt-2">{{ batch_detail_segment_summary.reviewed_segments }}</p>
+                <p class="text-gray-600 text-xs mt-1">Sin revisar: {{ batch_detail_segment_summary.unreviewed_segments }}</p>
+            </div>
+            <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+                <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">VENTAS ACTUALES</p>
+                <p class="text-white text-4xl font-black mt-2">{{ batch_detail_segment_summary.current_total_sales }}</p>
+                <p class="text-gray-600 text-xs mt-1">Suma live de summaries</p>
+            </div>
+            <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+                <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">MONTO ACTUAL</p>
+                <p class="text-white text-3xl font-black mt-2">${{ batch_detail_segment_summary.current_amount_total }}</p>
+                <p class="text-gray-600 text-xs mt-1">Acumulado live asociado</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5 mt-6">
         <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Segmentos Asociados</h2>
         {% if batch_detail_segments %}
         <div class="mt-4 overflow-x-auto">
@@ -137,6 +198,8 @@
                     <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
                         <th class="pb-2 font-black">Segmento</th>
                         <th class="pb-2 font-black">Estado En Lote</th>
+                        <th class="pb-2 font-black">Estado Actual</th>
+                        <th class="pb-2 font-black">Resumen Actual</th>
                         <th class="pb-2 font-black">Detalle</th>
                         <th class="pb-2 font-black text-right">Navegacion</th>
                     </tr>
@@ -150,8 +213,49 @@
                                 {{ item.batch_status|upper }}
                             </span>
                         </td>
+                        <td class="py-3 text-xs">
+                            <div class="flex flex-col gap-2">
+                                <span class="w-fit px-2 py-1 rounded-md text-[10px] font-black {% if item.current_status == 'sealed' %}bg-emerald-900/40 text-emerald-300{% elif item.current_status == 'footer_missing' %}bg-amber-900/40 text-amber-300{% elif item.current_status == 'integrity_error' %}bg-red-900/40 text-red-300{% elif item.current_status == 'open' %}bg-sky-900/40 text-sky-300{% else %}bg-gray-800 text-gray-300{% endif %}">
+                                    {{ item.current_status|upper }}
+                                </span>
+                                <div class="text-[11px] text-gray-400">
+                                    <div>
+                                        Footer:
+                                        {% if item.current_footer_present %}
+                                            <span class="text-emerald-300 font-bold">PRESENT</span>
+                                        {% elif item.live_available %}
+                                            <span class="text-amber-300 font-bold">MISSING</span>
+                                        {% else %}
+                                            <span class="text-gray-500 font-bold">N/A</span>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        Revision:
+                                        {% if item.current_reviewed %}
+                                            <span class="text-emerald-300 font-bold">REVIEWED</span>
+                                        {% else %}
+                                            <span class="text-gray-300 font-bold">PENDING</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 text-[11px] text-gray-300">
+                            <div class="font-bold text-white">{{ item.current_total_sales }} venta(s)</div>
+                            <div class="mt-1">${{ item.current_amount_total }}</div>
+                            {% if item.live_available %}
+                            <div class="mt-1 text-gray-500">Live</div>
+                            {% else %}
+                            <div class="mt-1 text-red-300">Sin detalle live</div>
+                            {% endif %}
+                        </td>
                         <td class="py-3 text-gray-300">
-                            {% if item.detail %}
+                            {% if item.live_available and item.current_detail %}
+                                <div class="text-white">{{ item.current_detail }}</div>
+                                {% if item.detail %}
+                                <div class="text-[11px] text-gray-500 mt-1">Lote: {{ item.detail }}</div>
+                                {% endif %}
+                            {% elif item.detail %}
                                 {{ item.detail }}
                             {% else %}
                                 SIN_DETALLE
