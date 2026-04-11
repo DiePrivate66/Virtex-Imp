@@ -14,6 +14,9 @@ from . import web_orders as web_orders_views
 
 urlpatterns = [
     path('', pos_views.pos_index, name='pos_index'),
+    path('privacy/', pos_views.privacy_policy, name='privacy_policy'),
+    path('terms/', pos_views.terms_of_service, name='terms_of_service'),
+    path('data-deletion/', pos_views.data_deletion, name='data_deletion'),
     path('registrar_venta/', pos_views.registrar_venta, name='registrar_venta'),
     path('api/transaccion-pendiente/', pos_views.consultar_transaccion_pendiente, name='api_transaccion_pendiente'),
     path('api/reconciliar-pago/', pos_views.reconciliar_pago, name='api_reconciliar_pago'),

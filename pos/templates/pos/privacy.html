@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            background: #f7f7f7;
+            color: #222;
+        }
+        main {
+            max-width: 900px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+        h1, h2 {
+            color: #111;
+        }
+        a {
+            color: #d35400;
+        }
+        ul {
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Politica de privacidad</h1>
+    <p>Esta politica aplica al uso de la PWA y de los canales de WhatsApp operados por Vírtex Imp mediante Bosco.</p>
+
+    <h2>Datos que recopilamos</h2>
+    <ul>
+        <li>nombre y telefono del cliente cuando realiza un pedido o escribe por WhatsApp;</li>
+        <li>detalle del pedido, direccion de entrega y referencias compartidas por el cliente;</li>
+        <li>mensajes necesarios para confirmar pedidos, pago, entrega y soporte operativo.</li>
+    </ul>
+
+    <h2>Uso de los datos</h2>
+    <ul>
+        <li>procesar pedidos y coordinar entrega;</li>
+        <li>enviar confirmaciones, actualizaciones de estado y soporte postventa;</li>
+        <li>mantener trazabilidad operativa, auditoria y prevencion de fraude.</li>
+    </ul>
+
+    <h2>Comparticion de datos</h2>
+    <p>Los datos se usan solo para operar el servicio. Pueden compartirse con proveedores tecnicos necesarios para el funcionamiento del sistema, como Meta WhatsApp Cloud API, infraestructura de hosting y servicios de mensajeria o impresion.</p>
+
+    <h2>Conservacion</h2>
+    <p>Los datos se conservan durante el tiempo necesario para operar pedidos, cumplir obligaciones contables y resolver incidentes operativos o legales.</p>
+
+    <h2>Derechos y contacto</h2>
+    {% if contact_email %}
+    <p>Para consultas sobre privacidad o solicitudes de acceso, rectificacion o eliminacion de datos, escribe a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+    {% else %}
+    <p>Para consultas sobre privacidad o solicitudes de acceso, rectificacion o eliminacion de datos, usa el canal de contacto publicado por el negocio en Meta o en la PWA.</p>
+    {% endif %}
+    <p>Instrucciones de Eliminacion de datos: <a href="{{ data_deletion_url }}">{{ data_deletion_url }}</a></p>
+
+    <h2>Canales oficiales</h2>
+    {% if public_pwa_url %}
+    <p>PWA publica: <a href="{{ public_pwa_url }}">{{ public_pwa_url }}</a></p>
+    {% endif %}
+    {% if public_backend_url %}
+    <p>Backend publico: <a href="{{ public_backend_url }}">{{ public_backend_url }}</a></p>
+    {% endif %}
+</main>
+</body>
+</html>

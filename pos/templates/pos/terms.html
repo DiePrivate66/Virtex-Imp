@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            background: #f7f7f7;
+            color: #222;
+        }
+        main {
+            max-width: 900px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+        h1, h2 {
+            color: #111;
+        }
+        a {
+            color: #d35400;
+        }
+        ul {
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Condiciones del servicio</h1>
+    <p>Estos terminos regulan el uso de la PWA, pedidos web y comunicaciones por WhatsApp operadas por Vírtex Imp mediante Bosco.</p>
+
+    <h2>Uso del servicio</h2>
+    <ul>
+        <li>el cliente debe proporcionar informacion real para procesar su pedido;</li>
+        <li>la disponibilidad de productos, tiempos y entrega puede variar segun operacion y cobertura;</li>
+        <li>el envio de mensajes por WhatsApp se usa solo para confirmacion y seguimiento operativo del pedido.</li>
+    </ul>
+
+    <h2>Pedidos y pagos</h2>
+    <ul>
+        <li>un pedido no se considera final hasta su confirmacion operativa;</li>
+        <li>los valores de envio, totales y confirmaciones pueden requerir validacion adicional;</li>
+        <li>si un pago no puede verificarse, el pedido puede quedar pendiente o cancelado hasta su conciliacion.</li>
+    </ul>
+
+    <h2>Entrega</h2>
+    <p>Los tiempos de entrega son estimados. La entrega depende de disponibilidad operativa, cobertura y validacion del pedido.</p>
+
+    <h2>Limitacion operativa</h2>
+    <p>El servicio puede suspender o rechazar pedidos con datos inconsistentes, actividad anomala o imposibilidad de verificacion.</p>
+
+    <h2>Contacto</h2>
+    {% if contact_email %}
+    <p>Para soporte o reclamos, escribe a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+    {% else %}
+    <p>Para soporte o reclamos, usa el canal de contacto oficial publicado por el negocio.</p>
+    {% endif %}
+    {% if public_pwa_url %}
+    <p>Canal de pedidos: <a href="{{ public_pwa_url }}">{{ public_pwa_url }}</a></p>
+    {% endif %}
+</main>
+</body>
+</html>

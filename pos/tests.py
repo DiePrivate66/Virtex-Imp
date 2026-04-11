@@ -5533,6 +5533,30 @@ class MetaWebhookTests(TestCase):
         )
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
+class PublicLegalPagesTests(SimpleTestCase):
+    def test_privacy_policy_page_is_public(self):
+        response = self.client.get(reverse('privacy_policy'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Politica de privacidad')
+        self.assertContains(response, 'Eliminacion de datos')
+
+    def test_terms_page_is_public(self):
+        response = self.client.get(reverse('terms_of_service'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Condiciones del servicio')
+        self.assertContains(response, 'Pedidos y pagos')
+
+    def test_data_deletion_page_is_public(self):
+        response = self.client.get(reverse('data_deletion'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Eliminacion de datos')
+        self.assertContains(response, 'Solicitud de eliminacion de datos')
+
+
 class WebOrderApiRequestParsingTests(SimpleTestCase):
     def test_parse_web_order_request_rejects_invalid_json_payload(self):
         request = RequestFactory().post(

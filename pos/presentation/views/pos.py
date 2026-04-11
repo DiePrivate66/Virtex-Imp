@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
+from email.utils import parseaddr
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 
 from pos.application.context import resolve_location_for_user
 from pos.application.sales import (
@@ -21,6 +24,19 @@ from pos.application.staff import user_is_pos_operator
 from pos.models import IdempotencyRecord
 
 logger = logging.getLogger(__name__)
+
+
+def _legal_page_context(page_title: str) -> dict:
+    raw_contact = getattr(settings, 'DEFAULT_FROM_EMAIL', '') or getattr(settings, 'EMAIL_HOST_USER', '')
+    _, parsed_email = parseaddr(raw_contact)
+    contact_email = parsed_email if parsed_email and '@' in parsed_email else ''
+    return {
+        'page_title': page_title,
+        'contact_email': contact_email,
+        'public_backend_url': getattr(settings, 'PUBLIC_BACKEND_URL', '').rstrip('/'),
+        'public_pwa_url': getattr(settings, 'PUBLIC_PWA_URL', '').rstrip('/'),
+        'data_deletion_url': reverse('data_deletion'),
+    }
 
 
 def _user_can_reconcile_payments(user) -> bool:
@@ -53,6 +69,30 @@ def pos_index(request):
         return redirect('pos_apertura')
 
     return render(request, 'pos/index.html', get_pos_home_context(request.user))
+
+
+def privacy_policy(request):
+    return render(
+        request,
+        'pos/privacy.html',
+        _legal_page_context('Politica de privacidad'),
+    )
+
+
+def terms_of_service(request):
+    return render(
+        request,
+        'pos/terms.html',
+        _legal_page_context('Condiciones del servicio'),
+    )
+
+
+def data_deletion(request):
+    return render(
+        request,
+        'pos/data_deletion.html',
+        _legal_page_context('Eliminacion de datos'),
+    )
 
 
 @login_required(login_url='pos_login')

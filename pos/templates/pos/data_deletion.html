@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            background: #f7f7f7;
+            color: #222;
+        }
+        main {
+            max-width: 900px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+        h1, h2 {
+            color: #111;
+        }
+        a {
+            color: #d35400;
+        }
+        ol {
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Eliminacion de datos</h1>
+    <p>Si deseas solicitar la eliminacion de tus datos personales vinculados a pedidos o conversaciones de WhatsApp, sigue este proceso:</p>
+
+    <ol>
+        {% if contact_email %}
+        <li>envia un correo a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> con el asunto <strong>Solicitud de eliminacion de datos</strong>;</li>
+        {% else %}
+        <li>usa el canal de contacto oficial publicado por el negocio e indica el asunto <strong>Solicitud de eliminacion de datos</strong>;</li>
+        {% endif %}
+        <li>incluye tu nombre, numero de telefono y una referencia del pedido si la tienes;</li>
+        <li>el equipo revisara la solicitud y respondera por el mismo canal o por correo.</li>
+    </ol>
+
+    <h2>Alcance</h2>
+    <p>La eliminacion se ejecutara en la medida permitida por obligaciones legales, contables, fiscales o de auditoria operativa.</p>
+
+    <h2>Contacto</h2>
+    {% if contact_email %}
+    <p>Correo de contacto: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></p>
+    {% else %}
+    <p>Correo de contacto: disponible a solicitud del negocio por sus canales oficiales.</p>
+    {% endif %}
+    {% if public_backend_url %}
+    <p>Servicio operado desde: <a href="{{ public_backend_url }}">{{ public_backend_url }}</a></p>
+    {% endif %}
+</main>
+</body>
+</html>
