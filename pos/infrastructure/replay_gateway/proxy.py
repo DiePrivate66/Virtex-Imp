@@ -55,6 +55,12 @@ class ReplayGatewayConfig:
     replay_waiter_ttl_seconds: float
     replay_bucket_count: int = 8
     gateway_header_value: str = 'active'
+    # Coordinator backend: 'redis', 'memory_dev', or 'fail_closed'
+    coordinator_backend: str = 'memory_dev'
+    coordinator_redis_url: str = ''
+    coordinator_ticket_ttl_ms: int = 30_000
+    coordinator_heartbeat_interval_seconds: float = 10.0
+    coordinator_max_waiters_per_bucket: int = 100
 
 
 class ReplayGatewayTimeoutError(TimeoutError):
@@ -266,13 +272,31 @@ class ReplayGatewayServer(ThreadingHTTPServer):
 
     def __init__(self, server_address, RequestHandlerClass, *, config: ReplayGatewayConfig):
         self.gateway_config = config
-        self.replay_coordinator = InMemoryBucketedReplayCoordinator(
+        self.replay_coordinator = self._build_coordinator(config)
+        super().__init__(server_address, RequestHandlerClass)
+
+    @staticmethod
+    def _build_coordinator(config: ReplayGatewayConfig) -> ReplayCoordinator:
+        backend = config.coordinator_backend
+        if backend == 'memory_dev':
+            return InMemoryBucketedReplayCoordinator(
+                bucket_count=config.replay_bucket_count,
+                slots=config.replay_cold_lane_slots,
+                slice_seconds=config.replay_cold_slice_seconds,
+                waiter_ttl_seconds=config.replay_waiter_ttl_seconds,
+            )
+        from .redis_coordinator import build_replay_coordinator
+        return build_replay_coordinator(
+            backend=backend,
+            redis_url=config.coordinator_redis_url,
             bucket_count=config.replay_bucket_count,
-            slots=config.replay_cold_lane_slots,
+            max_slots=config.replay_cold_lane_slots,
             slice_seconds=config.replay_cold_slice_seconds,
             waiter_ttl_seconds=config.replay_waiter_ttl_seconds,
+            ticket_ttl_ms=config.coordinator_ticket_ttl_ms,
+            heartbeat_interval_seconds=config.coordinator_heartbeat_interval_seconds,
+            max_waiters_per_bucket=config.coordinator_max_waiters_per_bucket,
         )
-        super().__init__(server_address, RequestHandlerClass)
 
 
 class ReplayProxyHandler(BaseHTTPRequestHandler):
@@ -360,6 +384,10 @@ class ReplayProxyHandler(BaseHTTPRequestHandler):
 
             while True:
                 self._ensure_not_expired(is_replay=is_replay, deadline=deadline, reason='replay_gateway_total_timeout')
+                # Self-fencing: verify ticket is still ours before each chunk
+                if cold_lane_ticket is not None and hasattr(self.server.replay_coordinator, 'check_fence'):
+                    if not self.server.replay_coordinator.check_fence(cold_lane_ticket):
+                        raise ReplayGatewayTimeoutError(reason='replay_ticket_fenced')
                 upstream.sock.settimeout(
                     self._next_timeout(
                         is_replay=is_replay,

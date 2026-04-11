@@ -1,0 +1,303 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+    <div class="flex items-start justify-between mb-6">
+        <div class="flex flex-col gap-3">
+            <a href="{% url 'dashboard_analytics' %}" class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+                &larr; VOLVER A ANALYTICS
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tight">HUERFANOS OFFLINE</h1>
+                <p class="text-gray-500 text-xs font-bold mt-1">Triage de confirmaciones de pago que llegaron antes de la venta base y quedaron en pending inbox.</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a
+                href="{{ offline_orphan_export_json_href }}"
+                class="bg-indigo-900/50 hover:bg-indigo-800/50 text-indigo-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Export JSON
+            </a>
+            <a
+                href="{{ offline_orphan_export_csv_href }}"
+                class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Export CSV
+            </a>
+        </div>
+    </div>
+
+    <div class="flex gap-2 mb-6">
+        {% for val, label in periods %}
+        <a href="?periodo={{ val }}" class="px-4 py-2 rounded-lg text-xs font-black uppercase transition
+            {% if periodo == val %}bg-bosco-orange text-black{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="rounded-2xl border border-cyan-700/40 bg-cyan-950/30 p-4 mb-6">
+        <p class="text-cyan-200 text-xs font-bold uppercase tracking-widest">Criterio De Triage</p>
+        <p class="text-cyan-100 text-sm mt-2">
+            Esta vista muestra eventos guardados en <span class="font-black">PendingOfflineOrphanEvent</span>.
+            Un huérfano queda <span class="font-black">PENDING</span> hasta que llegue la venta base con el mismo
+            <span class="font-black">client_transaction_id</span>; cuando eso ocurre pasa a
+            <span class="font-black">RESOLVED</span> y se enlaza a la venta final.
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Total Subset</p>
+            <p class="text-white text-4xl font-black mt-2">{{ offline_orphans_count }}</p>
+        </div>
+        <div class="bg-amber-950/30 rounded-2xl border border-amber-800/40 p-5">
+            <p class="text-amber-300 text-[10px] font-black uppercase tracking-widest">Pendientes</p>
+            <p class="text-amber-300 text-4xl font-black mt-2">{{ offline_orphans_pending_count }}</p>
+        </div>
+        <div class="bg-emerald-950/30 rounded-2xl border border-emerald-800/40 p-5">
+            <p class="text-emerald-300 text-[10px] font-black uppercase tracking-widest">Resueltos</p>
+            <p class="text-emerald-300 text-4xl font-black mt-2">{{ offline_orphans_resolved_count }}</p>
+        </div>
+    </div>
+
+    <form method="get" class="bg-black/20 border border-cyan-800/40 rounded-xl p-4 mb-4">
+        <input type="hidden" name="periodo" value="{{ periodo }}">
+        {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
+        {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
+        <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-9 gap-3">
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Client Tx</label>
+                <input
+                    type="text"
+                    name="offline_orphan_client_transaction_id"
+                    value="{{ offline_orphan_filter_client_transaction_id|default:'' }}"
+                    placeholder="sale-v2-pending"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Ref Pago</label>
+                <input
+                    type="text"
+                    name="offline_orphan_payment_reference"
+                    value="{{ offline_orphan_filter_payment_reference|default:'' }}"
+                    placeholder="BANK-001"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Correlation</label>
+                <input
+                    type="text"
+                    name="offline_orphan_correlation_id"
+                    value="{{ offline_orphan_filter_correlation_id|default:'' }}"
+                    placeholder="corr-001"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Estado</label>
+                <select
+                    name="offline_orphan_status"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_orphan_status_options %}
+                    <option value="{{ value }}" {% if offline_orphan_filter_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Evento</label>
+                <select
+                    name="offline_orphan_event_type"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_orphan_event_type_options %}
+                    <option value="{{ value }}" {% if offline_orphan_filter_event_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Organizacion</label>
+                <select
+                    name="offline_orphan_organization"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    <option value="">Todas</option>
+                    {% for option in offline_orphan_organization_options %}
+                    <option value="{{ option.organization_id }}" {% if offline_orphan_filter_organization == option.organization_id|stringformat:"s" %}selected{% endif %}>
+                        {{ option.organization__name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Sucursal</label>
+                <select
+                    name="offline_orphan_location"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    <option value="">Todas</option>
+                    {% for option in offline_orphan_location_options %}
+                    <option value="{{ option.location_id }}" {% if offline_orphan_filter_location == option.location_id|stringformat:"s" %}selected{% endif %}>
+                        {{ option.location__name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Ventana</label>
+                <select
+                    name="offline_orphan_time_window"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_orphan_time_window_options %}
+                    <option value="{{ value }}" {% if offline_orphan_filter_time_window == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase tracking-widest text-cyan-200 font-black mb-2">Orden</label>
+                <select
+                    name="offline_orphan_sort"
+                    class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                >
+                    {% for value, label in offline_orphan_sort_options %}
+                    <option value="{{ value }}" {% if offline_orphan_filter_sort == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="flex items-end gap-2 mt-4">
+            <button type="submit" class="bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
+                Filtrar
+            </button>
+            <a
+                href="{{ offline_orphan_clear_href }}"
+                class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Limpiar
+            </a>
+        </div>
+    </form>
+
+    {% if offline_orphans_count %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                    <th class="pb-2 font-black">Hora</th>
+                    <th class="pb-2 font-black">Estado</th>
+                    <th class="pb-2 font-black">Evento</th>
+                    <th class="pb-2 font-black">Client Tx</th>
+                    <th class="pb-2 font-black">Pago</th>
+                    <th class="pb-2 font-black">Sucursal</th>
+                    <th class="pb-2 font-black">Venta</th>
+                    <th class="pb-2 font-black">Ultimo AuditLog</th>
+                    <th class="pb-2 font-black text-right">Detalle</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm">
+                {% for orphan in offline_orphans %}
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
+                    <td class="py-3 text-gray-300 text-xs">{{ orphan.created_at|date:"d/m H:i" }}</td>
+                    <td class="py-3 text-xs">
+                        <span class="px-2 py-1 rounded-md text-[10px] font-black {% if orphan.status == 'PENDING' %}bg-amber-900/40 text-amber-300{% else %}bg-emerald-900/40 text-emerald-300{% endif %}">
+                            {{ orphan.status }}
+                        </span>
+                    </td>
+                    <td class="py-3 text-xs">
+                        <span class="px-2 py-1 rounded-md text-[10px] font-black bg-cyan-900/40 text-cyan-300">
+                            {{ orphan.event_type_label }}
+                        </span>
+                    </td>
+                    <td class="py-3 text-xs">
+                        <p class="text-white font-bold break-all">{{ orphan.client_transaction_id }}</p>
+                        <p class="text-gray-500 text-[10px] mt-1">{{ orphan.correlation_id|default:"SIN_CORRELATION" }}</p>
+                    </td>
+                    <td class="py-3 text-xs">
+                        <p class="text-white font-bold">{{ orphan.payment_reference|default:"SIN_REFERENCIA" }}</p>
+                        <p class="text-gray-500 text-[10px] mt-1">{{ orphan.payment_provider|default:"SIN_PROVIDER" }}</p>
+                    </td>
+                    <td class="py-3 text-gray-300 text-xs">
+                        {% if orphan.location %}
+                        {{ orphan.location.name }}
+                        {% else %}
+                        {{ orphan.organization.name|default:"SIN_UBICACION" }}
+                        {% endif %}
+                    </td>
+                    <td class="py-3 text-xs">
+                        {% if orphan.resolved_sale_id %}
+                        <a
+                            href="{% url 'admin:pos_venta_change' orphan.resolved_sale_id %}"
+                            target="_blank"
+                            rel="noopener"
+                            class="text-emerald-300 font-black hover:text-emerald-200"
+                        >
+                            Venta #{{ orphan.resolved_sale_id }}
+                        </a>
+                        <p class="text-gray-500 text-[10px] mt-1">{{ orphan.resolved_at|date:"d/m H:i" }}</p>
+                        {% else %}
+                        <span class="text-amber-300 font-black">Pendiente</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 text-xs">
+                        {% if orphan.latest_audit_log_id %}
+                        <a
+                            href="{% url 'admin:pos_auditlog_change' orphan.latest_audit_log_id %}"
+                            target="_blank"
+                            rel="noopener"
+                            class="text-indigo-300 font-black hover:text-indigo-200"
+                        >
+                            #{{ orphan.latest_audit_log_id }}
+                        </a>
+                        <p class="text-gray-500 text-[10px] mt-1">{{ orphan.latest_audit_log_event_type }}</p>
+                        {% else %}
+                        <span class="text-gray-500">SIN_AUDITLOG</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 text-right text-xs">
+                        <div class="flex justify-end gap-2">
+                            <a
+                                href="{% url 'admin:pos_pendingofflineorphanevent_change' orphan.id %}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                            >
+                                Huerfano
+                            </a>
+                            {% if orphan.resolved_sale_id %}
+                            <a
+                                href="{% url 'admin:pos_venta_change' orphan.resolved_sale_id %}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-emerald-900/50 text-emerald-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-emerald-800/50 transition"
+                            >
+                                Venta
+                            </a>
+                            {% endif %}
+                            {% if orphan.latest_audit_log_id %}
+                            <a
+                                href="{% url 'admin:pos_auditlog_change' orphan.latest_audit_log_id %}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-indigo-900/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                            >
+                                AuditLog
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="rounded-xl border border-dashed border-cyan-700/50 bg-black/20 px-4 py-6 text-center text-sm text-cyan-100">
+        No hay huérfanos offline que coincidan con los filtros actuales.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

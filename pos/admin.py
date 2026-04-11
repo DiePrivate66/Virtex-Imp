@@ -19,6 +19,7 @@ from .models import (
     LedgerRegistryActivation,
     MovimientoCaja,
     MovimientoInventario,
+    PendingOfflineOrphanEvent,
     PerfilUsuario,
     PrintJob,
     Producto,
@@ -320,6 +321,29 @@ class AuditLogAdmin(admin.ModelAdmin):
                 batch_html_url,
                 batch_json_url,
             )
+        if obj.target_model == "PendingOfflineOrphanEvent":
+            links = [
+                (
+                    'Abrir Huerfano',
+                    reverse('admin:pos_pendingofflineorphanevent_change', args=[obj.target_id]),
+                ),
+            ]
+            resolved_sale_id = str((obj.payload_json or {}).get('resolved_sale_id') or '').strip()
+            if resolved_sale_id:
+                links.append(
+                    (
+                        'Abrir Venta',
+                        reverse('admin:pos_venta_change', args=[resolved_sale_id]),
+                    )
+                )
+            return format_html(
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;">{}</div>',
+                format_html_join(
+                    '',
+                    '<a href="{}" target="_blank" rel="noopener">{}</a>',
+                    ((href, label) for label, href in links),
+                ),
+            )
         return "No aplica"
 
     @admin.display(description="Offline retention receipt")
@@ -365,6 +389,101 @@ class AuditLogAdmin(admin.ModelAdmin):
                 '',
                 '<li><strong>{}</strong>: {}</li>',
                 rows,
+            ),
+        )
+
+
+@admin.register(PendingOfflineOrphanEvent)
+class PendingOfflineOrphanEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "created_at",
+        "status",
+        "event_type",
+        "organization",
+        "location",
+        "client_transaction_id",
+        "payment_reference",
+        "payment_provider",
+        "resolved_sale_link",
+        "resolved_at",
+    )
+    list_filter = ("status", "event_type", "organization", "location", "created_at")
+    search_fields = (
+        "id",
+        "client_transaction_id",
+        "payment_reference",
+        "payment_provider",
+        "correlation_id",
+        "resolved_sale__id",
+        "organization__name",
+        "location__name",
+    )
+    readonly_fields = (
+        "organization",
+        "location",
+        "event_type",
+        "client_transaction_id",
+        "payment_reference",
+        "payment_provider",
+        "payload_json",
+        "correlation_id",
+        "status",
+        "resolved_sale_link",
+        "resolved_at",
+        "created_at",
+        "related_audit_logs",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("organization", "location", "resolved_sale")
+        )
+
+    @admin.display(description="Venta resuelta")
+    def resolved_sale_link(self, obj):
+        if not obj or not obj.resolved_sale_id:
+            return "No aplica"
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">Venta #{}</a>',
+            reverse('admin:pos_venta_change', args=[obj.resolved_sale_id]),
+            obj.resolved_sale_id,
+        )
+
+    @admin.display(description="Audit logs relacionados")
+    def related_audit_logs(self, obj):
+        if not obj:
+            return "No aplica"
+        audits = list(
+            AuditLog.objects.filter(
+                target_model='PendingOfflineOrphanEvent',
+                target_id=str(obj.id),
+            ).order_by('-created_at')[:10]
+        )
+        if not audits:
+            return "No hay audit logs directos"
+        return format_html(
+            '<ul style="margin:0;padding-left:18px;">{}</ul>',
+            format_html_join(
+                '',
+                '<li><a href="{}" target="_blank" rel="noopener">#{}</a> · {} · {}</li>',
+                (
+                    (
+                        reverse('admin:pos_auditlog_change', args=[audit.id]),
+                        audit.id,
+                        audit.event_type,
+                        audit.created_at,
+                    )
+                    for audit in audits
+                ),
             ),
         )
 

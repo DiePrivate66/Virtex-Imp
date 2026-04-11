@@ -106,6 +106,21 @@ urlpatterns = [
         analytics_views.dashboard_offline_retention_receipt_json,
         name='dashboard_offline_retention_receipt_json',
     ),
+    path(
+        'dashboard/huerfanos-offline/',
+        analytics_views.dashboard_offline_orphans,
+        name='dashboard_offline_orphans',
+    ),
+    path(
+        'dashboard/huerfanos-offline/export.json',
+        analytics_views.dashboard_offline_orphans_export_json,
+        name='dashboard_offline_orphans_export_json',
+    ),
+    path(
+        'dashboard/huerfanos-offline/export.csv',
+        analytics_views.dashboard_offline_orphans_export_csv,
+        name='dashboard_offline_orphans_export_csv',
+    ),
     path('dashboard/incidentes-offline/', analytics_views.dashboard_offline_incidents, name='dashboard_offline_incidents'),
     path(
         'dashboard/incidentes-offline/lotes/',

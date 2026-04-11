@@ -6,13 +6,22 @@ import json
 import socket
 import threading
 import time
+from unittest import mock
 
 from django.test import SimpleTestCase
 
 from pos.infrastructure.replay_gateway import (
     ReplayGatewayConfig,
+    RedisBucketedReplayCoordinator,
     build_gateway_server,
     stable_replay_bucket_index,
+)
+from pos.infrastructure.replay_gateway.proxy import ReplayGatewayAdmissionError
+from pos.infrastructure.replay_gateway.redis_coordinator import (
+    LUA_ADMIT,
+    LUA_FENCE_CHECK,
+    LUA_HEARTBEAT,
+    LUA_RELEASE,
 )
 
 
@@ -352,3 +361,234 @@ class ReplayGatewayProxyTests(SimpleTestCase):
         self.assertEqual(first_result.get('status'), 200)
         self.assertEqual(second_response.status, 200)
         self.assertEqual(second_payload['status'], 'ok')
+
+
+class _FakeRedis:
+    def __init__(self):
+        self.now = 0.0
+        self._strings: dict[str, str] = {}
+        self._zsets: dict[str, dict[str, float]] = {}
+        self._key_expiry: dict[str, float] = {}
+
+    def advance(self, seconds: float) -> None:
+        self.now += float(seconds)
+        self._prune_all()
+
+    def register_script(self, source: str):
+        if source == LUA_ADMIT:
+            return self._lua_admit
+        if source == LUA_RELEASE:
+            return self._lua_release
+        if source == LUA_HEARTBEAT:
+            return self._lua_heartbeat
+        if source == LUA_FENCE_CHECK:
+            return self._lua_fence_check
+        raise AssertionError('unknown lua script')
+
+    def _prune_all(self):
+        for key in list(self._key_expiry.keys()):
+            self._prune_key(key)
+
+    def _prune_key(self, key: str):
+        expiry = self._key_expiry.get(key)
+        if expiry is not None and self.now >= expiry:
+            self._key_expiry.pop(key, None)
+            self._strings.pop(key, None)
+            self._zsets.pop(key, None)
+
+    def _get_string(self, key: str) -> str | None:
+        self._prune_key(key)
+        return self._strings.get(key)
+
+    def _set_string(self, key: str, value: str):
+        self._prune_key(key)
+        self._strings[key] = value
+
+    def _get_zset(self, key: str) -> dict[str, float]:
+        self._prune_key(key)
+        return self._zsets.setdefault(key, {})
+
+    def _zremrangebyscore(self, key: str, min_score: float, max_score: float):
+        zset = self._get_zset(key)
+        for member, score in list(zset.items()):
+            if min_score <= score <= max_score:
+                zset.pop(member, None)
+
+    def _lua_admit(self, *, keys, args):
+        slots_key, ticket_key, waiters_key, slice_key = keys
+        org_key = str(args[0])
+        ticket_id = str(args[1])
+        max_slots = int(args[2])
+        ticket_ttl_ms = int(args[3])
+        slice_seconds = float(args[4])
+        waiter_ttl_s = float(args[5])
+        now = float(args[6])
+        max_waiters = int(args[7])
+        self.now = max(self.now, now)
+        slot_expiry = now + (ticket_ttl_ms / 1000.0)
+
+        cutoff = now - waiter_ttl_s
+        self._zremrangebyscore(waiters_key, float('-inf'), cutoff)
+        self._zremrangebyscore(slots_key, float('-inf'), now)
+
+        if self._get_string(ticket_key) is not None:
+            return json.dumps({
+                'status': 'DENIED',
+                'reason': 'replay_organization_capacity_exhausted',
+                'scope': 'organization',
+            })
+
+        active_count = len(self._get_zset(slots_key))
+        if active_count >= max_slots:
+            waiters = self._get_zset(waiters_key)
+            if len(waiters) < max_waiters:
+                waiters[org_key] = now
+            return json.dumps({
+                'status': 'DENIED',
+                'reason': 'replay_cold_lane_capacity_exhausted',
+                'scope': 'cold_lane',
+            })
+
+        slice_start = self._get_string(slice_key)
+        if slice_start is not None:
+            elapsed = now - float(slice_start)
+            if elapsed >= slice_seconds:
+                waiters = self._get_zset(waiters_key)
+                waiter_count = len(waiters)
+                own_waiter = waiters.get(org_key)
+                has_other_waiters = False
+                if own_waiter is not None:
+                    if waiter_count > 1:
+                        has_other_waiters = True
+                elif waiter_count > 0:
+                    has_other_waiters = True
+                if has_other_waiters:
+                    if len(waiters) < max_waiters or org_key in waiters:
+                        waiters[org_key] = now
+                    return json.dumps({
+                        'status': 'DENIED',
+                        'reason': 'replay_cold_lane_draining',
+                        'scope': 'cold_lane',
+                    })
+                self._set_string(slice_key, str(now))
+        else:
+            self._set_string(slice_key, str(now))
+
+        self._get_zset(slots_key)[org_key] = slot_expiry
+        self._set_string(ticket_key, ticket_id)
+        self._key_expiry[ticket_key] = now + (ticket_ttl_ms / 1000.0)
+        self._get_zset(waiters_key).pop(org_key, None)
+
+        safety_ttl = (ticket_ttl_ms * 10) / 1000.0
+        self._key_expiry[slots_key] = now + safety_ttl
+        self._key_expiry[slice_key] = now + safety_ttl
+        return json.dumps({
+            'status': 'ADMITTED',
+            'reason': 'admitted',
+            'scope': 'bucket',
+        })
+
+    def _lua_release(self, *, keys, args):
+        slots_key, ticket_key = keys
+        org_key = str(args[0])
+        ticket_id = str(args[1])
+        current = self._get_string(ticket_key)
+        if current == ticket_id:
+            self._strings.pop(ticket_key, None)
+            self._key_expiry.pop(ticket_key, None)
+            self._get_zset(slots_key).pop(org_key, None)
+            return 1
+        return 0
+
+    def _lua_heartbeat(self, *, keys, args):
+        ticket_key, slots_key = keys
+        ticket_id = str(args[0])
+        ticket_ttl_ms = int(args[1])
+        now = float(args[2])
+        org_key = str(args[3])
+        self.now = max(self.now, now)
+        current = self._get_string(ticket_key)
+        if current == ticket_id:
+            expiry = now + (ticket_ttl_ms / 1000.0)
+            self._key_expiry[ticket_key] = expiry
+            self._get_zset(slots_key)[org_key] = expiry
+            return 'RENEWED'
+        return 'EXPIRED'
+
+    def _lua_fence_check(self, *, keys, args):
+        ticket_key = keys[0]
+        ticket_id = str(args[0])
+        current = self._get_string(ticket_key)
+        if current == ticket_id:
+            return 'VALID'
+        return 'FENCED'
+
+
+class RedisReplayCoordinatorTests(SimpleTestCase):
+    def test_redis_replay_coordinator_prunes_expired_slot_leases(self):
+        fake_redis = _FakeRedis()
+        coordinator = RedisBucketedReplayCoordinator(
+            redis_client=fake_redis,
+            bucket_count=1,
+            max_slots=1,
+            slice_seconds=120.0,
+            waiter_ttl_seconds=30.0,
+            ticket_ttl_ms=1000,
+            heartbeat_interval_seconds=60.0,
+        )
+
+        with mock.patch('pos.infrastructure.replay_gateway.redis_coordinator.time.time', return_value=0.0):
+            ticket_a = coordinator.admit(organization_key='org-a')
+        ticket_a.heartbeat.stop()
+        fake_redis.advance(1.1)
+
+        with mock.patch('pos.infrastructure.replay_gateway.redis_coordinator.time.time', return_value=1.1):
+            ticket_b = coordinator.admit(organization_key='org-b')
+        ticket_b.heartbeat.stop()
+
+        self.assertEqual(ticket_a.base_ticket.organization_key, 'org-a')
+        self.assertEqual(ticket_b.base_ticket.organization_key, 'org-b')
+
+    def test_redis_replay_coordinator_denies_when_fenced(self):
+        fake_redis = _FakeRedis()
+        coordinator = RedisBucketedReplayCoordinator(
+            redis_client=fake_redis,
+            bucket_count=1,
+            max_slots=1,
+            slice_seconds=120.0,
+            waiter_ttl_seconds=30.0,
+            ticket_ttl_ms=1000,
+            heartbeat_interval_seconds=60.0,
+        )
+
+        with mock.patch('pos.infrastructure.replay_gateway.redis_coordinator.time.time', return_value=0.0):
+            ticket = coordinator.admit(organization_key='org-a')
+        ticket.heartbeat.stop()
+        fake_redis.advance(1.1)
+
+        self.assertFalse(coordinator.check_fence(ticket))
+
+    def test_redis_replay_coordinator_uses_draining_when_other_waiter_exists(self):
+        fake_redis = _FakeRedis()
+        coordinator = RedisBucketedReplayCoordinator(
+            redis_client=fake_redis,
+            bucket_count=1,
+            max_slots=1,
+            slice_seconds=0.1,
+            waiter_ttl_seconds=30.0,
+            ticket_ttl_ms=30_000,
+            heartbeat_interval_seconds=60.0,
+        )
+
+        with mock.patch('pos.infrastructure.replay_gateway.redis_coordinator.time.time', side_effect=[0.0, 0.2, 0.2]):
+            ticket_a = coordinator.admit(organization_key='org-a')
+            with self.assertRaises(ReplayGatewayAdmissionError) as waiter_exc:
+                coordinator.admit(organization_key='org-b')
+            self.assertEqual(waiter_exc.exception.reason, 'replay_cold_lane_capacity_exhausted')
+
+            coordinator.release(ticket_a)
+
+            with self.assertRaises(ReplayGatewayAdmissionError) as draining_exc:
+                coordinator.admit(organization_key='org-a')
+
+        self.assertEqual(draining_exc.exception.reason, 'replay_cold_lane_draining')

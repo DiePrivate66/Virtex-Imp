@@ -253,6 +253,30 @@
 
     {% include 'pos/partials/offline_audited_actions_panel.html' %}
 
+    {% if pending_offline_orphans_open_count %}
+    <div class="bg-cyan-950/30 rounded-2xl border border-cyan-700/40 p-6 mb-6">
+        <div class="flex items-center justify-between gap-4">
+            <div>
+                <h2 class="text-cyan-300 font-black text-sm uppercase tracking-widest">HUERFANOS OFFLINE PENDIENTES</h2>
+                <p class="text-cyan-100 text-xs mt-1">
+                    {{ pending_offline_orphans_open_count }} confirmacion(es) llegaron antes de la venta base y siguen en pending inbox.
+                </p>
+            </div>
+            <div class="flex items-center gap-3">
+                <a
+                    href="{{ offline_orphan_inbox_href }}"
+                    class="bg-cyan-900/50 hover:bg-cyan-800/50 text-cyan-100 text-xs font-black px-4 py-2 rounded-lg transition"
+                >
+                    VER HUERFANOS OFFLINE
+                </a>
+                <div class="bg-cyan-500 text-black text-2xl font-black px-4 py-2 rounded-xl">
+                    {{ pending_offline_orphans_open_count }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <!-- TOP PRODUCTOS -->
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6">

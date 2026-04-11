@@ -451,9 +451,11 @@ La deuda abierta ya no es el formato ni la validacion, sino la integracion opera
 
 - aun no existe el writer Electron real que use este journal desde worker/proceso separado
 - aun no existe UI de limbo conectada a este sidecar ni journal-only mode real en cliente
-- ya existe replay gateway dedicado con TTL total, idle timeout, cold lane y draining cooperativo fuera de Django; el limite actual es que la coordinacion vive en memoria por proceso gateway y no como scheduler distribuido entre multiples instancias
+- ya existe replay gateway dedicado con TTL total, idle timeout, cold lane y draining cooperativo fuera de Django; el backend `redis` ya coordina por bucket estable de organizacion, mientras `memory_dev` queda como fallback de desarrollo
 - el replay gateway externo ya no arbitra todo contra un hot slot unico: ahora parte la coordinacion por bucket estable de organizacion, con fairness fuerte dentro del bucket y sin pretender fairness global absoluta
 - `reconciliar_pago` ya acepta confirmaciones que lleguen antes de la venta base y las persiste en `PendingOfflineOrphanEvent`; cuando la venta aparece con el mismo `client_transaction_id`, el servidor resuelve ese huérfano en lugar de tratarlo como fallo terminal
+- `PendingOfflineOrphanEvent` ya es visible en Django admin con filtros por estado/evento/tenant, link a la venta resuelta cuando existe y trazabilidad cruzada hacia `AuditLog`
+- analytics ya expone una vista dedicada `/dashboard/huerfanos-offline/` con filtros operativos (`client_transaction_id`, `payment_reference`, `correlation_id`, `status`, tenant, ventana temporal), export JSON/CSV y navegación a admin/venta/auditlog
 - `shard_count` queda fijo por organizacion en Fase 1; no existe rebalance online ni lectura multi-era de shards
 
 ## Prioridad de Refactor Real

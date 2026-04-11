@@ -23,6 +23,8 @@ from pos.application.analytics import (
     build_offline_critical_incidents_export_payload,
     build_offline_limbo_context,
     build_offline_limbo_payload,
+    build_pending_offline_orphans_context,
+    build_pending_offline_orphans_export_payload,
     build_offline_retention_actions_context,
     build_offline_retention_actions_export_payload,
     build_offline_retention_receipt_payload,
@@ -99,6 +101,10 @@ def dashboard_analytics(request):
             tertiary_href=f"{reverse('dashboard_offline_retention')}?{urlencode(_build_period_query_params(context['periodo'], context['desde'], context['hasta']))}",
             tertiary_label='Retencion',
         )
+    )
+    context['offline_orphan_inbox_href'] = (
+        f"{reverse('dashboard_offline_orphans')}?"
+        f"{urlencode(_build_period_query_params(context['periodo'], context['desde'], context['hasta']))}"
     )
     return render(request, 'pos/dashboard.html', context)
 
@@ -211,6 +217,39 @@ def dashboard_offline_retention(request):
     return render(request, 'pos/offline_retention.html', context)
 
 
+def dashboard_offline_orphans(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    context = build_pending_offline_orphans_context(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_orphan_client_transaction_id=request.GET.get('offline_orphan_client_transaction_id', ''),
+        offline_orphan_payment_reference=request.GET.get('offline_orphan_payment_reference', ''),
+        offline_orphan_correlation_id=request.GET.get('offline_orphan_correlation_id', ''),
+        offline_orphan_status=request.GET.get('offline_orphan_status', ''),
+        offline_orphan_event_type=request.GET.get('offline_orphan_event_type', ''),
+        offline_orphan_organization=request.GET.get('offline_orphan_organization', ''),
+        offline_orphan_location=request.GET.get('offline_orphan_location', ''),
+        offline_orphan_time_window=request.GET.get('offline_orphan_time_window', ''),
+        offline_orphan_sort=request.GET.get('offline_orphan_sort', 'recent'),
+    )
+    export_query = urlencode(_build_offline_orphan_query_params_from_context(context))
+    context['offline_orphan_export_json_href'] = (
+        f"{reverse('dashboard_offline_orphans_export_json')}?{export_query}"
+    )
+    context['offline_orphan_export_csv_href'] = (
+        f"{reverse('dashboard_offline_orphans_export_csv')}?{export_query}"
+    )
+    context['offline_orphan_clear_href'] = (
+        f"{reverse('dashboard_offline_orphans')}?"
+        f"{urlencode(_build_period_query_params(context['periodo'], context['desde'], context['hasta']))}"
+    )
+    return render(request, 'pos/offline_orphans.html', context)
+
+
 def dashboard_offline_incident_batches(request):
     access_redirect = _require_admin_dashboard_access(request)
     if access_redirect:
@@ -276,6 +315,69 @@ def dashboard_offline_incident_batches_export_json(request):
     if access_redirect:
         return access_redirect
     return JsonResponse(_build_offline_bulk_runs_export_payload_from_request(request))
+
+
+def dashboard_offline_orphans_export_json(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+    return JsonResponse(_build_pending_offline_orphans_export_payload_from_request(request))
+
+
+def dashboard_offline_orphans_export_csv(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    payload = _build_pending_offline_orphans_export_payload_from_request(request)
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            'orphan_id',
+            'created_at',
+            'status',
+            'event_type',
+            'client_transaction_id',
+            'payment_reference',
+            'payment_provider',
+            'correlation_id',
+            'organization_name',
+            'location_name',
+            'resolved_sale_id',
+            'resolved_at',
+            'latest_audit_log_id',
+            'latest_audit_log_event_type',
+            'orphan_admin_url',
+            'resolved_sale_admin_url',
+            'auditlog_url',
+        ]
+    )
+    for item in payload['items']:
+        writer.writerow(
+            [
+                item['orphan_id'],
+                item['created_at'],
+                item['status'],
+                item['event_type'],
+                item['client_transaction_id'],
+                item['payment_reference'],
+                item['payment_provider'],
+                item['correlation_id'],
+                item['organization_name'],
+                item['location_name'],
+                item['resolved_sale_id'],
+                item['resolved_at'],
+                item['latest_audit_log_id'],
+                item['latest_audit_log_event_type'],
+                item['orphan_admin_url'],
+                item['resolved_sale_admin_url'],
+                item['auditlog_url'],
+            ]
+        )
+    response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename=\"offline-orphan-inbox.csv\"'
+    return response
 
 
 def dashboard_offline_incident_batches_export_csv(request):
@@ -999,6 +1101,26 @@ def _build_offline_actions_query_params_from_context(context):
     return params
 
 
+def _build_offline_orphan_query_params_from_context(context):
+    params = _build_period_query_params(context['periodo'], context['desde'], context['hasta'])
+    mapping = {
+        'offline_orphan_filter_client_transaction_id': 'offline_orphan_client_transaction_id',
+        'offline_orphan_filter_payment_reference': 'offline_orphan_payment_reference',
+        'offline_orphan_filter_correlation_id': 'offline_orphan_correlation_id',
+        'offline_orphan_filter_status': 'offline_orphan_status',
+        'offline_orphan_filter_event_type': 'offline_orphan_event_type',
+        'offline_orphan_filter_organization': 'offline_orphan_organization',
+        'offline_orphan_filter_location': 'offline_orphan_location',
+        'offline_orphan_filter_time_window': 'offline_orphan_time_window',
+        'offline_orphan_filter_sort': 'offline_orphan_sort',
+    }
+    for context_field, query_name in mapping.items():
+        value = str(context.get(context_field, '') or '').strip()
+        if value:
+            params[query_name] = value
+    return params
+
+
 def _build_offline_bulk_query_params_from_context(context):
     params = _build_period_query_params(context['periodo'], context['desde'], context['hasta'])
     mapping = {
@@ -1068,6 +1190,36 @@ def _build_offline_retention_actions_export_payload_from_request(request):
     for item in payload['items']:
         item['receipt_json_url'] = _build_offline_retention_receipt_json_href(item['audit_log_id'])
         item['auditlog_url'] = _build_auditlog_admin_href(item['audit_log_id'])
+    return payload
+
+
+def _build_pending_offline_orphans_export_payload_from_request(request):
+    payload = build_pending_offline_orphans_export_payload(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_orphan_client_transaction_id=request.GET.get('offline_orphan_client_transaction_id', ''),
+        offline_orphan_payment_reference=request.GET.get('offline_orphan_payment_reference', ''),
+        offline_orphan_correlation_id=request.GET.get('offline_orphan_correlation_id', ''),
+        offline_orphan_status=request.GET.get('offline_orphan_status', ''),
+        offline_orphan_event_type=request.GET.get('offline_orphan_event_type', ''),
+        offline_orphan_organization=request.GET.get('offline_orphan_organization', ''),
+        offline_orphan_location=request.GET.get('offline_orphan_location', ''),
+        offline_orphan_time_window=request.GET.get('offline_orphan_time_window', ''),
+        offline_orphan_sort=request.GET.get('offline_orphan_sort', 'recent'),
+    )
+    for item in payload['items']:
+        item['orphan_admin_url'] = _build_pending_offline_orphan_admin_href(item['orphan_id'])
+        item['resolved_sale_admin_url'] = (
+            _build_sale_admin_href(item['resolved_sale_id'])
+            if item.get('resolved_sale_id')
+            else ''
+        )
+        item['auditlog_url'] = (
+            _build_auditlog_admin_href(item['latest_audit_log_id'])
+            if item.get('latest_audit_log_id')
+            else ''
+        )
     return payload
 
 
@@ -1158,6 +1310,16 @@ def _build_offline_retention_receipt_json_href(audit_log_id='') -> str:
         f"{reverse('dashboard_offline_retention_receipt_json')}?"
         f"{urlencode({'audit_log_id': normalized_audit_log_id})}"
     )
+
+
+def _build_pending_offline_orphan_admin_href(orphan_id='') -> str:
+    normalized_orphan_id = int(orphan_id or 0)
+    return reverse('admin:pos_pendingofflineorphanevent_change', args=[normalized_orphan_id])
+
+
+def _build_sale_admin_href(sale_id='') -> str:
+    normalized_sale_id = int(sale_id or 0)
+    return reverse('admin:pos_venta_change', args=[normalized_sale_id])
 
 
 def _build_offline_batch_html_href(audit_log_id='', *, batch_id='', correlation_id='') -> str:

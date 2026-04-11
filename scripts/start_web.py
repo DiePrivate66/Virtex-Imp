@@ -95,6 +95,18 @@ def _build_gateway_config(*, external_port: int, upstream_port: int) -> ReplayGa
             )
         ),
         replay_bucket_count=int(os.environ.get('REPLAY_GATEWAY_BUCKET_COUNT', '8')),
+        coordinator_backend=os.environ.get('REPLAY_COORDINATOR_BACKEND', 'memory_dev'),
+        coordinator_redis_url=os.environ.get(
+            'REPLAY_COORDINATOR_REDIS_URL',
+            os.environ.get('REDIS_URL', ''),
+        ),
+        coordinator_ticket_ttl_ms=int(os.environ.get('REPLAY_TICKET_TTL_SECONDS', '30')) * 1000,
+        coordinator_heartbeat_interval_seconds=float(
+            os.environ.get('REPLAY_HEARTBEAT_INTERVAL_SECONDS', '10')
+        ),
+        coordinator_max_waiters_per_bucket=int(
+            os.environ.get('REPLAY_MAX_WAITERS_PER_BUCKET', '100')
+        ),
     )
 
 

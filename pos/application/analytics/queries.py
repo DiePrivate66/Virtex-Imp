@@ -18,7 +18,15 @@ from pos.infrastructure.offline import (
     recent_lookup_entries_from_snapshot,
     recover_segment_prefix,
 )
-from pos.models import AccountingAdjustment, Asistencia, AuditLog, DetalleVenta, MovimientoCaja, Venta
+from pos.models import (
+    AccountingAdjustment,
+    Asistencia,
+    AuditLog,
+    DetalleVenta,
+    MovimientoCaja,
+    PendingOfflineOrphanEvent,
+    Venta,
+)
 
 
 OFFLINE_AUDIT_EVENT_TYPE_OPTIONS = (
@@ -76,6 +84,20 @@ OFFLINE_AUDIT_SORT_OPTIONS = (
 
 OFFLINE_AUDIT_RETENTION_SORT_OPTIONS = (
     ('recent', 'Mas recientes'),
+)
+
+OFFLINE_ORPHAN_STATUS_OPTIONS = (
+    ('', 'Todos'),
+    (PendingOfflineOrphanEvent.Status.PENDING, 'Pendientes'),
+    (PendingOfflineOrphanEvent.Status.RESOLVED, 'Resueltos'),
+)
+
+OFFLINE_ORPHAN_TIME_WINDOW_OPTIONS = OFFLINE_AUDIT_TIME_WINDOW_OPTIONS
+
+OFFLINE_ORPHAN_SORT_OPTIONS = (
+    ('recent', 'Mas recientes'),
+    ('pending_first', 'Pendientes primero'),
+    ('oldest', 'Mas antiguos'),
 )
 
 OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP = {
@@ -293,6 +315,208 @@ def _build_offline_retention_summary(event_type: str, payload_json: dict) -> dic
         'meta_value': meta_value,
         'reason': reason,
         'hint': f'{receipt_type} | {detail_label}={detail_value} | {meta_value}',
+    }
+
+
+def _resolve_pending_orphan_event_type_label(event_type: str) -> str:
+    return {
+        'payment_confirmation': 'PAYMENT_CONFIRMATION',
+    }.get(str(event_type or '').strip(), str(event_type or '').strip().upper() or 'UNKNOWN')
+
+
+def _build_latest_pending_orphan_audit_by_orphan(orphan_ids: list[int]) -> dict[int, AuditLog]:
+    normalized_ids = []
+    for orphan_id in orphan_ids:
+        try:
+            resolved = int(orphan_id)
+        except (TypeError, ValueError):
+            continue
+        if resolved > 0:
+            normalized_ids.append(str(resolved))
+    if not normalized_ids:
+        return {}
+
+    latest_by_orphan: dict[int, AuditLog] = {}
+    queryset = (
+        AuditLog.objects.filter(
+            target_model='PendingOfflineOrphanEvent',
+            target_id__in=normalized_ids,
+        )
+        .select_related('actor_user')
+        .order_by('created_at')
+    )
+    for audit in queryset:
+        try:
+            orphan_id = int(str(audit.target_id or '').strip())
+        except (TypeError, ValueError):
+            continue
+        latest_by_orphan[orphan_id] = audit
+    return latest_by_orphan
+
+
+def _build_pending_offline_orphans(
+    desde,
+    hasta,
+    *,
+    client_transaction_id: str = '',
+    payment_reference: str = '',
+    correlation_id: str = '',
+    status: str = '',
+    event_type: str = '',
+    organization_id: str = '',
+    location_id: str = '',
+    time_window: str = '',
+    sort_order: str = 'recent',
+):
+    base_queryset = (
+        PendingOfflineOrphanEvent.objects.filter(
+            created_at__date__gte=desde,
+            created_at__date__lte=hasta,
+        )
+        .select_related('organization', 'location', 'resolved_sale')
+    )
+
+    organization_options = list(
+        base_queryset.exclude(organization__isnull=True)
+        .values('organization_id', 'organization__name')
+        .distinct()
+        .order_by('organization__name')
+    )
+    location_options = list(
+        base_queryset.exclude(location__isnull=True)
+        .values('location_id', 'location__name')
+        .distinct()
+        .order_by('location__name')
+    )
+    event_type_options = [('', 'Todos')]
+    event_type_options.extend(
+        (
+            normalized_event_type,
+            _resolve_pending_orphan_event_type_label(normalized_event_type),
+        )
+        for normalized_event_type in sorted(
+            {
+                str(value or '').strip()
+                for value in base_queryset.values_list('event_type', flat=True).distinct()
+                if str(value or '').strip()
+            }
+        )
+    )
+
+    queryset = base_queryset
+
+    normalized_client_transaction_id = str(client_transaction_id or '').strip()
+    if normalized_client_transaction_id:
+        queryset = queryset.filter(client_transaction_id__icontains=normalized_client_transaction_id)
+
+    normalized_payment_reference = str(payment_reference or '').strip()
+    if normalized_payment_reference:
+        queryset = queryset.filter(payment_reference__icontains=normalized_payment_reference)
+
+    normalized_correlation_id = str(correlation_id or '').strip()
+    if normalized_correlation_id:
+        queryset = queryset.filter(correlation_id__icontains=normalized_correlation_id)
+
+    normalized_status = str(status or '').strip()
+    if normalized_status in {
+        PendingOfflineOrphanEvent.Status.PENDING,
+        PendingOfflineOrphanEvent.Status.RESOLVED,
+    }:
+        queryset = queryset.filter(status=normalized_status)
+    else:
+        normalized_status = ''
+
+    normalized_event_type = str(event_type or '').strip()
+    if normalized_event_type:
+        queryset = queryset.filter(event_type=normalized_event_type)
+
+    normalized_organization_id = str(organization_id or '').strip()
+    if normalized_organization_id.isdigit():
+        queryset = queryset.filter(organization_id=int(normalized_organization_id))
+    else:
+        normalized_organization_id = ''
+
+    normalized_location_id = str(location_id or '').strip()
+    if normalized_location_id.isdigit():
+        queryset = queryset.filter(location_id=int(normalized_location_id))
+    else:
+        normalized_location_id = ''
+
+    normalized_time_window = str(time_window or '').strip()
+    if normalized_time_window in {'24h', '72h', '168h'}:
+        hours = int(normalized_time_window[:-1])
+        queryset = queryset.filter(created_at__gte=timezone.now() - timedelta(hours=hours))
+    else:
+        normalized_time_window = ''
+
+    normalized_sort_order = str(sort_order or '').strip()
+    if normalized_sort_order == 'pending_first':
+        queryset = queryset.order_by(
+            Case(
+                When(status=PendingOfflineOrphanEvent.Status.PENDING, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            '-created_at',
+        )
+    elif normalized_sort_order == 'oldest':
+        queryset = queryset.order_by('created_at')
+    else:
+        normalized_sort_order = 'recent'
+        queryset = queryset.order_by('-created_at')
+
+    items = list(queryset)
+    latest_audit_by_orphan = _build_latest_pending_orphan_audit_by_orphan([item.id for item in items])
+    for item in items:
+        latest_audit = latest_audit_by_orphan.get(item.id)
+        item.latest_audit_log_id = latest_audit.id if latest_audit else 0
+        item.latest_audit_log_event_type = latest_audit.event_type if latest_audit else ''
+        item.event_type_label = _resolve_pending_orphan_event_type_label(item.event_type)
+        item.status_label = str(item.get_status_display() or item.status or '').strip()
+
+    return {
+        'queryset': queryset,
+        'items': items,
+        'selected_client_transaction_id': normalized_client_transaction_id,
+        'selected_payment_reference': normalized_payment_reference,
+        'selected_correlation_id': normalized_correlation_id,
+        'selected_status': normalized_status,
+        'selected_event_type': normalized_event_type,
+        'selected_organization_id': normalized_organization_id,
+        'selected_location_id': normalized_location_id,
+        'selected_time_window': normalized_time_window,
+        'selected_sort_order': normalized_sort_order,
+        'status_options': OFFLINE_ORPHAN_STATUS_OPTIONS,
+        'event_type_options': event_type_options,
+        'organization_options': organization_options,
+        'location_options': location_options,
+        'time_window_options': OFFLINE_ORPHAN_TIME_WINDOW_OPTIONS,
+        'sort_options': OFFLINE_ORPHAN_SORT_OPTIONS,
+        'pending_count': sum(1 for item in items if item.status == PendingOfflineOrphanEvent.Status.PENDING),
+        'resolved_count': sum(1 for item in items if item.status == PendingOfflineOrphanEvent.Status.RESOLVED),
+    }
+
+
+def _serialize_pending_offline_orphan_item(item) -> dict:
+    return {
+        'orphan_id': item.id,
+        'created_at': timezone.localtime(item.created_at).isoformat(),
+        'status': item.status,
+        'status_label': item.status_label,
+        'event_type': item.event_type,
+        'event_type_label': item.event_type_label,
+        'client_transaction_id': item.client_transaction_id,
+        'payment_reference': item.payment_reference,
+        'payment_provider': item.payment_provider,
+        'correlation_id': item.correlation_id,
+        'organization_id': item.organization_id,
+        'organization_name': item.organization.name if item.organization_id and item.organization else '',
+        'location_id': item.location_id,
+        'location_name': item.location.name if item.location_id and item.location else '',
+        'resolved_sale_id': item.resolved_sale_id or 0,
+        'resolved_at': timezone.localtime(item.resolved_at).isoformat() if item.resolved_at else '',
+        'latest_audit_log_id': getattr(item, 'latest_audit_log_id', 0) or 0,
+        'latest_audit_log_event_type': getattr(item, 'latest_audit_log_event_type', ''),
     }
 
 
@@ -779,6 +1003,9 @@ def build_analytics_dashboard_context(
     refund_adjustments_open_total = (
         refund_adjustments_queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0')
     )
+    pending_offline_orphans_open_count = PendingOfflineOrphanEvent.objects.filter(
+        status=PendingOfflineOrphanEvent.Status.PENDING,
+    ).count()
     offline_audit_bundle = _build_offline_audited_actions(
         desde,
         hasta,
@@ -828,6 +1055,7 @@ def build_analytics_dashboard_context(
         'refund_adjustments_open': refund_adjustments_open,
         'refund_adjustments_open_count': refund_adjustments_queryset.count(),
         'refund_adjustments_open_total': refund_adjustments_open_total,
+        'pending_offline_orphans_open_count': pending_offline_orphans_open_count,
     }
     context.update(_build_offline_audit_context_fields(offline_audit_bundle))
     return context
@@ -927,6 +1155,62 @@ def build_offline_retention_actions_context(
     return context
 
 
+def build_pending_offline_orphans_context(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_orphan_client_transaction_id: str = '',
+    offline_orphan_payment_reference: str = '',
+    offline_orphan_correlation_id: str = '',
+    offline_orphan_status: str = '',
+    offline_orphan_event_type: str = '',
+    offline_orphan_organization: str = '',
+    offline_orphan_location: str = '',
+    offline_orphan_time_window: str = '',
+    offline_orphan_sort: str = 'recent',
+):
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    orphan_bundle = _build_pending_offline_orphans(
+        desde,
+        hasta,
+        client_transaction_id=offline_orphan_client_transaction_id,
+        payment_reference=offline_orphan_payment_reference,
+        correlation_id=offline_orphan_correlation_id,
+        status=offline_orphan_status,
+        event_type=offline_orphan_event_type,
+        organization_id=offline_orphan_organization,
+        location_id=offline_orphan_location,
+        time_window=offline_orphan_time_window,
+        sort_order=offline_orphan_sort,
+    )
+    return {
+        'periodo': periodo,
+        'desde': desde,
+        'hasta': hasta,
+        'periods': [('hoy', 'Hoy'), ('semana', '7 dias'), ('mes', '30 dias')],
+        'offline_orphans': orphan_bundle['items'],
+        'offline_orphans_count': orphan_bundle['queryset'].count(),
+        'offline_orphans_pending_count': orphan_bundle['pending_count'],
+        'offline_orphans_resolved_count': orphan_bundle['resolved_count'],
+        'offline_orphan_filter_client_transaction_id': orphan_bundle['selected_client_transaction_id'],
+        'offline_orphan_filter_payment_reference': orphan_bundle['selected_payment_reference'],
+        'offline_orphan_filter_correlation_id': orphan_bundle['selected_correlation_id'],
+        'offline_orphan_filter_status': orphan_bundle['selected_status'],
+        'offline_orphan_filter_event_type': orphan_bundle['selected_event_type'],
+        'offline_orphan_filter_organization': orphan_bundle['selected_organization_id'],
+        'offline_orphan_filter_location': orphan_bundle['selected_location_id'],
+        'offline_orphan_filter_time_window': orphan_bundle['selected_time_window'],
+        'offline_orphan_filter_sort': orphan_bundle['selected_sort_order'],
+        'offline_orphan_status_options': orphan_bundle['status_options'],
+        'offline_orphan_event_type_options': orphan_bundle['event_type_options'],
+        'offline_orphan_organization_options': orphan_bundle['organization_options'],
+        'offline_orphan_location_options': orphan_bundle['location_options'],
+        'offline_orphan_time_window_options': orphan_bundle['time_window_options'],
+        'offline_orphan_sort_options': orphan_bundle['sort_options'],
+    }
+
+
 def build_offline_audited_actions_export_payload(
     periodo: str = 'semana',
     desde_param=None,
@@ -968,6 +1252,47 @@ def build_offline_audited_actions_export_payload(
         'sort_order': offline_audit_bundle['selected_sort_order'],
         'count': len(items),
         'items': [_serialize_offline_audit_item(item) for item in items],
+    }
+
+
+def build_pending_offline_orphans_export_payload(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_orphan_client_transaction_id: str = '',
+    offline_orphan_payment_reference: str = '',
+    offline_orphan_correlation_id: str = '',
+    offline_orphan_status: str = '',
+    offline_orphan_event_type: str = '',
+    offline_orphan_organization: str = '',
+    offline_orphan_location: str = '',
+    offline_orphan_time_window: str = '',
+    offline_orphan_sort: str = 'recent',
+) -> dict:
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    orphan_bundle = _build_pending_offline_orphans(
+        desde,
+        hasta,
+        client_transaction_id=offline_orphan_client_transaction_id,
+        payment_reference=offline_orphan_payment_reference,
+        correlation_id=offline_orphan_correlation_id,
+        status=offline_orphan_status,
+        event_type=offline_orphan_event_type,
+        organization_id=offline_orphan_organization,
+        location_id=offline_orphan_location,
+        time_window=offline_orphan_time_window,
+        sort_order=offline_orphan_sort,
+    )
+    return {
+        'periodo': periodo,
+        'desde': str(desde),
+        'hasta': str(hasta),
+        'sort_order': orphan_bundle['selected_sort_order'],
+        'count': len(orphan_bundle['items']),
+        'pending_count': orphan_bundle['pending_count'],
+        'resolved_count': orphan_bundle['resolved_count'],
+        'items': [_serialize_pending_offline_orphan_item(item) for item in orphan_bundle['items']],
     }
 
 

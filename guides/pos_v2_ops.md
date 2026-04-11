@@ -218,6 +218,21 @@ Inspect the current limbo directly from the app:
 - Historical segment detail endpoint: `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
 - Historical segment HTML view: `/dashboard/limbo-offline/segment/?segment_id=<segment_id>`
 - Polling: the page refreshes automatically every 10 seconds and also supports manual refresh
+
+Triage offline payment confirmations that arrived before the base sale:
+
+- Django admin model: `PendingOfflineOrphanEvent`
+- Access: admin or superuser only
+- Filters: `status`, `event_type`, `organization`, `location`, `created_at`
+- Navigation:
+  - `sale.pending_orphan_resolved` entries in `AuditLogAdmin` now link back to the orphan record
+  - the orphan admin detail links to the resolved `Venta` when present
+  - the orphan admin detail also lists related `AuditLog` entries targeting that orphan id
+- Analytics inbox:
+  - URL: `/dashboard/huerfanos-offline/`
+  - Filters: `client_transaction_id`, `payment_reference`, `correlation_id`, `status`, `event_type`, tenant, `Ventana`
+  - Exports: `/dashboard/huerfanos-offline/export.json` and `/dashboard/huerfanos-offline/export.csv`
+  - Navigation per row: orphan admin, resolved sale admin when present, and latest related `AuditLog`
 - Operational actions:
   - `POST /dashboard/limbo-offline/reconcile/` repairs a lagging `.snapshot` sidecar from the active segment
   - `POST /dashboard/limbo-offline/reseal/` appends the pending footer when the sidecar already carries a valid seal request

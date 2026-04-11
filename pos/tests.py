@@ -1851,6 +1851,26 @@ class AnalyticsReplayTimelineTests(TestCase):
             f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={audit.id}',
         )
 
+    def test_dashboard_renders_offline_orphan_inbox_link_when_pending_exists(self):
+        PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-dashboard-001',
+            payment_reference='BANK-OD-001',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.PENDING,
+            correlation_id='orphan-dashboard-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard_analytics'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'HUERFANOS OFFLINE PENDIENTES')
+        self.assertContains(response, reverse('dashboard_offline_orphans'))
+        self.assertNotContains(response, 'orphan-dashboard-001')
+
     def test_dashboard_renders_offline_audited_action_filters(self):
         AuditLog.objects.create(
             organization=self.location.organization,
@@ -2185,6 +2205,172 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertContains(response, reverse('dashboard_offline_retention_export_csv'))
         self.assertContains(response, reverse('dashboard_offline_incidents'))
         self.assertContains(response, reverse('dashboard_analytics'))
+
+    def test_offline_orphan_inbox_view_renders_filtered_rows(self):
+        pending = PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-view-001',
+            payment_reference='BANK-OV-001',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.PENDING,
+            correlation_id='orphan-view-001',
+        )
+        sale = Venta.objects.create(
+            origen='POS',
+            tipo_pedido='SERVIR',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            payment_status=Venta.PaymentStatus.PAID,
+            total=Decimal('7.00'),
+            organization=self.location.organization,
+            location=self.location,
+            client_transaction_id='orphan-view-002',
+            accounting_booked_at=timezone.now(),
+        )
+        resolved = PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-view-002',
+            payment_reference='BANK-OV-002',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.RESOLVED,
+            resolved_sale=sale,
+            resolved_at=timezone.now(),
+            correlation_id='orphan-view-002',
+        )
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='sale.pending_orphan_resolved',
+            target_model='PendingOfflineOrphanEvent',
+            target_id=str(resolved.id),
+            payload_json={'resolved_sale_id': sale.id},
+            correlation_id='orphan-view-002',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard_offline_orphans'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'HUERFANOS OFFLINE')
+        self.assertContains(response, 'orphan-view-001')
+        self.assertContains(response, 'orphan-view-002')
+        self.assertContains(response, 'PAYMENT_CONFIRMATION')
+        self.assertContains(response, reverse('admin:pos_pendingofflineorphanevent_change', args=[pending.id]))
+        self.assertContains(response, reverse('admin:pos_pendingofflineorphanevent_change', args=[resolved.id]))
+        self.assertContains(response, reverse('admin:pos_venta_change', args=[sale.id]))
+        self.assertContains(response, reverse('admin:pos_auditlog_change', args=[audit.id]))
+        self.assertContains(response, reverse('dashboard_offline_orphans_export_json'))
+        self.assertContains(response, reverse('dashboard_offline_orphans_export_csv'))
+
+    def test_offline_orphan_inbox_json_export_returns_filtered_rows(self):
+        PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-json-001',
+            payment_reference='BANK-OJ-001',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.PENDING,
+            correlation_id='orphan-json-001',
+        )
+        sale = Venta.objects.create(
+            origen='POS',
+            tipo_pedido='SERVIR',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            payment_status=Venta.PaymentStatus.PAID,
+            total=Decimal('8.00'),
+            organization=self.location.organization,
+            location=self.location,
+            client_transaction_id='orphan-json-002',
+            accounting_booked_at=timezone.now(),
+        )
+        resolved = PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-json-002',
+            payment_reference='BANK-OJ-002',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.RESOLVED,
+            resolved_sale=sale,
+            resolved_at=timezone.now(),
+            correlation_id='orphan-json-002',
+        )
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='sale.pending_orphan_resolved',
+            target_model='PendingOfflineOrphanEvent',
+            target_id=str(resolved.id),
+            payload_json={'resolved_sale_id': sale.id},
+            correlation_id='orphan-json-002',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_orphans_export_json'),
+            {'offline_orphan_status': 'RESOLVED'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['count'], 1)
+        self.assertEqual(payload['pending_count'], 0)
+        self.assertEqual(payload['resolved_count'], 1)
+        self.assertEqual(payload['items'][0]['client_transaction_id'], 'orphan-json-002')
+        self.assertEqual(payload['items'][0]['status'], 'RESOLVED')
+        self.assertEqual(payload['items'][0]['event_type_label'], 'PAYMENT_CONFIRMATION')
+        self.assertEqual(payload['items'][0]['resolved_sale_id'], sale.id)
+        self.assertEqual(payload['items'][0]['latest_audit_log_id'], audit.id)
+        self.assertEqual(
+            payload['items'][0]['orphan_admin_url'],
+            reverse('admin:pos_pendingofflineorphanevent_change', args=[resolved.id]),
+        )
+        self.assertEqual(
+            payload['items'][0]['resolved_sale_admin_url'],
+            reverse('admin:pos_venta_change', args=[sale.id]),
+        )
+        self.assertEqual(
+            payload['items'][0]['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[audit.id]),
+        )
+
+    def test_offline_orphan_inbox_csv_export_returns_filtered_rows(self):
+        orphan = PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-csv-001',
+            payment_reference='BANK-OC-001',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.PENDING,
+            correlation_id='orphan-csv-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_orphans_export_csv'),
+            {'offline_orphan_status': 'PENDING'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn('attachment; filename="offline-orphan-inbox.csv"', response['Content-Disposition'])
+        content = response.content.decode('utf-8')
+        self.assertIn(
+            'orphan_id,created_at,status,event_type,client_transaction_id,payment_reference,payment_provider,correlation_id,organization_name,location_name,resolved_sale_id,resolved_at,latest_audit_log_id,latest_audit_log_event_type,orphan_admin_url,resolved_sale_admin_url,auditlog_url',
+            content,
+        )
+        self.assertIn('orphan-csv-001', content)
+        self.assertIn('BANK-OC-001', content)
+        self.assertIn(reverse('admin:pos_pendingofflineorphanevent_change', args=[orphan.id]), content)
 
     def test_offline_retention_json_export_returns_only_retention_subset(self):
         exported = AuditLog.objects.create(
@@ -3369,6 +3555,107 @@ class AnalyticsReplayTimelineTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'No aplica')
+
+    def test_pending_offline_orphan_admin_changelist_renders_pending_rows(self):
+        orphan_event = PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-admin-001',
+            payment_reference='BANK-ORPHAN-001',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.PENDING,
+            correlation_id='orphan-admin-001',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('admin:pos_pendingofflineorphanevent_changelist'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'orphan-admin-001')
+        self.assertContains(response, 'BANK-ORPHAN-001')
+        self.assertContains(response, orphan_event.event_type)
+
+    def test_pending_offline_orphan_admin_change_view_links_sale_and_related_audit(self):
+        sale = Venta.objects.create(
+            origen='POS',
+            tipo_pedido='SERVIR',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            payment_status=Venta.PaymentStatus.PAID,
+            total=Decimal('6.50'),
+            organization=self.location.organization,
+            location=self.location,
+            client_transaction_id='orphan-admin-002',
+            accounting_booked_at=timezone.now(),
+        )
+        orphan_event = PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-admin-002',
+            payment_reference='BANK-ORPHAN-002',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.RESOLVED,
+            resolved_sale=sale,
+            resolved_at=timezone.now(),
+            correlation_id='orphan-admin-002',
+        )
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='sale.pending_orphan_resolved',
+            target_model='PendingOfflineOrphanEvent',
+            target_id=str(orphan_event.id),
+            payload_json={
+                'client_transaction_id': orphan_event.client_transaction_id,
+                'resolved_sale_id': sale.id,
+            },
+            correlation_id='orphan-admin-002',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('admin:pos_pendingofflineorphanevent_change', args=[orphan_event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'orphan-admin-002')
+        self.assertContains(response, reverse('admin:pos_venta_change', args=[sale.id]))
+        self.assertContains(response, reverse('admin:pos_auditlog_change', args=[audit.id]))
+
+    def test_audit_log_admin_change_view_links_pending_offline_orphan_navigation(self):
+        orphan_event = PendingOfflineOrphanEvent.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            event_type='payment_confirmation',
+            client_transaction_id='orphan-admin-003',
+            payment_reference='BANK-ORPHAN-003',
+            payment_provider='TEST_GATEWAY',
+            status=PendingOfflineOrphanEvent.Status.PENDING,
+            correlation_id='orphan-admin-003',
+        )
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='sale.pending_orphan_resolved',
+            target_model='PendingOfflineOrphanEvent',
+            target_id=str(orphan_event.id),
+            payload_json={
+                'client_transaction_id': orphan_event.client_transaction_id,
+            },
+            correlation_id='orphan-admin-003',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('admin:pos_auditlog_change', args=[audit.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'sale.pending_orphan_resolved')
+        self.assertContains(
+            response,
+            reverse('admin:pos_pendingofflineorphanevent_change', args=[orphan_event.id]),
+        )
 
     def test_resolver_alerta_replay_marks_alert_resolved(self):
         venta = Venta.objects.create(
