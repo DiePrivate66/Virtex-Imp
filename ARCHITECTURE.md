@@ -351,6 +351,9 @@ La base durable local ya no esta en cero:
 
 - `pos.infrastructure.offline.journal` ya implementa journal JSONL segmentado, sidecar `.snapshot`, rolling hash por registro, footer sellado y recuperacion por prefijo valido
 - `pos.infrastructure.offline.runtime` ya agrega un runtime local segmentado encima del journal: rota por tamano, mantiene summary de limbo y repara agregados desde el journal cuando el sidecar queda atras
+- el sidecar ya no depende de un blob arbitrario creciente: ahora persiste un ring fijo de lookup reciente (`50` entradas) y valida que el `.snapshot` completo siga dentro del objetivo de `64 KB`
+- `pos.infrastructure.offline.projection` ya introduce una unica `projection.sqlite` de ventana caliente, reconstruible in-place y tratada explicitamente como cache descartable; si no existe o no puede reconstruirse, el runtime sigue en `journal_only`
+- `pos.infrastructure.offline.retention` ya define receipts tamper-evident para `purge_receipt` y `usb_export_receipt`, junto con comandos operativos para exportar a USB o purgar segmentos sellados bajo receipt; el purge de segmentos no sincronizados queda bloqueado salvo flujo `export_usb + --manager-override`
 - `pos.infrastructure.offline.writer` ya define un writer compartido por envelope canonico (`sale` / `lifecycle`) para que el shadow capture Django y un futuro cliente real no diverjan en el contrato de append
 - `pos.application.sales.offline_capture` ya puede espejar ventas pagadas y fallidas desde Django hacia ese journal como shadow capture opt-in (`OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True`) mientras el writer Electron real todavia no existe
 - `create_web_order()` tambien ya alimenta ese mismo journal con eventos pagados de origen `WEB`, de modo que el limbo y la cronologia offline no dependan solo del POS presencial
@@ -388,6 +391,55 @@ La base durable local ya no esta en cero:
 - ahora tambien existe una vista HTML individual por segmento historico en `/dashboard/limbo-offline/segment/`, construida sobre el mismo payload canonico del detalle JSON y enlazada desde el historial sellado del limbo
 - esa vista HTML del segmento ya permite ejecutar `revalidate footer` y `mark operational review` directamente desde la misma pantalla, reutilizando los endpoints JSON existentes y refrescando el detalle in-place sin volver al limbo expandido
 - esa misma vista ahora tambien permite `reconcile sidecar` para el segmento puntual y `reseal segment` cuando el snapshot mantiene `seal_pending` o el estado visible es `footer_missing`, sin caer de nuevo en el contrato global del limbo activo
+- esa misma vista ahora tambien expone retencion manual por segmento historico: `Export USB` genera `usb_export_receipt` local y `Purge After USB` solo aparece cuando ya existe ese receipt valido
+- el purge de segmento no sincronizado ya no depende solo del comando CLI: el contrato UI/server tambien exige firma del `usb_export_receipt` mas override explicito de gerente antes de destruir el journal local
+- el mismo contrato de retencion ya vive tambien en el detalle expandible del historial sellado dentro de `/dashboard/limbo-offline/`, evitando que el operador tenga que salir a la vista HTML individual para ejecutar export o purge manual
+- esas acciones de retencion ya generan `AuditLog` central explicito cuando el segmento tiene scope resoluble: `offline.segment_usb_exported` y `offline.segment_purged_after_usb`
+- esos dos eventos de retencion ya entran tambien en `ACCIONES OFFLINE AUDITADAS`, con filtros por `event_type` y `audit_result`, pero la vista critica sigue reservada para incidentes reales (`footer missing` o segmentos fuera de `sealed`)
+- el dashboard principal tambien exporta esa tabla completa en `JSON` y `CSV`, de modo que retencion y operaciones offline normales se pueden extraer sin pasar por la vista critica
+- ademas ya existe `/dashboard/retencion-offline/` como superficie separada para `Export USB` y `Purge After USB`, con exports propios y sin mezclar esos eventos con la cola de incidentes criticos
+- esa vista de retencion ahora tambien resume inline el receipt relevante por fila (`receipt_type`, USB root o `purge_mode`, override y firma truncada) para triage rapido sin abrir cada `AuditLog`
+- como esa superficie ya no mezcla incidentes de footer, tambien oculta los controles que no aplican (`Presencia De Footer` y el orden `footer missing primero`) para no contaminar el flujo operativo
+- por la misma razon, `RETENCION OFFLINE` ya no expone `Estado Del Segmento`; el foco queda en tipo de accion, actor, ubicacion, resultado y receipt
+- cuando el subset de retencion solo tiene una `Organizacion` o una `Sucursal` real, esos selectores tambien se ocultan para reducir ruido sin perder capacidad operativa
+- con el mismo criterio, el selector `Actor` tambien desaparece en retencion cuando el subset solo contiene un operador real
+- el mismo colapso ahora aplica a `Tipo De Accion` y `Resultado AuditLog` dentro de `RETENCION OFFLINE`; si el subset solo contiene un flujo real de retencion, esos filtros no se renderizan
+- cuando `RETENCION OFFLINE` entra como drill-down ya fijado a un solo segmento, tambien se ocultan `Segment ID` y `Ventana Temporal` para dejar la vista en modo triage puro
+- en ese mismo drill-down a segmento unico, la cabecera de `RETENCION OFFLINE` cambia a navegacion focalizada: CTA directo al segmento, enlace de vuelta a la retencion completa y sin tabs de periodo
+- la columna `Detalle` de esa tabla tambien se compacta en drill-down a segmento unico: queda `Segmento` como accion principal y `AuditLog` como enlace secundario, sin repetir `Limbo` ni `JSON`
+- en ese mismo modo, la tabla tambien oculta la columna `Segmento`, porque el identificador ya esta fijado en la cabecera del drill-down
+- si el drill-down ademas queda en una unica ubicacion efectiva, la tabla tambien oculta `Sucursal` para compactar la lectura operativa
+- con la misma regla, la columna `Actor` tambien desaparece si todas las filas del drill-down pertenecen al mismo operador
+- si `Estado` o `Resultado` tambien quedan determinados por un unico valor real dentro del drill-down, esas columnas se ocultan para concentrar la tabla en retention receipts y trazabilidad
+- la tarjeta superior de criterio tambien cambia en ese drill-down: deja el texto generico y muestra un resumen del segmento fijado con la ultima accion/receipt visible
+- cuando ese drill-down ya no conserva filtros utiles, el formulario desaparece por completo; la salida operativa queda en la cabecera (`ABRIR SEGMENTO` / `VER RETENCION COMPLETA`)
+- ese estado final convierte el drill-down de retencion en una superficie de triage de solo lectura: resumen del segmento, receipts visibles y salidas de navegacion, sin controles vacios
+- la misma tabla de retencion ya expone un endpoint JSON individual por `AuditLog` de receipt (`/dashboard/retencion-offline/receipt.json?audit_log_id=<id>`), limitado a eventos `offline.segment_usb_exported` y `offline.segment_purged_after_usb`
+- ese payload individual de `Receipt JSON` ahora expone tambien `retention_hint` en top-level, ademas del `retention_summary`, para simplificar consumidores externos
+- `AuditLogAdmin` enlaza tambien ese `Receipt JSON` para los eventos de retencion, cerrando la navegacion bidireccional entre admin, tabla de retencion y payload crudo
+- ese mismo `AuditLogAdmin` resume ahora el mismo `retention_hint` corto que ya sale en JSON/CSV, alineando la lectura compacta del receipt entre admin y exports
+- los exports JSON/CSV de `RETENCION OFFLINE` propagan tambien `receipt_json_url`, para que auditoria externa tenga la referencia cruda del receipt sin depender de navegar por la UI
+- el export general de `ACCIONES OFFLINE AUDITADAS` replica ese mismo `receipt_json_url` solo para eventos de retencion, manteniendolo vacio en revalidaciones/revisiones sin receipt asociado
+- esos exports JSON serializan tambien `retention_summary` con etiqueta de evento y un `hint` corto para clasificar receipts sin reparsear `payload_json`
+- la tabla general de `ACCIONES OFFLINE AUDITADAS` tambien renderiza `Receipt JSON` inline solo para filas de retencion, alineando dashboard, exports y `AuditLogAdmin` sobre la misma ruta cruda del receipt
+- el detalle HTML de lote offline tambien adjunta `Receipt JSON` por segmento asociado cuando su ultimo `AuditLog` central corresponde a retencion, manteniendo uniforme la navegacion cruda del receipt fuera del dashboard principal
+- ese mismo detalle individual de lote ahora resuelve tambien un `Receipt JSON` dominante a nivel batch, visible tanto en la cabecera HTML como en el payload JSON del lote cuando solo existe una retencion resoluble
+- el endpoint JSON individual del lote expone ahora tambien `retention_receipt_json_url`, alineando el contrato del detalle con los feeds batch JSON/CSV que ya publicaban la misma ruta dominante
+- la vista HTML individual del lote reutiliza ese mismo enriquecimiento y coloca `detail_json_url`, `detail_html_url`, `auditlog_url` y `retention_receipt_json_url` dentro de `batch_detail`, evitando divergencia entre contexto HTML y payload JSON
+- ese mismo helper de enriquecimiento se aplica tambien al export batch JSON, de modo que `items` y `selected_run` comparten exactamente las mismas URLs derivadas que el detalle individual del lote
+- el export CSV de lotes offline publica ahora esa misma superficie navegable (`detail_json_url`, `detail_html_url`, `auditlog_url`, `retention_receipt_json_url`), alineando completamente JSON, CSV y detalle individual
+- los exports generalistas de `ACCIONES OFFLINE AUDITADAS` y de `RETENCION OFFLINE` exponen ahora tambien `auditlog_url` en JSON y CSV, cerrando la simetria entre surfaces exportables y navegacion directa al admin
+- esa misma convencion alcanza ahora a `INCIDENTES OFFLINE CRITICOS`, que publica `auditlog_url` en JSON y CSV para mantener un patron unico de trazabilidad navegable en todas las exports offline
+- el mismo patron se extiende ahora al runtime offline operativo: `limbo` JSON, historial sellado y detalle individual de segmento resuelven el ultimo `AuditLog` central por `segment_id` y exponen `auditlog_url` cuando existe
+- la vista HTML principal `offline_limbo.html` ya consume ese enriquecimiento: el panel de segmento activo y el historial de segmentos sellados muestran un badge corto del ultimo evento central (`OPERATIONAL_REVIEW`, `FOOTER_REVALIDATED`, `USB_EXPORTED`, `PURGED_AFTER_USB`) y exponen `AuditLog` por fila cuando existe trazabilidad central
+- esa misma tabla batch expone ahora un hint corto del receipt (`receipt_type` + etiqueta de evento de retencion) junto a la navegacion del segmento, para triage rapido sin abrir el payload JSON
+- los exports JSON/CSV de lotes offline agregan tambien un `retention_hint` resumido por lote, calculado desde la ultima accion de retencion encontrada en los segmentos asociados
+- cuando ese hint agregado colapsa a una sola retencion dominante, esos mismos exports de lote propagan tambien `retention_receipt_json_url`
+- la tabla HTML de `LOTES OFFLINE AUDITADOS` renderiza tambien ese `retention_hint` agregado en la columna `Detalle`, manteniendo alineada la lectura compacta entre UI batch y exports
+- cuando ese `retention_hint` agregado colapsa a una unica retencion asociada, la tabla batch lo convierte en enlace directo al `Receipt JSON`; si hay multiples receipts asociados, permanece en modo solo lectura
+- la tarjeta de `Lote Seleccionado` replica esa misma regla y expone `Receipt JSON` cuando el lote seleccionado tiene una retencion dominante resoluble
+- `AuditLogAdmin` ya reconoce esos eventos de retencion y enlaza de vuelta a `/dashboard/retencion-offline/` con foco por `segment_id`, `event_type` y `audit_result`, cerrando la navegacion bidireccional tambien para ese flujo
+- ese mismo `AuditLogAdmin` ahora resume inline el receipt de retencion relevante (`usb_export_receipt` o `purge_receipt`) sin obligar a abrir el `payload_json` crudo
 - la vista `Limbo Offline` ya incorpora un buscador GET por `segment_id` para abrir o autoexpandir un segmento historico sin depender de venir desde analytics
 - ese mismo buscador ya vive tambien en el polling JSON del limbo: la UI reenvia `segment_id` al endpoint `/dashboard/limbo-offline/json/`, conserva la URL con `history.replaceState` y reexpande coincidencias sin recargar la pagina
 - la misma caja de busqueda ya permite abrir el detalle JSON historico exacto desde teclado (`Ctrl+Enter`) o con boton explicito, sin pasar antes por la tabla de segmentos sellados
@@ -400,6 +452,8 @@ La deuda abierta ya no es el formato ni la validacion, sino la integracion opera
 - aun no existe el writer Electron real que use este journal desde worker/proceso separado
 - aun no existe UI de limbo conectada a este sidecar ni journal-only mode real en cliente
 - ya existe replay gateway dedicado con TTL total, idle timeout, cold lane y draining cooperativo fuera de Django; el limite actual es que la coordinacion vive en memoria por proceso gateway y no como scheduler distribuido entre multiples instancias
+- el replay gateway externo ya no arbitra todo contra un hot slot unico: ahora parte la coordinacion por bucket estable de organizacion, con fairness fuerte dentro del bucket y sin pretender fairness global absoluta
+- `reconciliar_pago` ya acepta confirmaciones que lleguen antes de la venta base y las persiste en `PendingOfflineOrphanEvent`; cuando la venta aparece con el mismo `client_transaction_id`, el servidor resuelve ese huérfano en lugar de tratarlo como fallo terminal
 - `shard_count` queda fijo por organizacion en Fase 1; no existe rebalance online ni lectura multi-era de shards
 
 ## Prioridad de Refactor Real

@@ -5,11 +5,15 @@
     data-offline-segment-detail-root
     data-segment-id="{{ segment_detail.segment_id }}"
     data-segment-html-href="{{ segment_detail_html_href }}"
+    data-segment-back-href="{{ segment_detail_back_href }}"
     data-segment-can-reseal="{% if segment_detail_can_reseal %}1{% else %}0{% endif %}"
+    data-segment-latest-usb-export-signature="{{ segment_detail.retention.latest_usb_export_receipt.signature|default:'' }}"
     data-segment-revalidate-url="{% url 'dashboard_offline_limbo_segment_revalidate_json' %}"
     data-segment-reconcile-url="{% url 'dashboard_offline_limbo_segment_reconcile_json' %}"
     data-segment-reseal-url="{% url 'dashboard_offline_limbo_segment_reseal_json' %}"
     data-segment-review-url="{% url 'dashboard_offline_limbo_segment_review_json' %}"
+    data-segment-export-usb-url="{% url 'dashboard_offline_limbo_segment_export_usb_json' %}"
+    data-segment-purge-after-usb-url="{% url 'dashboard_offline_limbo_segment_purge_after_usb_json' %}"
 >
     <div class="flex items-start justify-between gap-4 mb-6">
         <div class="flex flex-col gap-3">
@@ -39,6 +43,16 @@
             >
                 Refrescar HTML
             </a>
+            {% if segment_detail.auditlog_url|default:segment_detail_auditlog_href %}
+            <a
+                href="{{ segment_detail.auditlog_url|default:segment_detail_auditlog_href }}"
+                target="_blank"
+                rel="noopener"
+                class="bg-emerald-900/50 hover:bg-emerald-800/50 text-emerald-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                AuditLog
+            </a>
+            {% endif %}
         </div>
     </div>
 
@@ -76,7 +90,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+    <div class="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-6">
         <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
             <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Snapshot</h2>
             <div class="mt-4 space-y-3 text-sm">
@@ -199,6 +213,83 @@
                 </div>
             </div>
         </div>
+
+        <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5">
+            <div class="flex items-start justify-between gap-3">
+                <h2 class="text-indigo-300 font-black text-sm uppercase tracking-widest">Retencion Manual</h2>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-100 text-[11px] font-black px-3 py-2 rounded-lg transition"
+                        data-segment-detail-action="export_usb"
+                        {% if not segment_detail.retention.allow_export_usb %}disabled{% endif %}
+                    >
+                        Export USB
+                    </button>
+                    {% if segment_detail.retention.allow_purge_after_usb %}
+                    <button
+                        type="button"
+                        class="bg-red-900/50 hover:bg-red-800/50 text-red-100 text-[11px] font-black px-3 py-2 rounded-lg transition"
+                        data-segment-detail-action="purge_after_usb"
+                    >
+                        Purge After USB
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="mt-4 space-y-3 text-sm">
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Receipts</p>
+                    <p class="text-white mt-1">
+                        purge={{ segment_detail.retention.purge_receipts_count|default:0 }} /
+                        usb={{ segment_detail.retention.usb_export_receipts_count|default:0 }}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Receipts Dir</p>
+                    <p class="text-gray-300 mt-1 break-all">{{ segment_detail.retention.receipts_dir|default:"N/A" }}</p>
+                </div>
+                <div>
+                    <label class="block text-gray-500 text-[10px] uppercase tracking-widest font-black mb-2">USB Root</label>
+                    <input
+                        type="text"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                        placeholder="E:\\"
+                        data-retention-usb-root
+                    >
+                </div>
+                <div>
+                    <label class="block text-gray-500 text-[10px] uppercase tracking-widest font-black mb-2">Reason</label>
+                    <input
+                        type="text"
+                        class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
+                        placeholder="manual override"
+                        data-retention-reason
+                    >
+                </div>
+                <div>
+                    <label class="inline-flex items-center gap-2 text-xs text-gray-300">
+                        <input type="checkbox" class="rounded border-gray-700 bg-gray-900" data-retention-manager-override>
+                        Confirmo override explicito de gerente para purge no sincronizado
+                    </label>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Ultimo USB Export</p>
+                    {% if segment_detail.retention.latest_usb_export_receipt %}
+                    <p class="text-white mt-1">{{ segment_detail.retention.latest_usb_export_receipt.created_at|default:"SIN_FECHA" }}</p>
+                    <p class="text-gray-400 text-xs mt-1 break-all">{{ segment_detail.retention.latest_usb_export_receipt.signature|default:"SIN_FIRMA" }}</p>
+                    {% else %}
+                    <p class="text-gray-400 mt-1">Sin usb_export_receipt valido.</p>
+                    {% endif %}
+                </div>
+                {% if not segment_detail.retention.allow_purge_after_usb %}
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">Purge Bloqueado</p>
+                    <p class="text-gray-400 mt-1">{{ segment_detail.retention.purge_after_usb_block_reason|default:"Purge no habilitado." }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <div class="rounded-2xl border border-indigo-800/40 bg-black/20 p-5 mb-6">
@@ -245,13 +336,20 @@
 
     const segmentId = String(root.dataset.segmentId || '').trim();
     const segmentHtmlHref = String(root.dataset.segmentHtmlHref || '').trim();
+    const segmentBackHref = String(root.dataset.segmentBackHref || '').trim();
     const segmentCanReseal = root.dataset.segmentCanReseal === '1';
+    const latestUsbExportSignature = String(root.dataset.segmentLatestUsbExportSignature || '').trim();
     const reconcileUrl = String(root.dataset.segmentReconcileUrl || '').trim();
     const resealUrl = String(root.dataset.segmentResealUrl || '').trim();
     const revalidateUrl = String(root.dataset.segmentRevalidateUrl || '').trim();
     const reviewUrl = String(root.dataset.segmentReviewUrl || '').trim();
+    const exportUsbUrl = String(root.dataset.segmentExportUsbUrl || '').trim();
+    const purgeAfterUsbUrl = String(root.dataset.segmentPurgeAfterUsbUrl || '').trim();
     const feedback = root.querySelector('[data-segment-action-feedback]');
     const actionButtons = Array.from(root.querySelectorAll('[data-segment-detail-action]'));
+    const retentionUsbRootInput = root.querySelector('[data-retention-usb-root]');
+    const retentionReasonInput = root.querySelector('[data-retention-reason]');
+    const retentionManagerOverrideInput = root.querySelector('[data-retention-manager-override]');
     const csrfToken = '{{ csrf_token }}';
 
     const setFeedback = (message, tone = 'neutral') => {
@@ -287,15 +385,44 @@
             reseal: resealUrl,
             revalidate: revalidateUrl,
             review: reviewUrl,
+            export_usb: exportUsbUrl,
+            purge_after_usb: purgeAfterUsbUrl,
         };
         const labelMap = {
             reconcile: 'reconciliacion de sidecar',
             reseal: 'reseal de segmento',
             revalidate: 'revalidacion de footer',
             review: 'revision operativa',
+            export_usb: 'exportacion manual a USB',
+            purge_after_usb: 'purge no sincronizado bajo override',
         };
         const endpoint = endpointMap[actionName] || '';
         const label = labelMap[actionName] || 'accion operativa';
+        const reason = String(retentionReasonInput?.value || '').trim();
+        const usbRoot = String(retentionUsbRootInput?.value || '').trim();
+        const managerOverride = Boolean(retentionManagerOverrideInput?.checked);
+        const body = { segment_id: segmentId };
+        if (actionName === 'export_usb') {
+            body.usb_root = usbRoot;
+            body.reason = reason;
+            if (!usbRoot) {
+                setFeedback('No se pudo ejecutar exportacion manual a USB: usb_root requerido.', 'error');
+                return;
+            }
+        }
+        if (actionName === 'purge_after_usb') {
+            body.reason = reason;
+            body.manager_override = managerOverride;
+            body.usb_export_receipt_signature = latestUsbExportSignature;
+            if (!latestUsbExportSignature) {
+                setFeedback('No se pudo ejecutar purge: falta usb_export_receipt valido.', 'error');
+                return;
+            }
+            if (!managerOverride) {
+                setFeedback('No se pudo ejecutar purge: override explicito de gerente requerido.', 'error');
+                return;
+            }
+        }
         try {
             setButtonsDisabled(true);
             setFeedback(`Ejecutando ${label} para ${segmentId}...`, 'neutral');
@@ -307,7 +434,7 @@
                     'X-Requested-With': 'XMLHttpRequest',
                 },
                 credentials: 'same-origin',
-                body: JSON.stringify({ segment_id: segmentId }),
+                body: JSON.stringify(body),
             });
             const payload = await response.json();
             if (!response.ok) {
@@ -323,10 +450,14 @@
                         : ` Registro central omitido: ${auditLog.detail || 'sin tenant resoluble'}.`
                 )
                 : '';
-            setFeedback(`${payload.action?.detail || 'Accion completada.'}${suffix} Recargando vista...`, 'success');
+            const receiptSuffix = payload.receipt?.signature
+                ? ` Receipt ${payload.receipt.receipt_type || 'desconocido'} generado.`
+                : '';
+            const redirectHref = payload.removed ? (segmentBackHref || '{{ segment_detail_back_href }}') : segmentHtmlHref;
+            setFeedback(`${payload.action?.detail || 'Accion completada.'}${suffix}${receiptSuffix} Recargando vista...`, 'success');
             window.setTimeout(() => {
-                if (segmentHtmlHref) {
-                    window.location.assign(segmentHtmlHref);
+                if (redirectHref) {
+                    window.location.assign(redirectHref);
                 } else {
                     window.location.reload();
                 }

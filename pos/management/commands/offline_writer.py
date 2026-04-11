@@ -71,6 +71,8 @@ class Command(BaseCommand):
             or getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
             limbo_recent_limit=options.get('recent_limit')
             or getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50),
+            sidecar_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SIDECAR_MAX_BYTES', 64 * 1024),
+            projection_window_hours=getattr(settings, 'OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS', 24),
         )
 
         try:

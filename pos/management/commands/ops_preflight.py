@@ -33,6 +33,7 @@ from pos.models import (
     LedgerAccount,
     LedgerRegistryActivation,
     OutboxEvent,
+    PendingOfflineOrphanEvent,
     Organization,
     OrganizationLedgerCounterShard,
     OrganizationLedgerState,
@@ -85,6 +86,7 @@ class Command(BaseCommand):
         checks.append(self._check_idempotency_backlog())
         checks.append(self._check_outbox_backlog())
         checks.append(self._check_payment_exceptions_backlog())
+        checks.append(self._check_pending_orphan_inbox())
         checks.append(self._check_ledger_shards())
         checks.append(self._check_operational_drift())
         checks.append(self._check_delivery_pool())
@@ -320,6 +322,7 @@ class Command(BaseCommand):
         cold_lane_slots = int(getattr(settings, 'REPLAY_GATEWAY_COLD_LANE_SLOTS', 0))
         cold_slice_seconds = float(getattr(settings, 'REPLAY_GATEWAY_COLD_SLICE_SECONDS', 0))
         waiter_ttl_seconds = float(getattr(settings, 'REPLAY_GATEWAY_WAITER_TTL_SECONDS', 0))
+        bucket_count = int(getattr(settings, 'REPLAY_GATEWAY_BUCKET_COUNT', 0))
         retry_after_seconds = int(getattr(settings, 'POS_REPLAY_RETRY_AFTER_SECONDS', 0))
         mutation_paths = tuple(getattr(settings, 'LEDGER_FENCED_MUTATION_PATHS', ()))
 
@@ -340,6 +343,8 @@ class Command(BaseCommand):
             errors.append('cold_lane_hours<=0')
         if cold_lane_slots <= 0:
             errors.append('cold_lane_slots<=0')
+        if bucket_count <= 0:
+            errors.append('bucket_count<=0')
         if cold_slice_seconds <= 0:
             errors.append('cold_slice_seconds<=0')
         if waiter_ttl_seconds <= 0:
@@ -362,7 +367,7 @@ class Command(BaseCommand):
         detail = (
             f'enabled timeout={total_timeout:.1f}s idle={idle_timeout:.1f}s '
             f'upstream_timeout={upstream_timeout:.1f}s cold_slots={cold_lane_slots} '
-            f'cold_slice={cold_slice_seconds:.1f}s'
+            f'cold_slice={cold_slice_seconds:.1f}s buckets={bucket_count}'
         )
         if errors:
             return CheckResult(
@@ -386,6 +391,7 @@ class Command(BaseCommand):
             return CheckResult('offline_journal', True, 'info', 'runtime offline desactivado')
 
         root_value = str(getattr(settings, 'OFFLINE_JOURNAL_ROOT', '') or '').strip()
+        sidecar_max_bytes = int(getattr(settings, 'OFFLINE_JOURNAL_SIDECAR_MAX_BYTES', 64 * 1024))
         if not root_value:
             return CheckResult(
                 'offline_journal',
@@ -409,6 +415,13 @@ class Command(BaseCommand):
                 'error',
                 f'root offline no es directorio: {root_dir}',
             )
+        if sidecar_max_bytes <= 0 or sidecar_max_bytes > 64 * 1024:
+            return CheckResult(
+                'offline_journal',
+                False,
+                'error',
+                f'sidecar_max_bytes invalido: {sidecar_max_bytes}',
+            )
 
         try:
             runtime = SegmentedJournalRuntime(
@@ -417,6 +430,8 @@ class Command(BaseCommand):
                     stream_name=getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales'),
                     segment_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
                     limbo_recent_limit=getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50),
+                    sidecar_max_bytes=sidecar_max_bytes,
+                    projection_window_hours=getattr(settings, 'OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS', 24),
                 )
             )
             limbo_view = runtime.get_limbo_view()
@@ -444,8 +459,16 @@ class Command(BaseCommand):
                 )
 
             summary = limbo_view.get('summary') or {}
+            projection_status = dict(limbo_view.get('projection') or {})
             capture_enabled = bool(getattr(settings, 'OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS', False))
             lookback_hours = max(1, int(getattr(settings, 'OPS_PREFLIGHT_OFFLINE_CAPTURE_LOOKBACK_HOURS', 24)))
+            snapshot_path_value = str(limbo_view.get('snapshot_path') or '').strip()
+            snapshot_bytes = 0
+            if snapshot_path_value:
+                snapshot_path = Path(snapshot_path_value)
+                if snapshot_path.exists():
+                    snapshot_bytes = int(snapshot_path.stat().st_size)
+            receipt_stats = self._collect_offline_receipt_stats(root_dir=root_dir)
             recent_sources, recent_record_count, source_scan_warnings = self._collect_recent_offline_capture_sources(
                 root_dir=root_dir,
                 stream_name=getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales'),
@@ -457,11 +480,24 @@ class Command(BaseCommand):
                 f'sealed={limbo_view.get("sealed")} '
                 f'total_sales={summary.get("total_sales", 0)} '
                 f'amount_total={summary.get("amount_total", "0.00")} '
+                f'mode={limbo_view.get("mode", "journal_only")} '
+                f'projection_available={bool(projection_status.get("available"))} '
+                f'projection_rows={int(projection_status.get("row_count") or 0)} '
+                f'projection_window={int(projection_status.get("window_hours") or 0)}h '
+                f'verify_path={bool(limbo_view.get("verify_path_available", False))} '
+                f'verify_status={limbo_view.get("last_verify_status", "unknown")} '
+                f'sidecar_bytes={snapshot_bytes} '
+                f'recent_lookup={summary.get("recent_lookup_count", 0)}/{summary.get("recent_lookup_capacity", 0)} '
+                f'receipts={receipt_stats["total"]} '
+                f'purge_receipts={receipt_stats["purge"]} '
+                f'usb_receipts={receipt_stats["usb_export"]} '
                 f'capture_enabled={capture_enabled} '
                 f'recent_capture_records={recent_record_count} '
                 f'recent_origins={",".join(sorted(recent_sources)) or "none"} '
                 f'lookback={lookback_hours}h'
             )
+            if projection_status.get('reason'):
+                detail += f'; projection_reason={projection_status.get("reason")}'
             if source_scan_warnings:
                 return CheckResult(
                     'offline_journal',
@@ -544,6 +580,22 @@ class Command(BaseCommand):
                 elif 'sales' in capture_source or 'pos' in capture_source:
                     recent_sources.add('POS')
         return recent_sources, recent_record_count, warnings
+
+    def _collect_offline_receipt_stats(self, *, root_dir: Path) -> dict[str, int]:
+        receipts_dir = root_dir / 'receipts'
+        if not receipts_dir.exists():
+            return {'total': 0, 'purge': 0, 'usb_export': 0}
+
+        total = 0
+        purge = 0
+        usb_export = 0
+        for receipt_path in receipts_dir.glob('*.json'):
+            total += 1
+            if receipt_path.name.startswith('purge_receipt-'):
+                purge += 1
+            elif receipt_path.name.startswith('usb_export_receipt-'):
+                usb_export += 1
+        return {'total': total, 'purge': purge, 'usb_export': usb_export}
 
     def _check_system_ledger_accounts(self) -> CheckResult:
         try:
@@ -718,6 +770,22 @@ class Command(BaseCommand):
             )
         except Exception as exc:
             return self._db_check_failure('payment_exceptions_backlog', exc)
+
+    def _check_pending_orphan_inbox(self) -> CheckResult:
+        try:
+            threshold_seconds = max(300, int(getattr(settings, 'PENDING_PAYMENT_TIMEOUT_SECONDS', 600)))
+            cutoff = timezone.now() - timedelta(seconds=threshold_seconds)
+            pending_queryset = PendingOfflineOrphanEvent.objects.filter(
+                status=PendingOfflineOrphanEvent.Status.PENDING,
+            )
+            pending_count = pending_queryset.count()
+            stale_count = pending_queryset.filter(created_at__lte=cutoff).count()
+            detail = f'pending={pending_count}, stale={stale_count}, threshold_seconds={threshold_seconds}'
+            if pending_count > 0:
+                return CheckResult('pending_orphan_inbox', False, 'warning', detail)
+            return CheckResult('pending_orphan_inbox', True, 'info', detail)
+        except Exception as exc:
+            return self._db_check_failure('pending_orphan_inbox', exc)
 
     def _check_ledger_shards(self) -> CheckResult:
         try:

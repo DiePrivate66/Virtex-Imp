@@ -16,15 +16,25 @@
         </div>
         <div class="flex items-center gap-3">
             <a
-                href="{{ batch_detail_json_href }}"
+                href="{{ batch_detail.detail_json_url|default:batch_detail_json_href }}"
                 target="_blank"
                 rel="noopener"
                 class="bg-indigo-900/50 hover:bg-indigo-800/50 text-indigo-100 text-xs font-black px-4 py-2 rounded-lg transition"
             >
                 JSON
             </a>
+            {% if batch_detail.retention_receipt_json_url|default:batch_detail_retention_receipt_json_href %}
             <a
-                href="{{ batch_detail_auditlog_href }}"
+                href="{{ batch_detail.retention_receipt_json_url|default:batch_detail_retention_receipt_json_href }}"
+                target="_blank"
+                rel="noopener"
+                class="bg-violet-900/50 hover:bg-violet-800/50 text-violet-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                Receipt JSON
+            </a>
+            {% endif %}
+            <a
+                href="{{ batch_detail.auditlog_url|default:batch_detail_auditlog_href }}"
                 target="_blank"
                 rel="noopener"
                 class="bg-emerald-900/50 hover:bg-emerald-800/50 text-emerald-100 text-xs font-black px-4 py-2 rounded-lg transition"
@@ -44,6 +54,9 @@
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">BATCH ID</p>
             <p class="text-white text-lg font-black mt-2 break-all">{{ batch_detail.batch_id }}</p>
             <p class="text-gray-600 text-xs mt-1">Correlation: {{ batch_detail.correlation_id|default:"SIN_CORRELATION" }}</p>
+            {% if batch_detail.retention_hint %}
+            <p class="text-violet-300 text-xs font-black mt-2">Retention: {{ batch_detail.retention_hint }}</p>
+            {% endif %}
         </div>
         <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">PROCESADOS</p>
@@ -263,6 +276,12 @@
                         </td>
                         <td class="py-3 text-right text-xs">
                             <div class="flex justify-end gap-2">
+                                {% if item.retention_hint.applicable %}
+                                <div class="mr-2 text-right">
+                                    <div class="text-violet-200 text-[10px] font-black">{{ item.retention_hint.receipt_type }}</div>
+                                    <div class="text-gray-500 text-[10px] mt-1">{{ item.retention_hint.event_label }}</div>
+                                </div>
+                                {% endif %}
                                 <a
                                     href="{{ item.limbo_href }}"
                                     class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
@@ -285,6 +304,16 @@
                                 >
                                     JSON
                                 </a>
+                                {% if item.retention_receipt_json_href %}
+                                <a
+                                    href="{{ item.retention_receipt_json_href }}"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="bg-violet-900/50 text-violet-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-violet-800/50 transition"
+                                >
+                                    Receipt JSON
+                                </a>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

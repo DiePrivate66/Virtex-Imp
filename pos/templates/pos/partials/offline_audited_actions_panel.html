@@ -32,16 +32,26 @@
             >
                 {{ offline_actions_secondary_label }}
             </a>
+            {% if offline_actions_tertiary_href and offline_actions_tertiary_label %}
+            <a
+                href="{{ offline_actions_tertiary_href }}"
+                class="bg-sky-900/40 hover:bg-sky-800/40 text-sky-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                {{ offline_actions_tertiary_label }}
+            </a>
+            {% endif %}
             <div class="bg-indigo-500 text-black text-2xl font-black px-4 py-2 rounded-xl">
                 {{ offline_audited_actions_count }}
             </div>
         </div>
     </div>
+    {% if offline_audited_actions_show_filter_form %}
     <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-4">
         <input type="hidden" name="periodo" value="{{ periodo }}">
         {% if desde %}<input type="hidden" name="desde" value="{{ desde }}">{% endif %}
         {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta }}">{% endif %}
         <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-11 gap-3">
+            {% if offline_audited_actions_show_segment_id_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Segment ID</label>
                 <input
@@ -52,6 +62,8 @@
                     class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-white"
                 >
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_time_window_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Ventana Temporal</label>
                 <select
@@ -65,6 +77,8 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_type_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Tipo De Accion</label>
                 <select
@@ -78,6 +92,8 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_organization_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Organizacion</label>
                 <select
@@ -95,6 +111,8 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_location_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Sucursal</label>
                 <select
@@ -112,6 +130,8 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_actor_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Actor</label>
                 <select
@@ -129,6 +149,8 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_segment_status_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Estado Del Segmento</label>
                 <select
@@ -146,6 +168,8 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_result_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Resultado AuditLog</label>
                 <select
@@ -159,6 +183,8 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_footer_presence_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Presencia De Footer</label>
                 <select
@@ -172,6 +198,8 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
+            {% if offline_audited_actions_show_sort_filter %}
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-indigo-200 font-black mb-2">Orden Operativa</label>
                 <select
@@ -185,6 +213,7 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
             <div class="flex items-end gap-2">
                 <button type="submit" class="bg-indigo-500 hover:bg-indigo-400 text-black text-xs font-black px-4 py-2 rounded-lg transition">
                     Filtrar
@@ -198,6 +227,7 @@
             </div>
         </div>
     </form>
+    {% endif %}
     {% if offline_actions_critical_view and offline_audited_actions_count %}
     <div class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-4">
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
@@ -247,11 +277,24 @@
                     {% endif %}
                     <th class="pb-2 font-black">Hora</th>
                     <th class="pb-2 font-black">Tipo</th>
+                    {% if not offline_audited_actions_single_segment_drilldown %}
                     <th class="pb-2 font-black">Segmento</th>
+                    {% endif %}
+                    {% if offline_audited_actions_show_status_column %}
                     <th class="pb-2 font-black">Estado</th>
+                    {% endif %}
+                    {% if offline_audited_actions_show_result_column %}
                     <th class="pb-2 font-black">Resultado</th>
+                    {% endif %}
+                    {% if offline_audited_actions_retention_only %}
+                    <th class="pb-2 font-black">Receipt</th>
+                    {% endif %}
+                    {% if offline_audited_actions_show_actor_column %}
                     <th class="pb-2 font-black">Actor</th>
+                    {% endif %}
+                    {% if offline_audited_actions_show_location_column %}
                     <th class="pb-2 font-black">Sucursal</th>
+                    {% endif %}
                     <th class="pb-2 font-black text-right">AuditLog</th>
                     <th class="pb-2 font-black text-right">Detalle</th>
                 </tr>
@@ -271,26 +314,44 @@
                     {% endif %}
                     <td class="py-3 text-gray-300 text-xs">{{ action.created_at|date:"d/m H:i" }}</td>
                     <td class="py-3 text-xs">
-                        <span class="px-2 py-1 rounded-md text-[10px] font-black {% if action.event_type == 'offline.segment_footer_revalidated' %}bg-sky-900/40 text-sky-300{% else %}bg-violet-900/40 text-violet-300{% endif %}">
-                            {% if action.event_type == 'offline.segment_footer_revalidated' %}
-                            FOOTER_REVALIDATED
-                            {% else %}
-                            OPERATIONAL_REVIEW
-                            {% endif %}
+                        <span class="px-2 py-1 rounded-md text-[10px] font-black {{ action.offline_event_type_tone }}">
+                            {{ action.offline_event_type_label }}
                         </span>
                     </td>
+                    {% if not offline_audited_actions_single_segment_drilldown %}
                     <td class="py-3 text-xs">
                         <p class="text-white font-bold break-all">{{ action.target_id }}</p>
                         <p class="text-gray-500 text-[10px] mt-1">{{ action.target_model }}</p>
                     </td>
+                    {% endif %}
+                    {% if offline_audited_actions_show_status_column %}
                     <td class="py-3 text-gray-200 text-xs">
                         {{ action.payload_json.segment_status|default:"SIN_STATUS" }}
                     </td>
+                    {% endif %}
+                    {% if offline_audited_actions_show_result_column %}
                     <td class="py-3 text-xs">
                         <span class="px-2 py-1 rounded-md text-[10px] font-black {% if action.offline_audit_result == 'footer_present' %}bg-emerald-900/40 text-emerald-300{% elif action.offline_audit_result == 'footer_missing' %}bg-rose-900/40 text-rose-300{% else %}bg-violet-900/40 text-violet-300{% endif %}">
                             {{ action.offline_audit_result_label }}
                         </span>
                     </td>
+                    {% endif %}
+                    {% if offline_audited_actions_retention_only %}
+                    <td class="py-3 text-xs">
+                        {% if action.offline_retention_summary.applicable %}
+                        <p class="text-white font-bold">{{ action.offline_retention_summary.receipt_type }}</p>
+                        <p class="text-gray-400 text-[10px] mt-1">
+                            {{ action.offline_retention_summary.detail_label }}={{ action.offline_retention_summary.detail_value }}
+                        </p>
+                        <p class="text-gray-500 text-[10px] mt-1">
+                            {{ action.offline_retention_summary.meta_value }} · {{ action.offline_retention_summary.reason }}
+                        </p>
+                        {% else %}
+                        <span class="text-gray-500">N/A</span>
+                        {% endif %}
+                    </td>
+                    {% endif %}
+                    {% if offline_audited_actions_show_actor_column %}
                     <td class="py-3 text-gray-300 text-xs">
                         {% if action.actor_user %}
                         {{ action.actor_user.username }}
@@ -298,6 +359,8 @@
                         SIN_USUARIO
                         {% endif %}
                     </td>
+                    {% endif %}
+                    {% if offline_audited_actions_show_location_column %}
                     <td class="py-3 text-gray-300 text-xs">
                         {% if action.location %}
                         {{ action.location.name }}
@@ -305,6 +368,7 @@
                         {{ action.organization.name|default:"SIN_UBICACION" }}
                         {% endif %}
                     </td>
+                    {% endif %}
                     <td class="py-3 text-right text-xs">
                         <p class="text-indigo-300 font-black">#{{ action.id }}</p>
                         <p class="text-gray-500 text-[10px] mt-1">
@@ -317,6 +381,32 @@
                     </td>
                     <td class="py-3 text-right text-xs">
                         <div class="flex justify-end gap-2">
+                            {% if offline_audited_actions_retention_only and offline_audited_actions_single_segment_drilldown %}
+                            <a
+                                href="{% url 'dashboard_offline_limbo_segment_detail' %}?segment_id={{ action.target_id|urlencode }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-sky-900/50 text-sky-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-sky-800/50 transition"
+                            >
+                                Segmento
+                            </a>
+                            <a
+                                href="{% url 'dashboard_offline_retention_receipt_json' %}?audit_log_id={{ action.id }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-indigo-900/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                            >
+                                Receipt JSON
+                            </a>
+                            <a
+                                href="{% url 'admin:pos_auditlog_change' action.id %}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-emerald-900/50 text-emerald-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-emerald-800/50 transition"
+                            >
+                                AuditLog
+                            </a>
+                            {% else %}
                             <a
                                 href="{% url 'dashboard_offline_limbo' %}?segment_id={{ action.target_id|urlencode }}"
                                 class="bg-gray-800 text-gray-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
@@ -339,6 +429,16 @@
                             >
                                 JSON
                             </a>
+                            {% if action.offline_retention_summary.applicable %}
+                            <a
+                                href="{% url 'dashboard_offline_retention_receipt_json' %}?audit_log_id={{ action.id }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="bg-violet-900/50 text-violet-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-violet-800/50 transition"
+                            >
+                                Receipt JSON
+                            </a>
+                            {% endif %}
                             <a
                                 href="{% url 'admin:pos_auditlog_change' action.id %}"
                                 target="_blank"
@@ -347,6 +447,7 @@
                             >
                                 AuditLog
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>

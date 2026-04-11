@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="min-h-screen bg-bosco-dark p-6 font-sans text-gray-100">
+    <div class="flex items-start justify-between mb-6">
+        <div class="flex flex-col gap-3">
+            <a href="{% url 'dashboard_analytics' %}" class="w-fit bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-700 transition">
+                &larr; VOLVER A ANALYTICS
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-white tracking-tight">RETENCION OFFLINE</h1>
+                <p class="text-gray-500 text-xs font-bold mt-1">Vista operativa dedicada a exportaciones USB y purges manuales del journal offline.</p>
+                {% if offline_retention_focus_segment_id %}
+                <p class="text-sky-300 text-xs font-black mt-2 uppercase tracking-widest">
+                    Drill-down fijado a {{ offline_retention_focus_segment_id }}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+        {% if offline_retention_focus_segment_id and offline_retention_focus_segment_href %}
+        <div class="flex items-center gap-3">
+            <a
+                href="{{ offline_retention_focus_segment_href }}"
+                class="bg-sky-900/50 hover:bg-sky-800/50 text-sky-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                ABRIR SEGMENTO
+            </a>
+            <a
+                href="{{ offline_retention_full_href }}"
+                class="bg-gray-800 hover:bg-gray-700 text-gray-100 text-xs font-black px-4 py-2 rounded-lg transition"
+            >
+                VER RETENCION COMPLETA
+            </a>
+        </div>
+        {% else %}
+        <a
+            href="{{ offline_retention_incidents_href }}"
+            class="bg-rose-900/50 hover:bg-rose-800/50 text-rose-100 text-xs font-black px-4 py-2 rounded-lg transition"
+        >
+            VER INCIDENTES CRITICOS
+        </a>
+        {% endif %}
+    </div>
+
+    {% if offline_retention_show_period_tabs %}
+    <div class="flex gap-2 mb-6">
+        {% for val, label in periods %}
+        <a href="?periodo={{ val }}" class="px-4 py-2 rounded-lg text-xs font-black uppercase transition
+            {% if periodo == val %}bg-bosco-orange text-black{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="rounded-2xl border border-sky-700/40 bg-sky-950/30 p-4 mb-6">
+        <p class="text-sky-200 text-xs font-bold uppercase tracking-widest">Criterio De Retencion</p>
+        {% if offline_retention_focus_summary %}
+        <p class="text-sky-100 text-sm mt-2">
+            Resumen del segmento fijado:
+            <span class="font-black">{{ offline_retention_focus_segment_id }}</span>
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-3">
+            <div class="rounded-xl border border-sky-800/40 bg-black/20 px-4 py-3">
+                <p class="text-sky-300 text-[10px] uppercase tracking-widest font-black">Ultima Accion</p>
+                <p class="text-white text-sm font-black mt-1">{{ offline_retention_focus_summary.event_label }}</p>
+            </div>
+            <div class="rounded-xl border border-sky-800/40 bg-black/20 px-4 py-3">
+                <p class="text-sky-300 text-[10px] uppercase tracking-widest font-black">Receipt</p>
+                <p class="text-white text-sm font-black mt-1">{{ offline_retention_focus_summary.receipt_type }}</p>
+            </div>
+            <div class="rounded-xl border border-sky-800/40 bg-black/20 px-4 py-3">
+                <p class="text-sky-300 text-[10px] uppercase tracking-widest font-black">{{ offline_retention_focus_summary.detail_label }}</p>
+                <p class="text-white text-sm font-black mt-1">{{ offline_retention_focus_summary.detail_value }}</p>
+            </div>
+            <div class="rounded-xl border border-sky-800/40 bg-black/20 px-4 py-3">
+                <p class="text-sky-300 text-[10px] uppercase tracking-widest font-black">Meta</p>
+                <p class="text-white text-sm font-black mt-1">{{ offline_retention_focus_summary.meta_value }}</p>
+                <p class="text-gray-400 text-[11px] mt-1">{{ offline_retention_focus_summary.reason }}</p>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-sky-100 text-sm mt-2">
+            Esta vista muestra solo acciones auditadas de retencion offline:
+            <span class="font-black">Export USB</span> y <span class="font-black">Purge After USB</span>.
+            No mezcla incidentes de footer ni segmentos fuera de <span class="font-black">sealed</span>.
+        </p>
+        {% endif %}
+    </div>
+
+    {% include 'pos/partials/offline_audited_actions_panel.html' %}
+</div>
+{% endblock %}

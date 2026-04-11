@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import reverse
-from django.utils.html import format_html
-from urllib.parse import quote
+from django.utils.html import format_html, format_html_join
+from urllib.parse import quote, urlencode
 
 from pos.application.staff.commands import sync_employee_user
 
@@ -26,6 +26,15 @@ from .models import (
     WhatsAppConversation,
     WhatsAppMessageLog,
 )
+
+
+def _truncate_admin_hint_value(raw_value, *, limit=16):
+    normalized = str(raw_value or "").strip()
+    if not normalized:
+        return "N/A"
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit]}..."
 
 
 class DetalleVentaInline(admin.TabularInline):
@@ -251,6 +260,7 @@ class AuditLogAdmin(admin.ModelAdmin):
         "resolved_by",
         "created_at",
         "offline_navigation_links",
+        "offline_retention_receipt_summary",
     )
 
     def has_add_permission(self, request):
@@ -268,15 +278,36 @@ class AuditLogAdmin(admin.ModelAdmin):
             limbo_url = f'{reverse("dashboard_offline_limbo")}?segment_id={encoded_segment_id}'
             html_url = f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id={encoded_segment_id}'
             json_url = f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={encoded_segment_id}'
+            links = [
+                ('Abrir Limbo', limbo_url),
+                ('Abrir HTML', html_url),
+                ('Abrir JSON', json_url),
+            ]
+            if obj.event_type in {
+                'offline.segment_usb_exported',
+                'offline.segment_purged_after_usb',
+            }:
+                retention_params = {
+                    'offline_action_segment_id': str(obj.target_id),
+                    'offline_action_type': str(obj.event_type),
+                }
+                audit_result = str((obj.payload_json or {}).get('audit_result') or '').strip()
+                if audit_result:
+                    retention_params['offline_action_result'] = audit_result
+                retention_url = f'{reverse("dashboard_offline_retention")}?{urlencode(retention_params)}'
+                links.append(('Abrir Retencion', retention_url))
+                receipt_json_url = (
+                    f'{reverse("dashboard_offline_retention_receipt_json")}?'
+                    f'{urlencode({"audit_log_id": obj.id})}'
+                )
+                links.append(('Receipt JSON', receipt_json_url))
             return format_html(
-                '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-                '<a href="{}" target="_blank" rel="noopener">Abrir Limbo</a>'
-                '<a href="{}" target="_blank" rel="noopener">Abrir HTML</a>'
-                '<a href="{}" target="_blank" rel="noopener">Abrir JSON</a>'
-                "</div>",
-                limbo_url,
-                html_url,
-                json_url,
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;">{}</div>',
+                format_html_join(
+                    '',
+                    '<a href="{}" target="_blank" rel="noopener">{}</a>',
+                    ((href, label) for label, href in links),
+                ),
             )
         if obj.target_model == "OfflineJournalSegmentBatch":
             batch_html_url = f'{reverse("dashboard_offline_incident_batch_detail")}?audit_log_id={obj.id}'
@@ -290,6 +321,52 @@ class AuditLogAdmin(admin.ModelAdmin):
                 batch_json_url,
             )
         return "No aplica"
+
+    @admin.display(description="Offline retention receipt")
+    def offline_retention_receipt_summary(self, obj):
+        if not obj:
+            return "No aplica"
+        if obj.event_type not in {
+            'offline.segment_usb_exported',
+            'offline.segment_purged_after_usb',
+        }:
+            return "No aplica"
+
+        payload = dict(obj.payload_json or {})
+        receipt_type = str(payload.get('receipt_type') or '').strip() or 'N/A'
+        receipt_signature = str(payload.get('receipt_signature') or '').strip()
+        truncated_receipt_signature = _truncate_admin_hint_value(receipt_signature)
+        retention_reason = str(payload.get('retention_reason') or '').strip() or 'N/A'
+        rows = [
+            ('Receipt type', receipt_type),
+            ('Audit result', str(payload.get('audit_result') or '').strip() or 'N/A'),
+            ('Receipt signature', truncated_receipt_signature),
+            ('Reason', retention_reason),
+        ]
+        if obj.event_type == 'offline.segment_usb_exported':
+            usb_root = str(payload.get('usb_root') or '').strip() or 'N/A'
+            rows.append(('USB root', usb_root))
+            rows.append(('Retention hint', f'{receipt_type} | USB={usb_root} | sig={truncated_receipt_signature}'))
+        else:
+            purge_mode = str(payload.get('purge_mode') or '').strip() or 'N/A'
+            manager_override = 'YES' if bool(payload.get('manager_override_confirmed')) else 'NO'
+            usb_receipt_signature = _truncate_admin_hint_value(payload.get('usb_export_receipt_signature') or '')
+            rows.extend(
+                [
+                    ('Purge mode', purge_mode),
+                    ('Manager override', manager_override),
+                    ('USB receipt signature', usb_receipt_signature),
+                    ('Retention hint', f'{receipt_type} | MODE={purge_mode} | override={manager_override}'),
+                ]
+            )
+        return format_html(
+            '<ul style="margin:0;padding-left:18px;">{}</ul>',
+            format_html_join(
+                '',
+                '<li><strong>{}</strong>: {}</li>',
+                rows,
+            ),
+        )
 
 
 @admin.register(LedgerAccount)

@@ -111,6 +111,8 @@ def _build_runtime_config() -> OfflineJournalRuntimeConfig:
         stream_name=getattr(settings, 'OFFLINE_JOURNAL_STREAM_NAME', 'sales'),
         segment_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
         limbo_recent_limit=getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50),
+        sidecar_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SIDECAR_MAX_BYTES', 64 * 1024),
+        projection_window_hours=getattr(settings, 'OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS', 24),
     )
 
 

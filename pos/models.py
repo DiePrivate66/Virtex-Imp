@@ -1043,6 +1043,53 @@ class AuditLog(models.Model):
         ordering = ['-created_at']
 
 
+class PendingOfflineOrphanEvent(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pendiente'
+        RESOLVED = 'RESOLVED', 'Resuelto'
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pending_offline_orphan_events',
+    )
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pending_offline_orphan_events',
+    )
+    event_type = models.CharField(max_length=80)
+    client_transaction_id = models.CharField(max_length=64, db_index=True)
+    payment_reference = models.CharField(max_length=80, blank=True)
+    payment_provider = models.CharField(max_length=50, blank=True)
+    payload_json = models.JSONField(default=dict, blank=True)
+    correlation_id = models.CharField(max_length=64, blank=True, db_index=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    resolved_sale = models.ForeignKey(
+        'Venta',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='resolved_pending_offline_orphans',
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event_type', 'client_transaction_id', 'payment_reference'],
+                condition=Q(status='PENDING'),
+                name='uq_pending_offline_orphan_event_pending',
+            ),
+        ]
+
+
 class LedgerRegistryActivation(models.Model):
     singleton_key = models.CharField(max_length=20, unique=True, default='default', editable=False)
     active_registry_version = models.CharField(max_length=64)

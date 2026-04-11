@@ -9,6 +9,8 @@
     data-segment-detail-html-url="{% url 'dashboard_offline_limbo_segment_detail' %}"
     data-segment-revalidate-url="{% url 'dashboard_offline_limbo_segment_revalidate_json' %}"
     data-segment-review-url="{% url 'dashboard_offline_limbo_segment_review_json' %}"
+    data-segment-export-usb-url="{% url 'dashboard_offline_limbo_segment_export_usb_json' %}"
+    data-segment-purge-after-usb-url="{% url 'dashboard_offline_limbo_segment_purge_after_usb_json' %}"
     data-reconcile-url="{% url 'dashboard_offline_limbo_reconcile_json' %}"
     data-reseal-url="{% url 'dashboard_offline_limbo_reseal_json' %}"
     data-seal-url="{% url 'dashboard_offline_limbo_seal_json' %}"
@@ -53,10 +55,132 @@
             <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Monto Acumulado</p>
             <p class="text-2xl font-black mt-2 text-bosco-orange">$<span data-field="amount_total">{{ limbo.summary.amount_total|default:"0.00" }}</span></p>
         </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Modo Runtime</p>
+            <p class="text-2xl font-black mt-2 text-indigo-200" data-field="runtime_mode_label">{{ runtime_mode|upper }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Projection SQLite</p>
+            <p class="text-2xl font-black mt-2 text-emerald-200" data-field="projection_state_label">
+                {% if projection.available %}HEALTHY{% else %}{{ projection.mode|upper }}{% endif %}
+            </p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Verify Path</p>
+            <p class="text-2xl font-black mt-2 text-sky-200" data-field="verify_status_label">{{ sidecar.last_verify_status|upper }}</p>
+        </div>
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-5">
+            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Receipt Files</p>
+            <p class="text-2xl font-black mt-2 text-white" data-field="receipt_files_count">{{ retention.receipt_files_count|default:0 }}</p>
+        </div>
     </div>
 
     <div class="rounded-2xl border px-4 py-3 text-sm font-bold mb-6" data-status-banner data-status="{{ status }}">
         Estado: <span data-field="status">{{ status|upper }}</span>. <span data-field="detail">{{ detail }}</span>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">Projection SQLite</h2>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">DB Path</p>
+                    <p class="text-gray-300 break-all" data-field="projection_db_path">{{ projection.db_path|default:"N/A" }}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Window</p>
+                        <p class="text-white text-sm font-black mt-1"><span data-field="projection_window_hours">{{ projection.window_hours|default:0 }}</span>h</p>
+                    </div>
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Rows</p>
+                        <p class="text-white text-sm font-black mt-1" data-field="projection_row_count">{{ projection.row_count|default:0 }}</p>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Last Event</p>
+                    <p class="text-gray-300 break-all" data-field="projection_last_event_id">{{ projection.last_event_id|default:"SIN_EVENTO" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Reason</p>
+                    <p class="text-gray-300 break-words" data-field="projection_reason">{{ projection.reason|default:"Sin observaciones." }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Disk Free Bytes</p>
+                    <p class="text-gray-300 break-all" data-field="projection_disk_free_bytes">{{ projection.disk_free_bytes|default:0 }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">Sidecar Fijo</h2>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Format Version</p>
+                    <p class="text-gray-300 break-all" data-field="sidecar_format_version">{{ sidecar.format_version|default:"fixed_v1" }}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Current Bytes</p>
+                        <p class="text-white text-sm font-black mt-1" data-field="sidecar_current_bytes">{{ sidecar.current_bytes|default:0 }}</p>
+                    </div>
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Max Bytes</p>
+                        <p class="text-white text-sm font-black mt-1" data-field="sidecar_max_bytes">{{ sidecar.max_bytes|default:0 }}</p>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Uso Del Sidecar</p>
+                    <p class="text-gray-300" data-field="sidecar_usage_percent">{{ sidecar.usage_percent|default:0 }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Recent Lookup Ring</p>
+                    <p class="text-gray-300" data-field="sidecar_recent_lookup_usage">{{ sidecar.recent_lookup_count|default:0 }}/{{ sidecar.recent_lookup_capacity|default:0 }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Verify Path Available</p>
+                    <p class="text-gray-300" data-field="verify_path_available_label">{% if sidecar.verify_path_available %}YES{% else %}NO{% endif %}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Last Verify Error</p>
+                    <p class="text-gray-300 break-words" data-field="last_verify_error">{{ sidecar.last_verify_error|default:"Sin errores." }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6">
+            <h2 class="text-white font-black text-sm uppercase tracking-widest mb-4">Retencion Local</h2>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Receipts Dir</p>
+                    <p class="text-gray-300 break-all" data-field="retention_receipts_dir">{{ retention.receipts_dir|default:"N/A" }}</p>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Total</p>
+                        <p class="text-white text-sm font-black mt-1" data-field="receipt_files_count_detail">{{ retention.receipt_files_count|default:0 }}</p>
+                    </div>
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Purge</p>
+                        <p class="text-white text-sm font-black mt-1" data-field="purge_receipt_files_count">{{ retention.purge_receipt_files_count|default:0 }}</p>
+                    </div>
+                    <div class="bg-gray-900/60 rounded-xl p-3">
+                        <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">USB</p>
+                        <p class="text-white text-sm font-black mt-1" data-field="usb_export_receipt_files_count">{{ retention.usb_export_receipt_files_count|default:0 }}</p>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Latest Receipt</p>
+                    <p class="text-gray-300" data-field="latest_receipt_at">{{ retention.latest_receipt_at|default:"SIN_RECEIPTS" }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-black uppercase tracking-widest">Current Segment Receipts</p>
+                    <p class="text-gray-300" data-field="current_segment_receipt_counts">
+                        purge={{ retention.current_segment_purge_receipts_count|default:0 }} / usb={{ retention.current_segment_usb_export_receipts_count|default:0 }}
+                    </p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <form method="get" class="bg-black/20 border border-indigo-800/40 rounded-xl p-4 mb-6" data-segment-search-form>
@@ -144,6 +268,28 @@
                 <div class="bg-gray-900/60 rounded-xl p-3">
                     <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Rotation Reason</p>
                     <p class="text-gray-300 break-words" data-field="rotation_reason">{{ rotation.reason|default:"Sin criterio de rotacion activo." }}</p>
+                </div>
+                <div class="bg-gray-900/60 rounded-xl p-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest">Ultimo AuditLog Central</p>
+                            <div class="mt-2">
+                                <span
+                                    data-active-audit-badge
+                                    class="px-2 py-1 rounded-md text-[10px] font-black {{ limbo.latest_audit_badge.tone|default:'bg-gray-800 text-gray-300' }}"
+                                >
+                                    {{ limbo.latest_audit_badge.label|default:"SIN_AUDITLOG" }}
+                                </span>
+                            </div>
+                        </div>
+                        <a
+                            href="{{ limbo.auditlog_url|default:'#' }}"
+                            data-active-auditlog-link
+                            class="{% if not limbo.auditlog_url %}hidden {% endif %}bg-indigo-900/40 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-800/50 transition"
+                        >
+                            AuditLog
+                        </a>
+                    </div>
                 </div>
                 <div class="pt-3 border-t border-gray-800">
                     <p class="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3">Acciones Operativas</p>
@@ -281,6 +427,14 @@
                             <p class="text-[10px] text-gray-400 mt-2">{{ segment.detail }}</p>
                         </td>
                         <td class="py-3 text-xs">
+                            <div class="mb-2">
+                                <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Audit Central</p>
+                                <div class="mt-2">
+                                    <span class="px-2 py-1 rounded-md text-[10px] font-black {{ segment.latest_audit_badge.tone|default:'bg-gray-800 text-gray-300' }}">
+                                        {{ segment.latest_audit_badge.label|default:"SIN_AUDITLOG" }}
+                                    </span>
+                                </div>
+                            </div>
                             <div class="flex flex-wrap gap-2">
                                 <button
                                     type="button"
@@ -296,6 +450,14 @@
                                 >
                                     HTML
                                 </a>
+                                {% if segment.auditlog_url %}
+                                <a
+                                    href="{{ segment.auditlog_url }}"
+                                    class="bg-indigo-950/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-900/60 transition"
+                                >
+                                    AuditLog
+                                </a>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -321,6 +483,8 @@
     const segmentDetailHtmlUrl = root.dataset.segmentDetailHtmlUrl;
     const segmentRevalidateUrl = root.dataset.segmentRevalidateUrl;
     const segmentReviewUrl = root.dataset.segmentReviewUrl;
+    const segmentExportUsbUrl = root.dataset.segmentExportUsbUrl;
+    const segmentPurgeAfterUsbUrl = root.dataset.segmentPurgeAfterUsbUrl;
     const reconcileUrl = root.dataset.reconcileUrl;
     const resealUrl = root.dataset.resealUrl;
     const sealUrl = root.dataset.sealUrl;
@@ -338,6 +502,8 @@
     const segmentSearchFeedback = root.querySelector('[data-segment-search-feedback]');
     const eventsBody = root.querySelector('[data-recent-events-body]');
     const sealedSegmentsBody = root.querySelector('[data-sealed-segments-body]');
+    const activeAuditBadge = root.querySelector('[data-active-audit-badge]');
+    const activeAuditLogLink = root.querySelector('[data-active-auditlog-link]');
     const refreshIntervalMs = 10000;
     let refreshTimer = null;
     let lastPayload = null;
@@ -349,6 +515,24 @@
     const setText = (field, value) => {
         const node = root.querySelector(`[data-field="${field}"]`);
         if (node) node.textContent = value;
+    };
+
+    const setBadge = (node, badge) => {
+        if (!node) return;
+        const normalizedBadge = badge || {};
+        node.textContent = normalizedBadge.label || 'SIN_AUDITLOG';
+        node.className = `px-2 py-1 rounded-md text-[10px] font-black ${normalizedBadge.tone || 'bg-gray-800 text-gray-300'}`;
+    };
+
+    const setLinkState = (node, href) => {
+        if (!node) return;
+        if (href) {
+            node.href = href;
+            node.classList.remove('hidden');
+            return;
+        }
+        node.removeAttribute('href');
+        node.classList.add('hidden');
     };
 
     const setStatusBanner = (status, detail) => {
@@ -580,6 +764,14 @@
                         <p class="text-[10px] text-gray-400 mt-2">${segment.detail || ''}</p>
                     </td>
                     <td class="py-3 text-xs">
+                        <div class="mb-2">
+                            <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Audit Central</p>
+                            <div class="mt-2">
+                                <span class="px-2 py-1 rounded-md text-[10px] font-black ${escapeHtml(segment.latest_audit_badge?.tone || 'bg-gray-800 text-gray-300')}">
+                                    ${escapeHtml(segment.latest_audit_badge?.label || 'SIN_AUDITLOG')}
+                                </span>
+                            </div>
+                        </div>
                         <div class="flex flex-wrap gap-2">
                             <button
                                 type="button"
@@ -595,6 +787,14 @@
                             >
                                 HTML
                             </a>
+                            ${segment.auditlog_url ? `
+                                <a
+                                    href="${escapeHtml(segment.auditlog_url)}"
+                                    class="bg-indigo-950/50 text-indigo-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-indigo-900/60 transition"
+                                >
+                                    AuditLog
+                                </a>
+                            ` : ''}
                         </div>
                     </td>
                 </tr>
@@ -647,9 +847,11 @@
         const ops = detail.ops_metadata || {};
         const review = ops.operational_review || {};
         const revalidation = ops.last_footer_revalidation || {};
+        const retention = detail.retention || {};
         const reviewAuditHtml = renderAuditInfo(review.audit_log, 'Sin registro central de revision.');
         const revalidationAuditHtml = renderAuditInfo(revalidation.audit_log, 'Sin registro central de revalidacion.');
         return `
+            <div class="space-y-4" data-segment-detail-panel data-segment-id="${escapeHtml(detail.segment_id)}">
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 <div class="bg-gray-900/60 rounded-xl p-4">
                     <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Snapshot</p>
@@ -682,7 +884,7 @@
                     </div>
                 </div>
             </div>
-            <div class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 <div class="bg-gray-900/60 rounded-xl p-4">
                     <div class="flex items-center justify-between gap-3">
                         <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Revision Operativa</p>
@@ -724,6 +926,65 @@
                         ${revalidationAuditHtml}
                     </div>
                 </div>
+                <div class="bg-gray-900/60 rounded-xl p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Retencion Manual</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                class="bg-gray-800 text-gray-300 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-gray-700 transition"
+                                data-segment-action-button="export_usb"
+                                data-segment-id="${escapeHtml(detail.segment_id)}"
+                            >
+                                Export USB
+                            </button>
+                            ${retention.allow_purge_after_usb ? `
+                                <button
+                                    type="button"
+                                    class="bg-red-900/50 text-red-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-red-800/50 transition"
+                                    data-segment-action-button="purge_after_usb"
+                                    data-segment-id="${escapeHtml(detail.segment_id)}"
+                                >
+                                    Purge After USB
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="mt-3 space-y-2 text-[11px]">
+                        <p class="text-gray-200">Receipts: <span class="font-black">purge=${escapeHtml(retention.purge_receipts_count ?? 0)} / usb=${escapeHtml(retention.usb_export_receipts_count ?? 0)}</span></p>
+                        <p class="text-gray-200">Receipts Dir:</p>
+                        <p class="text-gray-400 break-all">${escapeHtml(retention.receipts_dir || 'N/A')}</p>
+                        <label class="block text-gray-500 text-[10px] uppercase tracking-widest font-black">USB Root</label>
+                        <input
+                            type="text"
+                            class="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-[11px] text-white"
+                            placeholder="E:\\"
+                            data-retention-usb-root
+                        >
+                        <label class="block text-gray-500 text-[10px] uppercase tracking-widest font-black">Reason</label>
+                        <input
+                            type="text"
+                            class="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-[11px] text-white"
+                            placeholder="manual override"
+                            data-retention-reason
+                        >
+                        <label class="inline-flex items-center gap-2 text-[11px] text-gray-300">
+                            <input type="checkbox" class="rounded border-gray-700 bg-gray-900" data-retention-manager-override>
+                            Confirmo override explicito de gerente
+                        </label>
+                        ${retention.latest_usb_export_receipt?.signature ? `
+                            <p class="text-gray-200">Ultimo USB Export: <span class="font-black">${escapeHtml(formatTimestamp(retention.latest_usb_export_receipt.created_at))}</span></p>
+                            <p class="text-gray-400 break-all">${escapeHtml(retention.latest_usb_export_receipt.signature || 'SIN_FIRMA')}</p>
+                        ` : `
+                            <p class="text-gray-400">Sin usb_export_receipt valido.</p>
+                        `}
+                        ${retention.allow_purge_after_usb ? `
+                            <p class="text-red-200">Purge no sincronizado habilitado solo para este segmento y con override explicito.</p>
+                        ` : `
+                            <p class="text-gray-400">${escapeHtml(retention.purge_after_usb_block_reason || 'Purge no habilitado.')}</p>
+                        `}
+                    </div>
+                </div>
             </div>
             <div class="mt-4 bg-gray-900/60 rounded-xl p-4">
                 <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black mb-3">Ultimos Eventos Del Segmento</p>
@@ -741,6 +1002,7 @@
                     </table>
                 </div>
             </div>
+            </div>
         `;
     };
 
@@ -753,11 +1015,45 @@
         setText('offline_capture_enabled_label', payload.offline_capture_enabled ? 'ON' : 'OFF');
         setText('total_sales', payload.limbo?.summary?.total_sales ?? 0);
         setText('amount_total', payload.limbo?.summary?.amount_total ?? '0.00');
+        setText('runtime_mode_label', String(payload.runtime_mode || 'journal_only').toUpperCase());
+        setText(
+            'projection_state_label',
+            payload.projection?.available ? 'HEALTHY' : String(payload.projection?.mode || 'journal_only').toUpperCase(),
+        );
+        setText('verify_status_label', String(payload.sidecar?.last_verify_status || 'unknown').toUpperCase());
+        setText('receipt_files_count', payload.retention?.receipt_files_count ?? 0);
         setText('segment_id', payload.limbo?.segment_id || 'SIN_SEGMENTO');
         setText('segment_path', payload.limbo?.segment_path || 'N/A');
         setText('snapshot_path', payload.limbo?.snapshot_path || 'N/A');
+        setBadge(activeAuditBadge, payload.limbo?.latest_audit_badge);
         setText('record_count', payload.limbo?.record_count ?? 0);
         setText('sealed_label', payload.limbo?.sealed ? 'YES' : 'NO');
+        setLinkState(activeAuditLogLink, payload.limbo?.auditlog_url || '');
+        setText('projection_db_path', payload.projection?.db_path || 'N/A');
+        setText('projection_window_hours', payload.projection?.window_hours ?? 0);
+        setText('projection_row_count', payload.projection?.row_count ?? 0);
+        setText('projection_last_event_id', payload.projection?.last_event_id || 'SIN_EVENTO');
+        setText('projection_reason', payload.projection?.reason || 'Sin observaciones.');
+        setText('projection_disk_free_bytes', payload.projection?.disk_free_bytes ?? 0);
+        setText('sidecar_format_version', payload.sidecar?.format_version || 'fixed_v1');
+        setText('sidecar_current_bytes', payload.sidecar?.current_bytes ?? 0);
+        setText('sidecar_max_bytes', payload.sidecar?.max_bytes ?? 0);
+        setText('sidecar_usage_percent', `${payload.sidecar?.usage_percent ?? 0}%`);
+        setText(
+            'sidecar_recent_lookup_usage',
+            `${payload.sidecar?.recent_lookup_count ?? 0}/${payload.sidecar?.recent_lookup_capacity ?? 0}`,
+        );
+        setText('verify_path_available_label', payload.sidecar?.verify_path_available ? 'YES' : 'NO');
+        setText('last_verify_error', payload.sidecar?.last_verify_error || 'Sin errores.');
+        setText('retention_receipts_dir', payload.retention?.receipts_dir || 'N/A');
+        setText('receipt_files_count_detail', payload.retention?.receipt_files_count ?? 0);
+        setText('purge_receipt_files_count', payload.retention?.purge_receipt_files_count ?? 0);
+        setText('usb_export_receipt_files_count', payload.retention?.usb_export_receipt_files_count ?? 0);
+        setText('latest_receipt_at', formatTimestamp(payload.retention?.latest_receipt_at) || 'SIN_RECEIPTS');
+        setText(
+            'current_segment_receipt_counts',
+            `purge=${payload.retention?.current_segment_purge_receipts_count ?? 0} / usb=${payload.retention?.current_segment_usb_export_receipts_count ?? 0}`,
+        );
         setText('segment_size_bytes', payload.rotation?.segment_size_bytes ?? 0);
         setText('segment_max_bytes', payload.rotation?.segment_max_bytes ?? 0);
         setText('rotation_needed_label', payload.rotation?.rotation_needed ? 'YES' : 'NO');
@@ -806,7 +1102,7 @@
         renderSealedSegments(segments);
     };
 
-    const runSegmentAction = async (url, segmentId, fallbackLabel) => {
+    const runSegmentAction = async (url, segmentId, body = {}) => {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -814,13 +1110,18 @@
                 'X-Requested-With': 'XMLHttpRequest',
             },
             credentials: 'same-origin',
-            body: JSON.stringify({ segment_id: segmentId }),
+            body: JSON.stringify({ segment_id: segmentId, ...body }),
         });
         const payload = await response.json();
         if (!response.ok) {
             throw new Error(payload.detail || `HTTP ${response.status}`);
         }
-        segmentDetailsCache.set(segmentId, payload);
+        if (payload.removed) {
+            segmentDetailsCache.delete(segmentId);
+            expandedSegmentIds.delete(segmentId);
+        } else {
+            segmentDetailsCache.set(segmentId, payload);
+        }
         return payload;
     };
 
@@ -979,25 +1280,67 @@
                 const segmentId = actionButton.dataset.segmentId || '';
                 const actionName = actionButton.dataset.segmentActionButton || '';
                 if (!segmentId || !actionName) return;
+                const detailPanel = actionButton.closest('[data-segment-detail-panel]');
+                const usbRoot = String(detailPanel?.querySelector('[data-retention-usb-root]')?.value || '').trim();
+                const reason = String(detailPanel?.querySelector('[data-retention-reason]')?.value || '').trim();
+                const managerOverride = Boolean(detailPanel?.querySelector('[data-retention-manager-override]')?.checked);
+                const cachedDetail = segmentDetailsCache.get(segmentId) || {};
+                const latestUsbExportSignature = String(
+                    cachedDetail?.retention?.latest_usb_export_receipt?.signature || ''
+                ).trim();
                 try {
                     setActionFeedback(`Ejecutando ${actionName} sobre ${segmentId}...`, 'neutral');
                     if (actionName === 'revalidate') {
-                        const payload = await runSegmentAction(segmentRevalidateUrl, segmentId, 'revalidacion footer');
+                        const payload = await runSegmentAction(segmentRevalidateUrl, segmentId);
                         const auditLog = payload.audit_log || {};
                         const suffix = auditLog.recorded
                             ? ` AuditLog #${auditLog.audit_log_id} registrado.`
                             : ` Registro central omitido: ${auditLog.detail || 'sin tenant resoluble'}.`;
                         setActionFeedback(`Footer revalidado para ${segmentId}.${suffix}`, 'success');
-                    } else {
-                        const payload = await runSegmentAction(segmentReviewUrl, segmentId, 'revision operativa');
+                    } else if (actionName === 'review') {
+                        const payload = await runSegmentAction(segmentReviewUrl, segmentId);
                         const auditLog = payload.audit_log || {};
                         const suffix = auditLog.recorded
                             ? ` AuditLog #${auditLog.audit_log_id} registrado.`
                             : ` Registro central omitido: ${auditLog.detail || 'sin tenant resoluble'}.`;
                         setActionFeedback(`Revision operativa registrada para ${segmentId}.${suffix}`, 'success');
+                    } else if (actionName === 'export_usb') {
+                        if (!usbRoot) {
+                            throw new Error('usb_root requerido');
+                        }
+                        const payload = await runSegmentAction(segmentExportUsbUrl, segmentId, {
+                            usb_root: usbRoot,
+                            reason,
+                        });
+                        setActionFeedback(
+                            `Segmento ${segmentId} exportado a USB. Receipt ${payload.receipt?.signature || 'sin_firma'}.`,
+                            'success',
+                        );
+                    } else if (actionName === 'purge_after_usb') {
+                        if (!latestUsbExportSignature) {
+                            throw new Error('falta usb_export_receipt valido');
+                        }
+                        if (!managerOverride) {
+                            throw new Error('override explicito de gerente requerido');
+                        }
+                        const payload = await runSegmentAction(segmentPurgeAfterUsbUrl, segmentId, {
+                            reason,
+                            manager_override: managerOverride,
+                            usb_export_receipt_signature: latestUsbExportSignature,
+                        });
+                        setActionFeedback(
+                            `Segmento ${segmentId} purgado despues de export USB. Receipt ${payload.receipt?.signature || 'sin_firma'}.`,
+                            'success',
+                        );
+                    } else {
+                        return;
                     }
                 } catch (error) {
                     setActionFeedback(`No se pudo ejecutar ${actionName} en ${segmentId}: ${error}`, 'error');
+                }
+                await refresh();
+                if (actionName !== 'purge_after_usb') {
+                    await ensureSegmentExpanded(segmentId);
                 }
                 renderSealedSegments(lastPayload?.sealed_segments || []);
                 return;

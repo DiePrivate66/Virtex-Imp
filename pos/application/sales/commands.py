@@ -53,6 +53,7 @@ from pos.models import (
     MovimientoCaja,
     MovimientoInventario,
     OutboxEvent,
+    PendingOfflineOrphanEvent,
     Producto,
     Venta,
     compute_operating_day,
@@ -172,6 +173,7 @@ def register_sale(user, data: dict) -> SaleRegistrationResult:
         payment_reference=payment_result.get('payment_reference', referencia_pago),
         payment_provider=payment_result.get('payment_provider', ''),
     )
+    _resolve_pending_payment_confirmation_orphans_for_sale(venta=venta, user=user)
 
     if cliente and cliente.email:
         send_sale_receipt_email_async(venta, cliente.email)
@@ -250,18 +252,37 @@ def reconcile_payment_confirmation(
     payment_reference: str = '',
     payment_provider: str = '',
     gateway_payload: dict | None = None,
+    location=None,
 ) -> dict:
     if not venta_id and not client_transaction_id:
         raise PosSaleError('Debe indicar venta_id o client_transaction_id', status_code=400)
 
-    lookup = {'id': venta_id} if venta_id else {'client_transaction_id': _normalize_transaction_id(client_transaction_id)}
+    normalized_client_transaction_id = _normalize_transaction_id(client_transaction_id)
+    lookup = {'id': venta_id} if venta_id else {'client_transaction_id': normalized_client_transaction_id}
     venta = (
         Venta.objects.select_related('location', 'organization', 'operator')
         .filter(**lookup)
         .first()
     )
     if not venta:
-        raise PosSaleError('Venta no encontrada para reconciliacion', status_code=404)
+        if not normalized_client_transaction_id:
+            raise PosSaleError('Venta no encontrada para reconciliacion', status_code=404)
+        orphan_event, created = _enqueue_pending_payment_confirmation_orphan(
+            client_transaction_id=normalized_client_transaction_id,
+            payment_reference=payment_reference,
+            payment_provider=payment_provider,
+            gateway_payload=gateway_payload or {},
+            location=location,
+        )
+        return {
+            'status': 'orphan_pending',
+            'message': 'Confirmacion guardada en pending_orphan_inbox hasta que llegue la venta base.',
+            'payload': {
+                'pending_orphan_event_id': orphan_event.id,
+                'created': created,
+                'client_transaction_id': normalized_client_transaction_id,
+            },
+        }
 
     if venta.payment_status == Venta.PaymentStatus.PAID:
         return {
@@ -277,6 +298,7 @@ def reconcile_payment_confirmation(
             payment_reference=payment_reference,
             payment_provider=payment_provider or 'MANUAL_RECONCILIATION',
         )
+        _resolve_pending_payment_confirmation_orphans_for_sale(venta=venta, user=user)
         return {
             'status': 'paid',
             'message': f'La venta #{venta.id} se confirmo desde reconciliacion.',
@@ -990,6 +1012,83 @@ def _mark_sale_paid(*, venta_id: int, user, payment_reference: str, payment_prov
             audit_event_type='sale.payment_confirmed',
         )
         return venta
+
+
+def _enqueue_pending_payment_confirmation_orphan(
+    *,
+    client_transaction_id: str,
+    payment_reference: str,
+    payment_provider: str,
+    gateway_payload: dict,
+    location=None,
+) -> tuple[PendingOfflineOrphanEvent, bool]:
+    normalized_reference = _normalize_reference(payment_reference)
+    orphan_event, created = PendingOfflineOrphanEvent.objects.get_or_create(
+        event_type='payment_confirmation',
+        client_transaction_id=client_transaction_id,
+        payment_reference=normalized_reference,
+        defaults={
+            'organization': getattr(location, 'organization', None),
+            'location': location,
+            'payment_provider': (payment_provider or 'UNKNOWN')[:50],
+            'payload_json': {
+                'payment_reference': normalized_reference,
+                'payment_provider': payment_provider or 'UNKNOWN',
+                'gateway_payload': gateway_payload or {},
+            },
+            'correlation_id': client_transaction_id,
+        },
+    )
+    if not created:
+        orphan_event.payment_provider = (payment_provider or orphan_event.payment_provider or 'UNKNOWN')[:50]
+        orphan_event.payload_json = {
+            **dict(orphan_event.payload_json or {}),
+            'payment_reference': normalized_reference,
+            'payment_provider': payment_provider or orphan_event.payment_provider or 'UNKNOWN',
+            'gateway_payload': gateway_payload or {},
+        }
+        if location and not orphan_event.location_id:
+            orphan_event.location = location
+            orphan_event.organization = getattr(location, 'organization', None)
+        orphan_event.save(
+            update_fields=['payment_provider', 'payload_json', 'location', 'organization']
+        )
+    return orphan_event, created
+
+
+def _resolve_pending_payment_confirmation_orphans_for_sale(*, venta: Venta, user=None) -> None:
+    pending_events = list(
+        PendingOfflineOrphanEvent.objects.filter(
+            status=PendingOfflineOrphanEvent.Status.PENDING,
+            event_type='payment_confirmation',
+            client_transaction_id=venta.client_transaction_id,
+        ).order_by('created_at')
+    )
+    if not pending_events:
+        return
+
+    resolved_at = timezone.now()
+    for orphan_event in pending_events:
+        orphan_event.status = PendingOfflineOrphanEvent.Status.RESOLVED
+        orphan_event.resolved_sale = venta
+        orphan_event.resolved_at = resolved_at
+        orphan_event.save(update_fields=['status', 'resolved_sale', 'resolved_at'])
+        AuditLog.objects.create(
+            organization=venta.organization,
+            location=venta.location,
+            actor_user=user,
+            actor_staff=venta.operator,
+            event_type='sale.pending_orphan_resolved',
+            target_model='PendingOfflineOrphanEvent',
+            target_id=str(orphan_event.id),
+            payload_json={
+                'client_transaction_id': venta.client_transaction_id,
+                'payment_reference': orphan_event.payment_reference,
+                'resolved_sale_id': venta.id,
+                'event_type': orphan_event.event_type,
+            },
+            correlation_id=venta.client_transaction_id,
+        )
 
 
 def _reserve_inventory_for_existing_sale(*, venta: Venta, registrado_por):

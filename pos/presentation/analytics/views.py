@@ -15,6 +15,7 @@ from django.utils import timezone
 from pos.application.analytics import (
     OfflineLimboActionError,
     build_analytics_dashboard_context,
+    build_offline_audited_actions_export_payload,
     build_offline_bulk_run_detail_payload,
     build_offline_bulk_runs_export_payload,
     build_offline_bulk_runs_context,
@@ -22,6 +23,9 @@ from pos.application.analytics import (
     build_offline_critical_incidents_export_payload,
     build_offline_limbo_context,
     build_offline_limbo_payload,
+    build_offline_retention_actions_context,
+    build_offline_retention_actions_export_payload,
+    build_offline_retention_receipt_payload,
     build_offline_segment_detail_payload,
     execute_offline_limbo_action,
     execute_offline_segment_bulk_action,
@@ -33,6 +37,32 @@ from pos.application.sales import (
     resolve_payment_exception,
     resolve_post_close_replay_alert,
 )
+from pos.models import AuditLog
+
+
+OFFLINE_RETENTION_EVENT_TYPES = (
+    'offline.segment_usb_exported',
+    'offline.segment_purged_after_usb',
+)
+OFFLINE_RETENTION_EVENT_LABELS = {
+    'offline.segment_usb_exported': 'USB_EXPORTED',
+    'offline.segment_purged_after_usb': 'PURGED_AFTER_USB',
+}
+
+
+def _build_offline_batch_retention_hint(audit: AuditLog | None) -> dict:
+    if not audit:
+        return {
+            'applicable': False,
+            'receipt_type': '',
+            'event_label': '',
+        }
+    payload = dict(audit.payload_json or {})
+    return {
+        'applicable': True,
+        'receipt_type': str(payload.get('receipt_type') or 'N/A'),
+        'event_label': OFFLINE_RETENTION_EVENT_LABELS.get(audit.event_type, audit.event_type),
+    }
 
 
 def dashboard_analytics(request):
@@ -65,6 +95,9 @@ def dashboard_analytics(request):
             subtitle='Revision centralizada del journal offline dentro del periodo activo.',
             force_render=False,
             critical_view=False,
+            export_query_params=_build_offline_actions_query_params_from_context(context),
+            tertiary_href=f"{reverse('dashboard_offline_retention')}?{urlencode(_build_period_query_params(context['periodo'], context['desde'], context['hasta']))}",
+            tertiary_label='Retencion',
         )
     )
     return render(request, 'pos/dashboard.html', context)
@@ -108,6 +141,74 @@ def dashboard_offline_incidents(request):
         f"{urlencode(_build_offline_bulk_query_params_from_context(context))}"
     )
     return render(request, 'pos/offline_incidents.html', context)
+
+
+def dashboard_offline_retention(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    context = build_offline_retention_actions_context(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_action_segment_id=request.GET.get('offline_action_segment_id', ''),
+        offline_action_time_window=request.GET.get('offline_action_time_window', ''),
+        offline_action_type=request.GET.get('offline_action_type', ''),
+        offline_action_organization=request.GET.get('offline_action_organization', ''),
+        offline_action_location=request.GET.get('offline_action_location', ''),
+        offline_action_actor=request.GET.get('offline_action_actor', ''),
+        offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
+        offline_action_result=request.GET.get('offline_action_result', ''),
+        offline_action_sort=request.GET.get('offline_action_sort', 'recent'),
+    )
+    context.update(
+        _build_offline_actions_panel_context(
+            route_name='dashboard_offline_retention',
+            periodo=context['periodo'],
+            desde=context['desde'],
+            hasta=context['hasta'],
+            title='RETENCION OFFLINE',
+            subtitle='Exportaciones USB y purges manuales del journal offline dentro del periodo activo.',
+            force_render=True,
+            critical_view=False,
+            export_query_params=_build_offline_actions_query_params_from_context(context),
+            secondary_route_name='dashboard_analytics',
+            secondary_label='Volver a analytics',
+        )
+    )
+    context['offline_retention_incidents_href'] = (
+        f"{reverse('dashboard_offline_incidents')}?"
+        f"{urlencode(_build_period_query_params(context['periodo'], context['desde'], context['hasta']))}"
+    )
+    context['offline_retention_full_href'] = (
+        f"{reverse('dashboard_offline_retention')}?"
+        f"{urlencode(_build_period_query_params(context['periodo'], context['desde'], context['hasta']))}"
+    )
+    context['offline_retention_show_period_tabs'] = not context.get(
+        'offline_audited_actions_single_segment_drilldown', False
+    )
+    focus_segment_id = str(context.get('offline_audited_actions_drilldown_segment_id') or '').strip()
+    context['offline_retention_focus_segment_id'] = focus_segment_id
+    context['offline_retention_focus_segment_href'] = (
+        f'{reverse("dashboard_offline_limbo_segment_detail")}?{urlencode({"segment_id": focus_segment_id})}'
+        if focus_segment_id
+        else ''
+    )
+    focus_summary = None
+    if context.get('offline_audited_actions_single_segment_drilldown') and context.get('offline_audited_actions'):
+        focus_action = context['offline_audited_actions'][0]
+        retention_summary = getattr(focus_action, 'offline_retention_summary', {}) or {}
+        focus_summary = {
+            'event_label': getattr(focus_action, 'offline_event_type_label', 'OFFLINE_EVENT'),
+            'receipt_type': retention_summary.get('receipt_type') or 'N/A',
+            'detail_label': retention_summary.get('detail_label') or 'N/A',
+            'detail_value': retention_summary.get('detail_value') or 'N/A',
+            'meta_value': retention_summary.get('meta_value') or 'N/A',
+            'reason': retention_summary.get('reason') or 'N/A',
+        }
+    context['offline_retention_focus_summary'] = focus_summary
+    return render(request, 'pos/offline_retention.html', context)
 
 
 def dashboard_offline_incident_batches(request):
@@ -157,6 +258,16 @@ def dashboard_offline_incident_batches(request):
         if context.get('offline_bulk_selected_run')
         else ''
     )
+    context['offline_bulk_selected_run_retention_receipt_json_href'] = (
+        _build_offline_retention_receipt_json_href(
+            context['offline_bulk_selected_run'].bulk_retention_receipt_audit_log_id
+        )
+        if (
+            context.get('offline_bulk_selected_run')
+            and getattr(context['offline_bulk_selected_run'], 'bulk_retention_receipt_audit_log_id', 0)
+        )
+        else ''
+    )
     return render(request, 'pos/offline_incident_batches.html', context)
 
 
@@ -189,7 +300,11 @@ def dashboard_offline_incident_batches_export_csv(request):
             'location_name',
             'actor_username',
             'selected',
+            'retention_hint',
+            'retention_receipt_json_url',
             'detail_json_url',
+            'detail_html_url',
+            'auditlog_url',
         ]
     )
     for item in payload['items']:
@@ -207,7 +322,11 @@ def dashboard_offline_incident_batches_export_csv(request):
                 item['location_name'],
                 item['actor_username'],
                 'YES' if item['selected'] else 'NO',
+                item.get('retention_hint', ''),
+                item.get('retention_receipt_json_url', ''),
                 item['detail_json_url'],
+                item.get('detail_html_url', ''),
+                item.get('auditlog_url', ''),
             ]
         )
     response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
@@ -220,13 +339,14 @@ def dashboard_offline_incident_batch_json(request):
     if api_error:
         return api_error
     try:
-        return JsonResponse(
+        payload = _enrich_offline_bulk_run_detail_urls(
             build_offline_bulk_run_detail_payload(
                 audit_log_id=request.GET.get('audit_log_id', ''),
                 batch_id=request.GET.get('batch_id', ''),
                 correlation_id=request.GET.get('correlation_id', ''),
             )
         )
+        return JsonResponse(payload)
     except ValueError as exc:
         return JsonResponse({'detail': str(exc)}, status=400)
 
@@ -236,10 +356,12 @@ def dashboard_offline_incident_batch_detail(request):
     if access_redirect:
         return access_redirect
     try:
-        detail = build_offline_bulk_run_detail_payload(
-            audit_log_id=request.GET.get('audit_log_id', ''),
-            batch_id=request.GET.get('batch_id', ''),
-            correlation_id=request.GET.get('correlation_id', ''),
+        detail = _enrich_offline_bulk_run_detail_urls(
+            build_offline_bulk_run_detail_payload(
+                audit_log_id=request.GET.get('audit_log_id', ''),
+                batch_id=request.GET.get('batch_id', ''),
+                correlation_id=request.GET.get('correlation_id', ''),
+            )
         )
     except ValueError:
         return redirect('dashboard_offline_incident_batches')
@@ -250,21 +372,79 @@ def dashboard_offline_incident_batch_detail(request):
         'batch_detail': detail,
         'batch_detail_segments': batch_detail_segments,
         'batch_detail_segment_summary': _build_offline_batch_segment_live_summary(batch_detail_segments),
-        'batch_detail_json_href': _build_offline_batch_json_href(
-            detail['audit_log_id'],
-            batch_id=detail['batch_id'],
-            correlation_id=detail['correlation_id'],
-        ),
-        'batch_detail_html_href': _build_offline_batch_html_href(
-            detail['audit_log_id'],
-            batch_id=detail['batch_id'],
-            correlation_id=detail['correlation_id'],
-        ),
-        'batch_detail_auditlog_href': reverse('admin:pos_auditlog_change', args=[detail['audit_log_id']]),
+        'batch_detail_json_href': detail['detail_json_url'],
+        'batch_detail_html_href': detail['detail_html_url'],
+        'batch_detail_auditlog_href': detail['auditlog_url'],
+        'batch_detail_retention_receipt_json_href': detail['retention_receipt_json_url'],
         'batch_detail_payload_pretty': json.dumps(detail['payload_json'], ensure_ascii=False, indent=2, sort_keys=True),
         'batch_detail_back_href': _build_offline_batch_back_href(request),
     }
     return render(request, 'pos/offline_incident_batch_detail.html', context)
+
+
+def _enrich_offline_bulk_run_detail_urls(detail: dict) -> dict:
+    enriched = dict(detail or {})
+    if not enriched:
+        return enriched
+    enriched['detail_json_url'] = _build_offline_batch_json_href(
+        enriched.get('audit_log_id', ''),
+        batch_id=enriched.get('batch_id', ''),
+        correlation_id=enriched.get('correlation_id', ''),
+    )
+    enriched['detail_html_url'] = _build_offline_batch_html_href(
+        enriched.get('audit_log_id', ''),
+        batch_id=enriched.get('batch_id', ''),
+        correlation_id=enriched.get('correlation_id', ''),
+    )
+    enriched['auditlog_url'] = _build_auditlog_admin_href(enriched['audit_log_id'])
+    enriched['retention_receipt_json_url'] = (
+        _build_offline_retention_receipt_json_href(enriched['retention_receipt_audit_log_id'])
+        if enriched.get('retention_receipt_audit_log_id')
+        else ''
+    )
+    return enriched
+
+
+def _enrich_offline_segment_detail_urls(detail: dict) -> dict:
+    enriched = dict(detail or {})
+    if not enriched:
+        return enriched
+    enriched['detail_json_url'] = _build_offline_segment_json_href(enriched.get('segment_id', ''))
+    enriched['detail_html_url'] = _build_offline_segment_html_href(enriched.get('segment_id', ''))
+    enriched['auditlog_url'] = (
+        _build_auditlog_admin_href(enriched['latest_audit_log_id'])
+        if enriched.get('latest_audit_log_id')
+        else ''
+    )
+    return enriched
+
+
+def _enrich_offline_limbo_payload_auditlog_urls(payload: dict) -> dict:
+    enriched = dict(payload or {})
+    limbo = dict(enriched.get('limbo') or {})
+    limbo['auditlog_url'] = (
+        _build_auditlog_admin_href(limbo['latest_audit_log_id'])
+        if limbo.get('latest_audit_log_id')
+        else ''
+    )
+    enriched['limbo'] = limbo
+    enriched['sealed_segments'] = [
+        {
+            **dict(item or {}),
+            'auditlog_url': (
+                _build_auditlog_admin_href((item or {}).get('latest_audit_log_id'))
+                if (item or {}).get('latest_audit_log_id')
+                else ''
+            ),
+        }
+        for item in enriched.get('sealed_segments', [])
+    ]
+    return enriched
+
+
+def _build_auditlog_admin_href(audit_log_id='') -> str:
+    normalized_audit_log_id = int(audit_log_id or 0)
+    return reverse('admin:pos_auditlog_change', args=[normalized_audit_log_id])
 
 
 def dashboard_offline_incidents_export_json(request):
@@ -273,6 +453,140 @@ def dashboard_offline_incidents_export_json(request):
         return access_redirect
 
     return JsonResponse(_build_offline_critical_incidents_export_payload_from_request(request))
+
+
+def dashboard_offline_audited_actions_export_json(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    return JsonResponse(_build_offline_audited_actions_export_payload_from_request(request))
+
+
+def dashboard_offline_audited_actions_export_csv(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    payload = _build_offline_audited_actions_export_payload_from_request(request)
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            'audit_log_id',
+            'created_at',
+            'event_type',
+            'segment_id',
+            'segment_status',
+            'audit_result',
+            'footer_present',
+            'organization_name',
+            'location_name',
+            'actor_username',
+            'critical',
+            'segment_has_review',
+            'retention_hint',
+            'receipt_json_url',
+            'auditlog_url',
+        ]
+    )
+    for item in payload['items']:
+        writer.writerow(
+            [
+                item['audit_log_id'],
+                item['created_at'],
+                item['event_type'],
+                item['segment_id'],
+                item['segment_status'],
+                item['audit_result'],
+                'YES' if item['footer_present'] else 'NO',
+                item['organization_name'],
+                item['location_name'],
+                item['actor_username'],
+                'YES' if item['critical'] else 'NO',
+                'YES' if item['segment_has_review'] else 'NO',
+                ((item.get('retention_summary') or {}).get('hint') or ''),
+                item.get('receipt_json_url', ''),
+                item.get('auditlog_url', ''),
+            ]
+        )
+    response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename=\"offline-audited-actions.csv\"'
+    return response
+
+
+def dashboard_offline_retention_export_json(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    return JsonResponse(_build_offline_retention_actions_export_payload_from_request(request))
+
+
+def dashboard_offline_retention_export_csv(request):
+    access_redirect = _require_admin_dashboard_access(request)
+    if access_redirect:
+        return access_redirect
+
+    payload = _build_offline_retention_actions_export_payload_from_request(request)
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            'audit_log_id',
+            'created_at',
+            'event_type',
+            'segment_id',
+            'segment_status',
+            'audit_result',
+            'footer_present',
+            'organization_name',
+            'location_name',
+            'actor_username',
+            'critical',
+            'segment_has_review',
+            'retention_hint',
+            'receipt_json_url',
+            'auditlog_url',
+        ]
+    )
+    for item in payload['items']:
+        writer.writerow(
+            [
+                item['audit_log_id'],
+                item['created_at'],
+                item['event_type'],
+                item['segment_id'],
+                item['segment_status'],
+                item['audit_result'],
+                'YES' if item['footer_present'] else 'NO',
+                item['organization_name'],
+                item['location_name'],
+                item['actor_username'],
+                'YES' if item['critical'] else 'NO',
+                'YES' if item['segment_has_review'] else 'NO',
+                ((item.get('retention_summary') or {}).get('hint') or ''),
+                item.get('receipt_json_url', ''),
+                item.get('auditlog_url', ''),
+            ]
+        )
+    response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename=\"offline-retention-actions.csv\"'
+    return response
+
+
+def dashboard_offline_retention_receipt_json(request):
+    api_error = _require_admin_dashboard_api_access(request)
+    if api_error:
+        return api_error
+    try:
+        return JsonResponse(
+            build_offline_retention_receipt_payload(
+                audit_log_id=request.GET.get('audit_log_id', ''),
+            )
+        )
+    except ValueError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
 
 
 def dashboard_offline_incidents_export_csv(request):
@@ -297,6 +611,7 @@ def dashboard_offline_incidents_export_csv(request):
             'actor_username',
             'critical',
             'segment_has_review',
+            'auditlog_url',
         ]
     )
     for item in payload['items']:
@@ -314,6 +629,7 @@ def dashboard_offline_incidents_export_csv(request):
                 item['actor_username'],
                 'YES' if item['critical'] else 'NO',
                 'YES' if item['segment_has_review'] else 'NO',
+                item.get('auditlog_url', ''),
             ]
         )
     response = HttpResponse(buffer.getvalue(), content_type='text/csv; charset=utf-8')
@@ -334,7 +650,7 @@ def dashboard_offline_limbo(request):
     if access_redirect:
         return access_redirect
 
-    context = build_offline_limbo_context()
+    context = _enrich_offline_limbo_payload_auditlog_urls(build_offline_limbo_context())
     context['initial_segment_id'] = str(request.GET.get('segment_id', '') or '').strip()
     return render(
         request,
@@ -347,7 +663,11 @@ def dashboard_offline_limbo_json(request):
     api_error = _require_admin_dashboard_api_access(request)
     if api_error:
         return api_error
-    return JsonResponse(build_offline_limbo_payload(request.GET.get('segment_id', '')))
+    return JsonResponse(
+        _enrich_offline_limbo_payload_auditlog_urls(
+            build_offline_limbo_payload(request.GET.get('segment_id', ''))
+        )
+    )
 
 
 def dashboard_offline_limbo_segment_json(request):
@@ -356,7 +676,11 @@ def dashboard_offline_limbo_segment_json(request):
         return api_error
     segment_id = request.GET.get('segment_id', '')
     try:
-        return JsonResponse(build_offline_segment_detail_payload(segment_id))
+        return JsonResponse(
+            _enrich_offline_segment_detail_urls(
+                build_offline_segment_detail_payload(segment_id)
+            )
+        )
     except ValueError as exc:
         return JsonResponse({'detail': str(exc)}, status=400)
 
@@ -366,14 +690,17 @@ def dashboard_offline_limbo_segment_detail(request):
     if access_redirect:
         return access_redirect
     try:
-        detail = build_offline_segment_detail_payload(request.GET.get('segment_id', ''))
+        detail = _enrich_offline_segment_detail_urls(
+            build_offline_segment_detail_payload(request.GET.get('segment_id', ''))
+        )
     except ValueError:
         return redirect('dashboard_offline_limbo')
 
     context = {
         'segment_detail': detail,
-        'segment_detail_json_href': _build_offline_segment_json_href(detail['segment_id']),
-        'segment_detail_html_href': _build_offline_segment_html_href(detail['segment_id']),
+        'segment_detail_json_href': detail['detail_json_url'],
+        'segment_detail_html_href': detail['detail_html_url'],
+        'segment_detail_auditlog_href': detail['auditlog_url'],
         'segment_detail_back_href': _build_offline_segment_back_href(request, detail['segment_id']),
         'segment_detail_can_reconcile_sidecar': True,
         'segment_detail_can_reseal': (
@@ -399,6 +726,14 @@ def dashboard_offline_limbo_segment_reconcile_json(request):
 
 def dashboard_offline_limbo_segment_reseal_json(request):
     return _execute_offline_segment_action_json(request, action='reseal_segment')
+
+
+def dashboard_offline_limbo_segment_export_usb_json(request):
+    return _execute_offline_segment_action_json(request, action='export_usb')
+
+
+def dashboard_offline_limbo_segment_purge_after_usb_json(request):
+    return _execute_offline_segment_action_json(request, action='purge_after_usb')
 
 
 def dashboard_offline_limbo_reconcile_json(request):
@@ -546,6 +881,10 @@ def _execute_offline_segment_action_json(request, *, action: str):
                 user=request.user,
                 ip_address=request.META.get('REMOTE_ADDR', ''),
                 user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                usb_root=str(body.get('usb_root') or '').strip(),
+                reason=str(body.get('reason') or '').strip(),
+                manager_override=bool(body.get('manager_override')),
+                usb_export_receipt_signature=str(body.get('usb_export_receipt_signature') or '').strip(),
             )
         )
     except OfflineLimboActionError as exc:
@@ -572,23 +911,58 @@ def _build_offline_actions_panel_context(
     force_render: bool,
     critical_view: bool,
     export_query_params=None,
+    secondary_route_name: str | None = None,
+    secondary_label: str | None = None,
+    tertiary_href: str = '',
+    tertiary_label: str = '',
 ):
     period_query = urlencode(_build_period_query_params(periodo, desde, hasta))
+    resolved_secondary_route_name = secondary_route_name or (
+        'dashboard_analytics' if critical_view else 'dashboard_offline_incidents'
+    )
+    resolved_secondary_label = secondary_label or (
+        'Volver a analytics' if critical_view else 'Solo criticos'
+    )
     context = {
         'offline_actions_title': title,
         'offline_actions_subtitle': subtitle,
         'offline_actions_force_render': force_render,
         'offline_actions_clear_href': f"{reverse(route_name)}?{period_query}",
         'offline_actions_critical_view': critical_view,
-        'offline_actions_secondary_href': f"{reverse('dashboard_analytics' if critical_view else 'dashboard_offline_incidents')}?{period_query}",
-        'offline_actions_secondary_label': 'Volver a analytics' if critical_view else 'Solo criticos',
+        'offline_actions_secondary_href': f"{reverse(resolved_secondary_route_name)}?{period_query}",
+        'offline_actions_secondary_label': resolved_secondary_label,
+        'offline_actions_tertiary_href': tertiary_href,
+        'offline_actions_tertiary_label': tertiary_label,
     }
-    if critical_view and export_query_params:
+    if export_query_params:
         export_query = urlencode(export_query_params)
+        export_json_route = (
+            'dashboard_offline_incidents_export_json'
+            if critical_view
+            else (
+                'dashboard_offline_retention_export_json'
+                if route_name == 'dashboard_offline_retention'
+                else 'dashboard_offline_audited_actions_export_json'
+            )
+        )
+        export_csv_route = (
+            'dashboard_offline_incidents_export_csv'
+            if critical_view
+            else (
+                'dashboard_offline_retention_export_csv'
+                if route_name == 'dashboard_offline_retention'
+                else 'dashboard_offline_audited_actions_export_csv'
+            )
+        )
         context.update(
             {
-                'offline_actions_export_json_href': f"{reverse('dashboard_offline_incidents_export_json')}?{export_query}",
-                'offline_actions_export_csv_href': f"{reverse('dashboard_offline_incidents_export_csv')}?{export_query}",
+                'offline_actions_export_json_href': f"{reverse(export_json_route)}?{export_query}",
+                'offline_actions_export_csv_href': f"{reverse(export_csv_route)}?{export_query}",
+            }
+        )
+    if critical_view:
+        context.update(
+            {
                 'offline_actions_bulk_revalidate_href': reverse('dashboard_offline_incidents_bulk_revalidate_json'),
                 'offline_actions_bulk_review_href': reverse('dashboard_offline_incidents_bulk_review_json'),
             }
@@ -656,7 +1030,7 @@ def _build_offline_bulk_back_to_incidents_query_params(context):
 
 
 def _build_offline_critical_incidents_export_payload_from_request(request):
-    return build_offline_critical_incidents_export_payload(
+    payload = build_offline_critical_incidents_export_payload(
         periodo=request.GET.get('periodo', 'semana'),
         desde_param=request.GET.get('desde'),
         hasta_param=request.GET.get('hasta'),
@@ -671,6 +1045,58 @@ def _build_offline_critical_incidents_export_payload_from_request(request):
         offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
         offline_action_sort=request.GET.get('offline_action_sort', 'footer_missing'),
     )
+    for item in payload['items']:
+        item['auditlog_url'] = _build_auditlog_admin_href(item['audit_log_id'])
+    return payload
+
+
+def _build_offline_retention_actions_export_payload_from_request(request):
+    payload = build_offline_retention_actions_export_payload(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_action_segment_id=request.GET.get('offline_action_segment_id', ''),
+        offline_action_time_window=request.GET.get('offline_action_time_window', ''),
+        offline_action_type=request.GET.get('offline_action_type', ''),
+        offline_action_organization=request.GET.get('offline_action_organization', ''),
+        offline_action_location=request.GET.get('offline_action_location', ''),
+        offline_action_actor=request.GET.get('offline_action_actor', ''),
+        offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
+        offline_action_result=request.GET.get('offline_action_result', ''),
+        offline_action_sort=request.GET.get('offline_action_sort', 'recent'),
+    )
+    for item in payload['items']:
+        item['receipt_json_url'] = _build_offline_retention_receipt_json_href(item['audit_log_id'])
+        item['auditlog_url'] = _build_auditlog_admin_href(item['audit_log_id'])
+    return payload
+
+
+def _build_offline_audited_actions_export_payload_from_request(request):
+    payload = build_offline_audited_actions_export_payload(
+        periodo=request.GET.get('periodo', 'semana'),
+        desde_param=request.GET.get('desde'),
+        hasta_param=request.GET.get('hasta'),
+        offline_action_segment_id=request.GET.get('offline_action_segment_id', ''),
+        offline_action_time_window=request.GET.get('offline_action_time_window', ''),
+        offline_action_type=request.GET.get('offline_action_type', ''),
+        offline_action_organization=request.GET.get('offline_action_organization', ''),
+        offline_action_location=request.GET.get('offline_action_location', ''),
+        offline_action_actor=request.GET.get('offline_action_actor', ''),
+        offline_action_segment_status=request.GET.get('offline_action_segment_status', ''),
+        offline_action_result=request.GET.get('offline_action_result', ''),
+        offline_action_footer_presence=request.GET.get('offline_action_footer_presence', ''),
+        offline_action_sort=request.GET.get('offline_action_sort', 'recent'),
+    )
+    for item in payload['items']:
+        if item['event_type'] in {
+            'offline.segment_usb_exported',
+            'offline.segment_purged_after_usb',
+        }:
+            item['receipt_json_url'] = _build_offline_retention_receipt_json_href(item['audit_log_id'])
+        else:
+            item['receipt_json_url'] = ''
+        item['auditlog_url'] = _build_auditlog_admin_href(item['audit_log_id'])
+    return payload
 
 
 def _build_offline_bulk_runs_export_payload_from_request(request):
@@ -687,22 +1113,9 @@ def _build_offline_bulk_runs_export_payload_from_request(request):
         offline_bulk_batch_id=request.GET.get('offline_bulk_batch_id', ''),
         offline_bulk_correlation_id=request.GET.get('offline_bulk_correlation_id', ''),
     )
-    for item in payload['items']:
-        item['detail_json_url'] = _build_offline_batch_json_href(item['audit_log_id'])
-        item['detail_html_url'] = _build_offline_batch_html_href(
-            item['audit_log_id'],
-            batch_id=item['batch_id'],
-            correlation_id=item.get('correlation_id', ''),
-        )
+    payload['items'] = [_enrich_offline_bulk_run_detail_urls(item) for item in payload['items']]
     if payload.get('selected_run'):
-        payload['selected_run']['detail_json_url'] = _build_offline_batch_json_href(
-            payload['selected_run']['audit_log_id']
-        )
-        payload['selected_run']['detail_html_url'] = _build_offline_batch_html_href(
-            payload['selected_run']['audit_log_id'],
-            batch_id=payload['selected_run']['batch_id'],
-            correlation_id=payload['selected_run'].get('correlation_id', ''),
-        )
+        payload['selected_run'] = _enrich_offline_bulk_run_detail_urls(payload['selected_run'])
     return payload
 
 
@@ -737,6 +1150,14 @@ def _build_offline_batch_json_href(audit_log_id='', *, batch_id='', correlation_
     elif normalized_correlation_id:
         params['correlation_id'] = normalized_correlation_id
     return f"{reverse('dashboard_offline_incident_batch_json')}?{urlencode(params)}"
+
+
+def _build_offline_retention_receipt_json_href(audit_log_id='') -> str:
+    normalized_audit_log_id = str(audit_log_id or '').strip()
+    return (
+        f"{reverse('dashboard_offline_retention_receipt_json')}?"
+        f"{urlencode({'audit_log_id': normalized_audit_log_id})}"
+    )
 
 
 def _build_offline_batch_html_href(audit_log_id='', *, batch_id='', correlation_id='') -> str:
@@ -814,6 +1235,19 @@ def _build_offline_batch_segment_references(detail: dict) -> list[dict]:
         for segment_id in (payload.get('failed_segment_ids') or [])
         if str(segment_id or '').strip()
     }
+    latest_retention_by_segment = {}
+    if segment_ids:
+        retention_candidates = (
+            AuditLog.objects.filter(
+                target_model='OfflineJournalSegment',
+                target_id__in=segment_ids,
+                event_type__in=OFFLINE_RETENTION_EVENT_TYPES,
+            )
+            .order_by('target_id', '-created_at', '-id')
+        )
+        for audit in retention_candidates:
+            if audit.target_id not in latest_retention_by_segment:
+                latest_retention_by_segment[audit.target_id] = audit
 
     rows = []
     for segment_id in segment_ids:
@@ -824,6 +1258,7 @@ def _build_offline_batch_segment_references(detail: dict) -> list[dict]:
         else:
             batch_status = 'listed'
         encoded_segment_id = quote(segment_id, safe='')
+        retention_audit = latest_retention_by_segment.get(segment_id)
         rows.append(
             {
                 'segment_id': segment_id,
@@ -832,6 +1267,12 @@ def _build_offline_batch_segment_references(detail: dict) -> list[dict]:
                 'limbo_href': f'{reverse("dashboard_offline_limbo")}?segment_id={encoded_segment_id}',
                 'html_href': f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id={encoded_segment_id}',
                 'json_href': f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={encoded_segment_id}',
+                'retention_receipt_json_href': (
+                    _build_offline_retention_receipt_json_href(retention_audit.id) if retention_audit else ''
+                ),
+                'retention_audit_log_id': retention_audit.id if retention_audit else '',
+                'retention_event_type': retention_audit.event_type if retention_audit else '',
+                'retention_hint': _build_offline_batch_retention_hint(retention_audit),
             }
         )
     return rows

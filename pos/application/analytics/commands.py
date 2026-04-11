@@ -8,7 +8,10 @@ from django.utils import timezone
 from pos.infrastructure.offline import (
     JournalIntegrityError,
     OfflineJournalRuntimeConfig,
+    OfflineRetentionError,
     SegmentedJournalRuntime,
+    destroy_unreplayed_segment_after_usb_export,
+    export_segment_bundle_to_usb,
     load_snapshot_payload,
     persist_snapshot_payload,
     reconcile_snapshot_with_segment,
@@ -45,6 +48,12 @@ def _resolve_offline_runtime_root_and_stream():
     return root_dir, stream_name
 
 
+def _resolve_offline_receipt_secret() -> str:
+    return str(
+        getattr(settings, 'OFFLINE_JOURNAL_RECEIPT_SECRET', '') or getattr(settings, 'SECRET_KEY', '')
+    ).strip()
+
+
 def execute_offline_limbo_action(*, action: str) -> dict:
     action_name = str(action or '').strip().lower()
     if action_name not in {'reconcile_sidecar', 'reseal_segment', 'seal_active_segment'}:
@@ -56,6 +65,8 @@ def execute_offline_limbo_action(*, action: str) -> dict:
         stream_name=stream_name,
         segment_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
         limbo_recent_limit=getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50),
+        sidecar_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SIDECAR_MAX_BYTES', 64 * 1024),
+        projection_window_hours=getattr(settings, 'OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS', 24),
     )
     try:
         with journal_runtime_lock(root_dir, stream_name):
@@ -123,9 +134,20 @@ def execute_offline_segment_action(
     user,
     ip_address: str = '',
     user_agent: str = '',
+    usb_root: str = '',
+    reason: str = '',
+    manager_override: bool = False,
+    usb_export_receipt_signature: str = '',
 ) -> dict:
     action_name = str(action or '').strip().lower()
-    if action_name not in {'revalidate_footer', 'mark_operational_review', 'reconcile_sidecar', 'reseal_segment'}:
+    if action_name not in {
+        'revalidate_footer',
+        'mark_operational_review',
+        'reconcile_sidecar',
+        'reseal_segment',
+        'export_usb',
+        'purge_after_usb',
+    }:
         raise OfflineLimboActionError('offline segment action desconocida')
 
     root_dir, stream_name = _resolve_offline_runtime_root_and_stream()
@@ -137,8 +159,14 @@ def execute_offline_segment_action(
                 user=user,
                 ip_address=ip_address,
                 user_agent=user_agent,
+                root_dir=root_dir,
+                stream_name=stream_name,
+                usb_root=usb_root,
+                reason=reason,
+                manager_override=manager_override,
+                usb_export_receipt_signature=usb_export_receipt_signature,
             )
-    except JournalIntegrityError as exc:
+    except (JournalIntegrityError, OfflineRetentionError) as exc:
         raise OfflineLimboActionError(str(exc)) from exc
 
 
@@ -181,6 +209,8 @@ def execute_offline_segment_bulk_action(
                     user=user,
                     ip_address=ip_address,
                     user_agent=user_agent,
+                    root_dir=root_dir,
+                    stream_name=stream_name,
                 )
                 succeeded += 1
                 results.append(
@@ -230,6 +260,12 @@ def _execute_offline_segment_action_locked(
     user,
     ip_address: str = '',
     user_agent: str = '',
+    root_dir: Path,
+    stream_name: str,
+    usb_root: str = '',
+    reason: str = '',
+    manager_override: bool = False,
+    usb_export_receipt_signature: str = '',
 ) -> dict:
     limbo_payload = build_offline_limbo_payload()
     active_segment_id = str((limbo_payload.get('limbo') or {}).get('segment_id') or '').strip()
@@ -239,12 +275,11 @@ def _execute_offline_segment_action_locked(
         detail_payload = build_offline_segment_detail_payload(segment_id)
     except ValueError as exc:
         raise OfflineLimboActionError(str(exc)) from exc
-    if (
-        action_name in {'revalidate_footer', 'mark_operational_review'}
-        and active_segment_is_open
-        and str(segment_id or '').strip() == active_segment_id
-    ):
-        raise OfflineLimboActionError('la accion historica no aplica sobre el segmento activo')
+    if active_segment_is_open and str(segment_id or '').strip() == active_segment_id:
+        if action_name in {'revalidate_footer', 'mark_operational_review'}:
+            raise OfflineLimboActionError('la accion historica no aplica sobre el segmento activo')
+        if action_name in {'export_usb', 'purge_after_usb'}:
+            raise OfflineLimboActionError('la retencion manual no aplica sobre el segmento activo')
 
     segment_path = Path(detail_payload['segment_path'])
     snapshot_path = Path(detail_payload['snapshot_path'])
@@ -278,6 +313,104 @@ def _execute_offline_segment_action_locked(
             ),
         }
         return refreshed
+
+    if action_name == 'export_usb':
+        normalized_usb_root = str(usb_root or '').strip()
+        if not normalized_usb_root:
+            raise OfflineLimboActionError('usb_root requerido para export_usb')
+        actor_username = user.get_username() if user and hasattr(user, 'get_username') else ''
+        actor_user_id = getattr(user, 'id', None)
+        receipt = export_segment_bundle_to_usb(
+            root_dir=root_dir,
+            stream_name=stream_name,
+            segment_id=detail_payload['segment_id'],
+            usb_root=Path(normalized_usb_root),
+            actor=(actor_username or 'manager'),
+            reason=reason,
+            receipt_secret=_resolve_offline_receipt_secret(),
+        )
+        snapshot = load_snapshot_payload(snapshot_path)
+        ops_metadata = dict(snapshot.get('ops_metadata') or {})
+        ops_metadata['last_usb_export'] = {
+            'exported_at': timezone.now().isoformat(),
+            'exported_by': actor_username,
+            'exported_by_id': actor_user_id,
+            'reason': str(reason or '').strip()[:255],
+            'usb_root': normalized_usb_root,
+            'usb_export_receipt_signature': str(receipt.get('signature') or ''),
+        }
+        snapshot['ops_metadata'] = ops_metadata
+        persist_snapshot_payload(snapshot_path, snapshot)
+        refreshed = build_offline_segment_detail_payload(segment_id)
+        audit_log_payload = _record_offline_segment_audit_log(
+            action_name=action_name,
+            segment_id=detail_payload['segment_id'],
+            detail_payload=refreshed,
+            user=user,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            extra_payload={
+                'receipt_type': str(receipt.get('receipt_type') or ''),
+                'receipt_signature': str(receipt.get('signature') or ''),
+                'usb_root': normalized_usb_root,
+                'retention_reason': str(reason or '').strip()[:255],
+            },
+        )
+        snapshot = load_snapshot_payload(snapshot_path)
+        ops_metadata = dict(snapshot.get('ops_metadata') or {})
+        export_metadata = dict(ops_metadata.get('last_usb_export') or {})
+        export_metadata['audit_log'] = audit_log_payload
+        ops_metadata['last_usb_export'] = export_metadata
+        snapshot['ops_metadata'] = ops_metadata
+        persist_snapshot_payload(snapshot_path, snapshot)
+        refreshed = build_offline_segment_detail_payload(segment_id)
+        refreshed['action'] = {
+            'name': action_name,
+            'performed': True,
+            'detail': 'Segmento exportado a USB y usb_export_receipt registrado.',
+        }
+        refreshed['receipt'] = receipt
+        refreshed['audit_log'] = audit_log_payload
+        return refreshed
+
+    if action_name == 'purge_after_usb':
+        receipt = destroy_unreplayed_segment_after_usb_export(
+            root_dir=root_dir,
+            stream_name=stream_name,
+            segment_id=detail_payload['segment_id'],
+            actor=(user.get_username() if user and hasattr(user, 'get_username') else 'manager'),
+            reason=reason,
+            usb_export_receipt_signature=usb_export_receipt_signature,
+            receipt_secret=_resolve_offline_receipt_secret(),
+            manager_override=manager_override,
+        )
+        audit_log_payload = _record_offline_segment_audit_log(
+            action_name=action_name,
+            segment_id=detail_payload['segment_id'],
+            detail_payload=detail_payload,
+            user=user,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            extra_payload={
+                'receipt_type': str(receipt.get('receipt_type') or ''),
+                'receipt_signature': str(receipt.get('signature') or ''),
+                'purge_mode': str(receipt.get('purge_mode') or ''),
+                'retention_reason': str(reason or '').strip()[:255],
+                'manager_override_confirmed': bool(receipt.get('manager_override_confirmed')),
+                'usb_export_receipt_signature': str(receipt.get('usb_export_receipt_signature') or ''),
+            },
+        )
+        return {
+            'segment_id': detail_payload['segment_id'],
+            'removed': True,
+            'action': {
+                'name': action_name,
+                'performed': True,
+                'detail': 'Segmento no sincronizado purgado despues de export USB y override de gerente.',
+            },
+            'receipt': receipt,
+            'audit_log': audit_log_payload,
+        }
 
     snapshot = load_snapshot_payload(snapshot_path)
     ops_metadata = dict(snapshot.get('ops_metadata') or {})
@@ -342,6 +475,7 @@ def _record_offline_segment_audit_log(
     user,
     ip_address: str = '',
     user_agent: str = '',
+    extra_payload: dict | None = None,
 ) -> dict:
     organization, location, actor_staff = _resolve_offline_segment_audit_scope(
         detail_payload=detail_payload,
@@ -356,16 +490,22 @@ def _record_offline_segment_audit_log(
     event_type = {
         'revalidate_footer': 'offline.segment_footer_revalidated',
         'mark_operational_review': 'offline.segment_operational_review_marked',
+        'export_usb': 'offline.segment_usb_exported',
+        'purge_after_usb': 'offline.segment_purged_after_usb',
     }[action_name]
     audit_result = _resolve_offline_segment_audit_result(
         event_type=event_type,
         detail_payload=detail_payload,
     )
-    relevant_ops_metadata = (
-        dict((detail_payload.get('ops_metadata') or {}).get('last_footer_revalidation') or {})
-        if action_name == 'revalidate_footer'
-        else dict((detail_payload.get('ops_metadata') or {}).get('operational_review') or {})
-    )
+    ops_metadata = dict(detail_payload.get('ops_metadata') or {})
+    if action_name == 'revalidate_footer':
+        relevant_ops_metadata = dict(ops_metadata.get('last_footer_revalidation') or {})
+    elif action_name == 'mark_operational_review':
+        relevant_ops_metadata = dict(ops_metadata.get('operational_review') or {})
+    elif action_name == 'export_usb':
+        relevant_ops_metadata = dict(ops_metadata.get('last_usb_export') or {})
+    else:
+        relevant_ops_metadata = {}
     audit_log = AuditLog.objects.create(
         organization=organization,
         location=location,
@@ -386,6 +526,7 @@ def _record_offline_segment_audit_log(
             'snapshot_path': str(detail_payload.get('snapshot_path') or ''),
             'summary': dict(detail_payload.get('summary') or {}),
             'ops_metadata': relevant_ops_metadata,
+            **dict(extra_payload or {}),
         },
         ip_address=str(ip_address or '').strip() or None,
         user_agent=str(user_agent or '').strip()[:255],
@@ -540,6 +681,10 @@ def _record_offline_segment_bulk_audit_logs(
 def _resolve_offline_segment_audit_result(*, event_type: str, detail_payload: dict) -> str:
     if event_type == 'offline.segment_footer_revalidated':
         return 'footer_present' if detail_payload.get('footer_present') else 'footer_missing'
+    if event_type == 'offline.segment_usb_exported':
+        return 'usb_exported'
+    if event_type == 'offline.segment_purged_after_usb':
+        return 'purged_after_usb'
     return 'review_marked'
 
 

@@ -10,6 +10,7 @@ from django.core.management.base import CommandError
 from django.test import SimpleTestCase
 
 from pos.infrastructure.offline import (
+    DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES,
     JournalIntegrityError,
     SegmentJournal,
     reconcile_snapshot_with_segment,
@@ -174,6 +175,36 @@ class SegmentJournalTests(SimpleTestCase):
         self.assertEqual(recovery.record_count, 1)
         self.assertTrue(recovery.corrupted_tail)
         self.assertIn('prev_record_hash mismatch', recovery.error_message)
+
+    def test_snapshot_sidecar_stays_bounded_with_fixed_lookup_ring(self):
+        for index in range(DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES + 10):
+            event_id = f'evt-{index:03d}'
+            self.journal.append_event(
+                event_id=event_id,
+                payload={'sale_total': '1.00'},
+                client_transaction_id=f'tx-{index:03d}',
+                summary={
+                    'summary_version': 'limbo_sales_v1',
+                    'total_sales': index + 1,
+                    'amount_total': f'{index + 1:.2f}',
+                    'recent_sales': [],
+                },
+                recent_lookup_entry={
+                    'event_id': event_id,
+                    'client_transaction_id': f'tx-{index:03d}',
+                    'payment_reference': f'pay-{index:03d}',
+                    'sale_total': '1.00',
+                    'status': 'PAID',
+                    'display_name_truncated': 'Cliente',
+                },
+            )
+
+        snapshot = self._read_snapshot()
+
+        self.assertEqual(len(snapshot['recent_lookup_ring']), DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES)
+        self.assertEqual(snapshot['recent_lookup_ring_count'], DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES)
+        self.assertEqual(snapshot['recent_lookup_ring'][snapshot['recent_lookup_ring_cursor']]['event_id'], 'evt-059')
+        self.assertLessEqual(self.snapshot_path.stat().st_size, 64 * 1024)
 
 
 class OfflineJournalCommandTests(SimpleTestCase):

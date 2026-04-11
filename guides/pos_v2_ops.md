@@ -14,6 +14,9 @@ This guide covers the server-side operational foundation already implemented in 
 - a dedicated replay gateway wrapper with total timeout, idle timeout, cold-lane slicing, and cooperative draining ahead of Django
 - Python reference primitives for the offline JSONL journal, `.snapshot` sidecar, reseal, and valid-prefix recovery
 - a local segmented journal runtime with limbo summary repair and size-based rotation
+- a fixed-size sidecar contract with bounded lookup ring (`50` entries, target `<=64 KB`)
+- a single `projection.sqlite` cache rebuilt in place while Bosco remains usable in `journal_only`
+- tamper-evident offline retention receipts for USB export and destructive purge flows
 - organization-scoped ledger shards for open accounting adjustments
 
 It does **not** cover the future Electron offline runtime integration or LAN sync. The replay gateway already enforces cold-lane slicing and cooperative draining, but only per gateway process, not via a distributed coordinator across multiple instances.
@@ -34,6 +37,8 @@ What is implemented there:
 - segment reseal from pending sidecar state after an interrupted footer write
 - a segmented runtime that rolls to the next segment after the current one reaches the configured size threshold
 - limbo summary repair from the journal when the `.snapshot` sidecar falls behind or loses its aggregates
+- a fixed lookup ring embedded in the sidecar so recent search/reprint/void flows do not require a full JSONL scan
+- `projection.sqlite` rebuilt in place as a hot cache, not as a second authority
 
 What is still missing:
 
@@ -70,6 +75,23 @@ Inspect the current limbo summary for a journal directory:
 ```powershell
 python manage.py offline_limbo path\\to\\offline-root --stream sales --json
 ```
+
+Inspect or rebuild the hot SQLite cache:
+
+```powershell
+python manage.py offline_projection path\\to\\offline-root --stream sales --json
+python manage.py offline_projection path\\to\\offline-root --stream sales --rebuild --json
+```
+
+Export or purge a segment with receipts:
+
+```powershell
+python manage.py offline_retention path\\to\\offline-root sales-20260406-001 --action export_usb --usb-root E:\\ --actor gerente --reason "backup manual" --json
+python manage.py offline_retention path\\to\\offline-root sales-20260406-001 --action purge_synced --server-replay-receipt srv-ack-001 --actor gerente --reason "disk pressure" --json
+python manage.py offline_retention path\\to\\offline-root sales-20260406-001 --action purge_after_usb --usb-export-receipt-signature <firma_usb> --manager-override --actor gerente --reason "manual override" --json
+```
+
+`purge_after_usb` queda bloqueado por defecto. Solo destruye un segmento no sincronizado si ya existe un `usb_export_receipt` valido y el gerente confirma el override con `--manager-override`.
 
 ## Daily Commands
 
@@ -147,6 +169,7 @@ REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS=10
 REPLAY_GATEWAY_IDLE_TIMEOUT_SECONDS=5
 REPLAY_GATEWAY_COLD_LANE_SLOTS=2
 REPLAY_GATEWAY_COLD_SLICE_SECONDS=120
+REPLAY_GATEWAY_BUCKET_COUNT=8
 ```
 
 Enable offline journal runtime checks:
@@ -155,6 +178,9 @@ Enable offline journal runtime checks:
 OFFLINE_JOURNAL_ENABLED=True
 OFFLINE_JOURNAL_ROOT=D:\\bosco-offline
 OFFLINE_JOURNAL_STREAM_NAME=sales
+OFFLINE_JOURNAL_SIDECAR_MAX_BYTES=65536
+OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS=24
+OFFLINE_JOURNAL_RECEIPT_SECRET=change-me
 ```
 
 Optional: enable server-side shadow capture so Django mirrors paid and failed sales into the same JSONL contract while Electron is not wired yet:
@@ -190,6 +216,7 @@ Inspect the current limbo directly from the app:
 - Surface: current summary, active segment paths, tail health, recent events and bounded history of sealed segments
 - JSON refresh endpoint: `/dashboard/limbo-offline/json/`
 - Historical segment detail endpoint: `/dashboard/limbo-offline/segment/json/?segment_id=<segment_id>`
+- Historical segment HTML view: `/dashboard/limbo-offline/segment/?segment_id=<segment_id>`
 - Polling: the page refreshes automatically every 10 seconds and also supports manual refresh
 - Operational actions:
   - `POST /dashboard/limbo-offline/reconcile/` repairs a lagging `.snapshot` sidecar from the active segment
@@ -198,9 +225,60 @@ Inspect the current limbo directly from the app:
 - Historical segment actions:
   - `POST /dashboard/limbo-offline/segment/revalidate/` revalidates footer state for a sealed historical segment and stores the result in `ops_metadata`
   - `POST /dashboard/limbo-offline/segment/review/` marks a sealed historical segment as operationally reviewed in `ops_metadata`
+  - `POST /dashboard/limbo-offline/segment/export-usb/` exports a historical segment to a USB path and records a `usb_export_receipt`
+  - `POST /dashboard/limbo-offline/segment/purge-after-usb/` destroys a non-synced historical segment only after a valid `usb_export_receipt` plus explicit manager override
+- the HTML detail page now exposes that retention panel directly: `Export USB` stays available for historical segments, while `Purge After USB` is hidden until the segment already carries a valid `usb_export_receipt`
+- the non-synced purge flow is hard-gated in both UI and server contract: no purge runs without the USB receipt signature and explicit manager override
+- the same retention controls now also exist inside the expandable historical detail on `/dashboard/limbo-offline/`, so operators can export or purge from the limbo screen without opening the standalone HTML page first
 - when the segment exposes tenant scope (`organization_id/location_id`) or the acting user has a single active membership, both actions also write a centralized `AuditLog`; if scope cannot be resolved, the local action still succeeds and the response reports that the central log was skipped
+- the explicit `AuditLog` event types for these retention actions are `offline.segment_usb_exported` and `offline.segment_purged_after_usb`
 - the expanded UI detail now shows the central logging result directly, including `audit_log_id` when recorded or the explicit skip reason when tenant scope could not be resolved
 - the main analytics dashboard now includes an `ACCIONES OFFLINE AUDITADAS` table filtered by the active period so recent offline operations can be reviewed without opening each historical segment detail
+- that same analytics surface now also indexes and filters the retention events `offline.segment_usb_exported` and `offline.segment_purged_after_usb`, including their `audit_result` values (`usb_exported` / `purged_after_usb`) without promoting sealed retention activity into the critical-only incident view
+- the main dashboard table now also exposes `Export JSON` and `Export CSV` for the full filtered subset, so retention actions can be extracted without switching to the critical-only screen
+- Bosco now also exposes `/dashboard/retencion-offline/` as a dedicated retention-only view for `offline.segment_usb_exported` and `offline.segment_purged_after_usb`, with its own `JSON` and `CSV` exports and without mixing footer/review incidents into the same operator screen
+- that retention-only table now includes a compact receipt summary column so operators can triage `receipt_type`, USB root or `purge_mode`, override state and truncated signature without opening every `AuditLog`
+- because this screen is retention-only, Bosco now hides footer-only controls there (`Presencia De Footer` and the `Footer missing primero` ordering) to keep the operator filter surface strictly relevant
+- the same retention view now also hides `Estado Del Segmento`; in practice these events are already scoped to retention operations and that extra selector only added noise
+- when the filtered retention subset only has one real `Organizacion` or `Sucursal`, Bosco also hides those selectors to keep the panel compact without losing useful filtering power
+- under the same rule, the retention view also hides `Actor` when the subset only has one real operator, so the panel only keeps filters that can still change the result set
+- the retention view now applies that same collapse rule to `Tipo De Accion` and `Resultado AuditLog`; if only one real retention action is present in the subset, those controls disappear instead of presenting a no-op selector
+- when `RETENCION OFFLINE` is opened as a single-segment drill-down (for example from `AuditLogAdmin`), Bosco also hides `Segment ID` and `Ventana Temporal` once the filtered subset is already pinned to one real segment
+- that same single-segment retention drill-down now switches its header navigation: Bosco replaces the generic `VER INCIDENTES CRITICOS` CTA with `ABRIR SEGMENTO` and `VER RETENCION COMPLETA`, and hides the period tabs because they no longer change the result set
+- in that same single-segment drill-down, each retention row also collapses its navigation to `Segmento` + `AuditLog`; Bosco drops the redundant `Limbo` and `JSON` row links because the screen is already anchored to one segment
+- when the drill-down is already pinned to one segment, the retention table also hides the `Segmento` column itself because every row would repeat the same identifier
+- if that same drill-down also resolves to one effective location, Bosco hides the `Sucursal` column too, leaving only the fields that still add operator value
+- under that same drill-down rule, Bosco also hides the `Actor` column when every visible row belongs to the same operator
+- the same drill-down compaction now hides `Estado` and `Resultado` too when the filtered subset already fixes them to a single real value
+- the retention criteria card also switches in that mode: instead of the generic explanation, Bosco shows a focused summary of the pinned segment and the latest visible receipt/action metadata
+- once that drill-down has no meaningful filters left, Bosco drops the empty filter form entirely; the operator exits through `VER RETENCION COMPLETA` or the focused segment CTA instead of pressing a no-op `Filtrar`
+- in practice this means the single-segment retention drill-down becomes a read-only triage surface: no period tabs, no empty filter form, no redundant row navigation, only receipt context and traceability exits
+- each retention row now also exposes `Receipt JSON`, backed by `/dashboard/retencion-offline/receipt.json?audit_log_id=<id>`, so operators can inspect the raw `payload_json` for `offline.segment_usb_exported` and `offline.segment_purged_after_usb` without opening Django admin
+- that individual `Receipt JSON` payload now also exposes `retention_hint` at top level, mirroring the compact hint already present in `retention_summary`
+- the same `Receipt JSON` endpoint is now linked directly from `AuditLogAdmin` for retention events, so admin navigation can jump straight from the central audit record to the raw retention payload
+- that same `AuditLogAdmin` summary now includes the same short retention hint used in exports (`receipt_type | USB=... | sig=...` or `receipt_type | MODE=... | override=...`), so admin, JSON and CSV expose the same compact reading
+- `RETENCION OFFLINE` exports now also carry that URL (`receipt_json_url`) in both JSON and CSV, so external audit tooling can dereference the raw receipt payload without reconstructing routes manually
+- the main `ACCIONES OFFLINE AUDITADAS` export now propagates the same `receipt_json_url` for retention events, while leaving it blank for footer/review events that do not have a retention receipt payload
+- those JSON exports now also serialize `retention_summary` with the retention event label and a short `hint`, so external consumers can classify receipts without reopening `payload_json`
+- the shared `ACCIONES OFFLINE AUDITADAS` table now also renders `Receipt JSON` inline for retention rows, so dashboard triage, exports and admin all expose the same raw receipt entry point
+- the batch detail page now propagates that same `Receipt JSON` link for any associated segment whose latest central `AuditLog` is a retention event, so batch triage can jump to the raw receipt without detouring through the retention dashboard
+- that same batch detail page now also resolves the dominant batch-level retention receipt in its top bar and JSON detail payload when the batch collapses to a single retention receipt
+- the individual batch JSON endpoint now exposes `retention_receipt_json_url` directly, matching the batch export feeds and avoiding client-side URL reconstruction from `retention_receipt_audit_log_id`
+- the HTML batch detail view now carries the same URL set inside `batch_detail` itself (`detail_json_url`, `detail_html_url`, `auditlog_url`, `retention_receipt_json_url`), so template rendering and serialized consumers use one enriched contract
+- the batch export JSON now reuses that same URL enrichment helper, so each row and `selected_run` expose the same `detail_json_url`, `detail_html_url`, `auditlog_url` and `retention_receipt_json_url` contract as the individual batch detail payload
+- the batch CSV export now publishes the same navigable surface as the JSON export, adding `detail_html_url` and `auditlog_url` alongside `detail_json_url` and `retention_receipt_json_url`
+- the general `ACCIONES OFFLINE AUDITADAS` and `RETENCION OFFLINE` exports now also expose `auditlog_url` in both JSON and CSV, so external audit tooling can jump straight from an exported row to Django admin without rebuilding that route
+- the `INCIDENTES OFFLINE CRITICOS` exports now expose that same `auditlog_url`, so every offline export surface shares one direct navigation pattern back to the central `AuditLog`
+- the limbo JSON payload and the individual segment JSON/HTML detail now also resolve the latest central `AuditLog` per segment and expose `auditlog_url`, keeping the same navigation pattern outside the export surfaces
+- the main `LIMBO OFFLINE` HTML view now renders that same latest central `AuditLog` directly in the active-segment card and in each sealed-history row, using the same compact event badges (`OPERATIONAL_REVIEW`, `FOOTER_REVALIDATED`, `USB_EXPORTED`, `PURGED_AFTER_USB`) before the admin link
+- the same batch table now shows a short retention hint (`usb_export_receipt` / `purge_receipt` plus the retention event label) next to the navigation buttons, so operators can identify the receipt class before opening the raw JSON
+- the batch JSON/CSV exports now also expose an aggregated `retention_hint` per run (for example `USB_EXPORTED x1`), derived from the latest retention action found across the batch's associated segments
+- when that aggregated batch hint resolves to a single dominant receipt, the same batch exports now also expose `retention_receipt_json_url`, so external consumers can dereference the raw receipt directly
+- the HTML table of `LOTES OFFLINE AUDITADOS` now renders that same aggregated `retention_hint` inline in the `Detalle` column, keeping batch UI aligned with the batch JSON/CSV exports
+- when that batch-level hint collapses to a single associated retention receipt, Bosco turns it into a direct `Receipt JSON` link; when multiple retention receipts are present, the hint stays as plain text
+- the `Lote Seleccionado` card now follows the same rule: it shows the aggregated retention hint and exposes `Receipt JSON` when the selected batch has a single dominant receipt
+- when one of those retention events is opened in `AuditLogAdmin`, the change view now links directly to `/dashboard/retencion-offline/` already filtered by `segment_id`, `event_type` and `audit_result`
+- that same `AuditLogAdmin` change view now renders an inline retention receipt summary (`receipt_type`, signature, reason, USB root or purge mode / manager override) so operators do not need to inspect raw `payload_json`
 - that table now supports operational ordering by newest first, missing-footer first, and unreviewed first so incident triage can be driven by severity instead of chronology alone
 - Bosco also exposes `/dashboard/incidentes-offline/` as a dedicated critical-only view backed by the same filters and ordering rules, but restricted to segments still in incident state (`footer missing` or non-`sealed` status)
 - that critical-only view also exposes `CSV` and `JSON` exports for the exact filtered subset currently under review, so incident response can work with the same operational ordering outside the browser
@@ -331,6 +409,7 @@ This check verifies:
 
 - `OFFLINE_JOURNAL_ENABLED`
 - `OFFLINE_JOURNAL_ROOT`
+- bounded sidecar config (`OFFLINE_JOURNAL_SIDECAR_MAX_BYTES<=65536`)
 - current active segment recovery without truncated/corrupted tail
 - limbo summary visibility (`total_sales`, `amount_total`) from the repaired sidecar/runtime view
 
@@ -434,7 +513,7 @@ This check verifies:
 - `REPLAY_GATEWAY_ENABLED`
 - timeout ordering (`idle < total < upstream`)
 - valid upstream port wiring
-- cold-lane config (`hours`, `slots`, `slice`, `waiter_ttl`)
+- cold-lane config (`hours`, `slots`, `slice`, `waiter_ttl`, `bucket_count`)
 - `Procfile` still points `web` to `python scripts/start_web.py`
 
 If this check fails, do not trust replay timeout enforcement at the edge even if Django admission is still active.

@@ -48,6 +48,7 @@ from .models import (
     Location,
     Organization,
     OrganizationLedgerCounterShard,
+    PendingOfflineOrphanEvent,
     PrintJob,
     Producto,
     Venta,
@@ -64,10 +65,13 @@ from .tasks import (
     sweep_delivery_quote_timeouts,
 )
 from .infrastructure.offline import (
+    OfflineProjectionConfig,
     OfflineJournalRuntimeConfig,
     SegmentJournal,
     SegmentedJournalRuntime,
+    export_segment_bundle_to_usb,
     recover_segment_prefix,
+    rebuild_projection_in_place,
 )
 from .application.web_orders.updates import build_web_order_update_request
 
@@ -812,6 +816,7 @@ class OpsPreflightCommandTests(TestCase):
         self.assertIn('system_ledger_accounts', check_names)
         self.assertIn('outbox_backlog', check_names)
         self.assertIn('payment_exceptions_backlog', check_names)
+        self.assertIn('pending_orphan_inbox', check_names)
         self.assertIn('replay_gateway', check_names)
         self.assertIn('ledger_shards', check_names)
         self.assertIn('operational_drift', check_names)
@@ -929,6 +934,11 @@ class OpsPreflightCommandTests(TestCase):
         self.assertEqual(result.level, 'info')
         self.assertIn('total_sales=1', result.detail)
         self.assertIn('amount_total=13.25', result.detail)
+        self.assertIn('mode=journal_only', result.detail)
+        self.assertIn('projection_available=False', result.detail)
+        self.assertIn('verify_status=verified', result.detail)
+        self.assertIn('recent_lookup=1/50', result.detail)
+        self.assertIn('receipts=0', result.detail)
         self.assertIn('capture_enabled=False', result.detail)
 
     def test_ops_preflight_offline_journal_reports_recent_pos_and_web_capture_sources(self):
@@ -1012,6 +1022,26 @@ class OpsPreflightCommandTests(TestCase):
         self.assertIn('capture_enabled=True', result.detail)
         self.assertIn('recent_origins=POS', result.detail)
         self.assertIn('missing_recent_origins=WEB', result.detail)
+
+    def test_ops_preflight_pending_orphan_inbox_warns_when_pending_exists(self):
+        from pos.management.commands.ops_preflight import Command
+
+        location = Location.get_or_create_default()
+        PendingOfflineOrphanEvent.objects.create(
+            organization=location.organization,
+            location=location,
+            event_type='sale.payment_confirmed',
+            client_transaction_id='ops-pending-orphan-001',
+            payment_reference='PAY-ORPHAN-001',
+            status=PendingOfflineOrphanEvent.Status.PENDING,
+        )
+
+        result = Command()._check_pending_orphan_inbox()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.level, 'warning')
+        self.assertIn('pending=1', result.detail)
+        self.assertIn('stale=0', result.detail)
 
     def test_ops_preflight_ledger_shards_detects_counter_drift(self):
         from pos.management.commands.ops_preflight import Command
@@ -1178,6 +1208,64 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(context['offline_audited_actions_count'], 1)
         self.assertEqual(context['offline_audited_actions'][0].id, audit.id)
         self.assertEqual(context['offline_audited_actions'][0].target_id, 'sales-20260404-009')
+
+    def test_dashboard_context_includes_usb_export_and_purge_actions(self):
+        exported = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-010',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-010',
+        )
+        purged = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-011',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'purged_after_usb'},
+            correlation_id='sales-20260404-011',
+        )
+
+        context = build_analytics_dashboard_context(periodo='semana')
+
+        self.assertEqual(context['offline_audited_actions_count'], 2)
+        self.assertEqual(
+            {item.id for item in context['offline_audited_actions']},
+            {exported.id, purged.id},
+        )
+        self.assertEqual(
+            {item.offline_audit_result for item in context['offline_audited_actions']},
+            {'usb_exported', 'purged_after_usb'},
+        )
+        self.assertTrue(
+            any(
+                value == 'offline.segment_usb_exported'
+                for value, _label in context['offline_audited_action_type_options']
+            )
+        )
+        self.assertTrue(
+            any(
+                value == 'offline.segment_purged_after_usb'
+                for value, _label in context['offline_audited_action_type_options']
+            )
+        )
+        self.assertTrue(
+            any(
+                value == 'usb_exported'
+                for value, _label in context['offline_audited_action_result_options']
+            )
+        )
+        self.assertTrue(
+            any(
+                value == 'purged_after_usb'
+                for value, _label in context['offline_audited_action_result_options']
+            )
+        )
 
     def test_dashboard_context_filters_offline_audited_actions_by_all_operational_dimensions(self):
         other_user = User.objects.create_user(
@@ -1351,6 +1439,50 @@ class AnalyticsReplayTimelineTests(TestCase):
             )
         )
 
+    def test_dashboard_context_filters_offline_audited_actions_by_usb_purge_result(self):
+        retention_audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-031',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-031',
+        )
+        purged = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-032',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'purged_after_usb'},
+            correlation_id='sales-20260404-032',
+        )
+
+        context = build_analytics_dashboard_context(
+            periodo='semana',
+            offline_action_type='offline.segment_purged_after_usb',
+            offline_action_result='purged_after_usb',
+        )
+
+        self.assertEqual(context['offline_audited_actions_count'], 1)
+        self.assertEqual(context['offline_audited_actions'][0].id, purged.id)
+        self.assertEqual(
+            context['offline_audited_actions'][0].offline_audit_result,
+            'purged_after_usb',
+        )
+        self.assertEqual(
+            context['offline_audited_actions'][0].offline_audit_result_label,
+            'PURGED_AFTER_USB',
+        )
+        self.assertEqual(
+            context['offline_audited_action_filter_type'],
+            'offline.segment_purged_after_usb',
+        )
+        self.assertEqual(context['offline_audited_action_filter_result'], 'purged_after_usb')
+
     def test_dashboard_context_orders_offline_audited_actions_by_footer_missing_first(self):
         missing_footer = AuditLog.objects.create(
             organization=self.location.organization,
@@ -1470,6 +1602,46 @@ class AnalyticsReplayTimelineTests(TestCase):
             [missing_footer.target_id, corrupt_segment.target_id],
         )
         self.assertNotIn(footer_ok.target_id, [item.target_id for item in context['offline_audited_actions']])
+
+    def test_offline_critical_incidents_context_excludes_sealed_retention_actions(self):
+        retention_audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-071',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-071',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-072',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'purged_after_usb'},
+            correlation_id='sales-20260404-072',
+        )
+        missing_footer = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-073',
+            payload_json={'segment_status': 'sealed', 'footer_present': False, 'audit_result': 'footer_missing'},
+            correlation_id='sales-20260404-073',
+        )
+
+        context = build_offline_critical_incidents_context(periodo='semana')
+
+        self.assertEqual(context['offline_critical_incidents_count'], 1)
+        self.assertEqual(
+            [item.target_id for item in context['offline_audited_actions']],
+            [missing_footer.target_id],
+        )
 
     def test_offline_critical_incidents_context_includes_bulk_metrics(self):
         revalidate_batch = AuditLog.objects.create(
@@ -1643,7 +1815,41 @@ class AnalyticsReplayTimelineTests(TestCase):
             response,
             reverse('admin:pos_auditlog_change', args=[audit.id]),
         )
+        self.assertNotContains(response, 'Receipt JSON')
         self.assertContains(response, reverse('dashboard_offline_incidents'))
+        self.assertContains(response, reverse('dashboard_offline_retention'))
+        self.assertContains(response, reverse('dashboard_offline_audited_actions_export_json'))
+        self.assertContains(response, reverse('dashboard_offline_audited_actions_export_csv'))
+
+    def test_dashboard_renders_receipt_json_link_for_retention_action(self):
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-019',
+            payload_json={
+                'segment_status': 'sealed',
+                'footer_present': True,
+                'audit_result': 'usb_exported',
+                'receipt_type': 'usb_export_receipt',
+                'signature': 'sig-usb-001',
+                'usb_root': 'E:\\\\BOSCO',
+                'reason': 'manual export before purge',
+            },
+            correlation_id='sales-20260404-019',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard_analytics'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Receipt JSON')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={audit.id}',
+        )
 
     def test_dashboard_renders_offline_audited_action_filters(self):
         AuditLog.objects.create(
@@ -1795,6 +2001,443 @@ class AnalyticsReplayTimelineTests(TestCase):
             reverse('admin:pos_auditlog_change', args=[failing_batch.id]),
         )
 
+    def test_dashboard_offline_audited_actions_json_export_includes_retention_events(self):
+        exported = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-074',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-074',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-075',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'purged_after_usb'},
+            correlation_id='sales-20260404-075',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_audited_actions_export_json'),
+            {
+                'offline_action_type': 'offline.segment_usb_exported',
+                'offline_action_result': 'usb_exported',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload['critical_only'])
+        self.assertEqual(payload['count'], 1)
+        self.assertEqual(payload['items'][0]['audit_log_id'], exported.id)
+        self.assertEqual(payload['items'][0]['event_type'], 'offline.segment_usb_exported')
+        self.assertEqual(payload['items'][0]['event_type_label'], 'USB_EXPORTED')
+        self.assertEqual(payload['items'][0]['audit_result'], 'usb_exported')
+        self.assertTrue(payload['items'][0]['retention_summary']['applicable'])
+        self.assertEqual(payload['items'][0]['retention_summary']['receipt_type'], 'N/A')
+        self.assertEqual(payload['items'][0]['retention_summary']['event_label'], 'USB_EXPORTED')
+        self.assertIn('USB=', payload['items'][0]['retention_summary']['hint'])
+        self.assertEqual(
+            payload['items'][0]['receipt_json_url'],
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={exported.id}',
+        )
+        self.assertEqual(
+            payload['items'][0]['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[exported.id]),
+        )
+
+    def test_dashboard_offline_audited_actions_csv_export_includes_retention_events(self):
+        purged = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-076',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'purged_after_usb'},
+            correlation_id='sales-20260404-076',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_audited_actions_export_csv'),
+            {
+                'offline_action_type': 'offline.segment_purged_after_usb',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn(
+            'attachment; filename="offline-audited-actions.csv"',
+            response['Content-Disposition'],
+        )
+        content = response.content.decode('utf-8')
+        self.assertIn(
+            'audit_log_id,created_at,event_type,segment_id,segment_status,audit_result,footer_present,organization_name,location_name,actor_username,critical,segment_has_review,retention_hint,receipt_json_url,auditlog_url',
+            content,
+        )
+        self.assertIn(str(purged.id), content)
+        self.assertIn('offline.segment_purged_after_usb', content)
+        self.assertIn('purged_after_usb', content)
+        self.assertIn('MODE=N/A | override=NO', content)
+        self.assertIn(
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={purged.id}',
+            content,
+        )
+        self.assertIn(
+            reverse('admin:pos_auditlog_change', args=[purged.id]),
+            content,
+        )
+
+    def test_offline_retention_view_renders_only_retention_actions(self):
+        retention_audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-077',
+            payload_json={
+                'segment_status': 'sealed',
+                'audit_result': 'usb_exported',
+                'receipt_type': 'usb_export_receipt',
+                'receipt_signature': '1234567890abcdef1234567890abcdef',
+                'retention_reason': 'manual backup',
+                'usb_root': 'E:\\bosco-usb-device',
+            },
+            correlation_id='sales-20260404-077',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-078',
+            payload_json={
+                'segment_status': 'sealed',
+                'audit_result': 'purged_after_usb',
+                'receipt_type': 'purge_receipt',
+                'receipt_signature': 'abcdef1234567890abcdef1234567890',
+                'purge_mode': 'manual_usb_override',
+                'manager_override_confirmed': True,
+                'retention_reason': 'manual override',
+            },
+            correlation_id='sales-20260404-078',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-079',
+            payload_json={'segment_status': 'sealed', 'footer_present': False, 'audit_result': 'footer_missing'},
+            correlation_id='sales-20260404-079',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard_offline_retention'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'RETENCION OFFLINE')
+        self.assertContains(response, 'sales-20260404-077')
+        self.assertContains(response, 'sales-20260404-078')
+        self.assertNotContains(response, 'sales-20260404-079')
+        self.assertContains(response, '<th class="pb-2 font-black">Segmento</th>', html=False)
+        self.assertContains(response, '<th class="pb-2 font-black">Estado</th>', html=False)
+        self.assertContains(response, '<th class="pb-2 font-black">Resultado</th>', html=False)
+        self.assertContains(response, '<th class="pb-2 font-black">Actor</th>', html=False)
+        self.assertContains(response, '<th class="pb-2 font-black">Sucursal</th>', html=False)
+        self.assertContains(response, 'Receipt')
+        self.assertContains(response, 'USB_EXPORTED')
+        self.assertContains(response, 'PURGED_AFTER_USB')
+        self.assertContains(response, 'usb_export_receipt')
+        self.assertContains(response, 'purge_receipt')
+        self.assertContains(response, 'USB=E:\\bosco-usb-device')
+        self.assertContains(response, 'MODE=manual_usb_override')
+        self.assertContains(response, 'sig=1234567890abcdef...')
+        self.assertContains(response, 'override=YES')
+        self.assertContains(response, 'manual backup')
+        self.assertContains(response, 'manual override')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id=',
+            count=2,
+        )
+        self.assertNotContains(response, 'Organizacion')
+        self.assertNotContains(response, 'name="offline_action_organization"', html=False)
+        self.assertNotContains(response, 'name="offline_action_location"', html=False)
+        self.assertNotContains(response, 'name="offline_action_actor"', html=False)
+        self.assertNotContains(response, 'Estado Del Segmento')
+        self.assertNotContains(response, 'Presencia De Footer')
+        self.assertNotContains(response, 'Footer missing primero')
+        self.assertNotContains(response, 'Orden Operativa')
+        self.assertContains(response, reverse('dashboard_offline_retention_export_json'))
+        self.assertContains(response, reverse('dashboard_offline_retention_export_csv'))
+        self.assertContains(response, reverse('dashboard_offline_incidents'))
+        self.assertContains(response, reverse('dashboard_analytics'))
+
+    def test_offline_retention_json_export_returns_only_retention_subset(self):
+        exported = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-080',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-080',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-081',
+            payload_json={'segment_status': 'sealed', 'footer_present': False, 'audit_result': 'footer_missing'},
+            correlation_id='sales-20260404-081',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_retention_export_json'),
+            {'offline_action_result': 'usb_exported'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload['critical_only'])
+        self.assertTrue(payload['retention_only'])
+        self.assertEqual(payload['count'], 1)
+        self.assertEqual(payload['items'][0]['audit_log_id'], exported.id)
+        self.assertEqual(payload['items'][0]['event_type_label'], 'USB_EXPORTED')
+        self.assertEqual(payload['items'][0]['audit_result'], 'usb_exported')
+        self.assertTrue(payload['items'][0]['retention_summary']['applicable'])
+        self.assertEqual(payload['items'][0]['retention_summary']['receipt_type'], 'N/A')
+        self.assertEqual(payload['items'][0]['retention_summary']['event_label'], 'USB_EXPORTED')
+        self.assertIn('USB=', payload['items'][0]['retention_summary']['hint'])
+        self.assertEqual(
+            payload['items'][0]['receipt_json_url'],
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={exported.id}',
+        )
+        self.assertEqual(
+            payload['items'][0]['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[exported.id]),
+        )
+
+    def test_offline_retention_receipt_json_returns_raw_payload(self):
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-080R',
+            payload_json={
+                'segment_status': 'sealed',
+                'audit_result': 'usb_exported',
+                'receipt_type': 'usb_export_receipt',
+                'receipt_signature': '1234567890abcdef1234567890abcdef',
+                'retention_reason': 'manual backup',
+                'usb_root': 'E:\\bosco-usb-device',
+            },
+            correlation_id='sales-20260404-080R',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_retention_receipt_json'),
+            {'audit_log_id': str(audit.id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['audit_log_id'], audit.id)
+        self.assertEqual(payload['event_type'], 'offline.segment_usb_exported')
+        self.assertEqual(payload['segment_id'], 'sales-20260404-080R')
+        self.assertEqual(payload['audit_result'], 'usb_exported')
+        self.assertEqual(payload['retention_summary']['receipt_type'], 'usb_export_receipt')
+        self.assertEqual(payload['retention_summary']['event_label'], 'USB_EXPORTED')
+        self.assertIn('USB=', payload['retention_summary']['hint'])
+        self.assertEqual(payload['retention_hint'], payload['retention_summary']['hint'])
+        self.assertEqual(payload['payload_json']['usb_root'], 'E:\\bosco-usb-device')
+
+    def test_offline_retention_receipt_json_rejects_non_retention_audit_log(self):
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_footer_revalidated',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-080S',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'footer_present', 'footer_present': True},
+            correlation_id='sales-20260404-080S',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_retention_receipt_json'),
+            {'audit_log_id': str(audit.id)},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()['detail'],
+            'No existe un AuditLog de retencion offline con ese id.',
+        )
+
+    def test_offline_retention_view_hides_type_and_result_filters_when_subset_has_single_real_option(self):
+        retention_audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-080A',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-080A',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard_offline_retention'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="offline_action_type"', html=False)
+        self.assertNotContains(response, 'name="offline_action_result"', html=False)
+
+    def test_offline_retention_view_hides_segment_and_time_filters_for_single_segment_drilldown(self):
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-080B',
+            payload_json={
+                'segment_status': 'sealed',
+                'audit_result': 'usb_exported',
+                'receipt_type': 'usb_export_receipt',
+                'receipt_signature': '1234567890abcdef1234567890abcdef',
+                'retention_reason': 'manual backup',
+                'usb_root': 'E:\\bosco-usb-device',
+            },
+            correlation_id='sales-20260404-080B',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_retention'),
+            {
+                'offline_action_segment_id': 'sales-20260404-080B',
+                'offline_action_type': 'offline.segment_usb_exported',
+                'offline_action_result': 'usb_exported',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'sales-20260404-080B')
+        self.assertContains(response, 'Drill-down fijado a sales-20260404-080B')
+        self.assertContains(response, 'Resumen del segmento fijado:')
+        self.assertContains(response, 'Ultima Accion')
+        self.assertContains(response, 'USB_EXPORTED')
+        self.assertContains(response, 'usb_export_receipt')
+        self.assertContains(response, 'USB')
+        self.assertContains(response, 'E:\\bosco-usb-device')
+        self.assertContains(response, 'sig=1234567890abcdef...')
+        self.assertContains(response, 'manual backup')
+        self.assertNotContains(response, 'Esta vista muestra solo acciones auditadas de retencion offline:')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id=sales-20260404-080B',
+            count=2,
+        )
+        self.assertContains(
+            response,
+            reverse('admin:pos_auditlog_change', args=[AuditLog.objects.get(target_id='sales-20260404-080B').id]),
+        )
+        self.assertContains(response, 'VER RETENCION COMPLETA')
+        self.assertNotContains(response, 'VER INCIDENTES CRITICOS')
+        self.assertNotContains(response, '?periodo=hoy')
+        self.assertNotContains(response, '>Filtrar<', html=False)
+        self.assertNotContains(response, '>Limpiar<', html=False)
+        self.assertNotContains(response, '<th class="pb-2 font-black">Segmento</th>', html=False)
+        self.assertNotContains(response, '<th class="pb-2 font-black">Estado</th>', html=False)
+        self.assertNotContains(response, '<th class="pb-2 font-black">Resultado</th>', html=False)
+        self.assertNotContains(response, '<th class="pb-2 font-black">Actor</th>', html=False)
+        self.assertNotContains(response, '<th class="pb-2 font-black">Sucursal</th>', html=False)
+        self.assertNotContains(response, '>Limbo<', html=False)
+        self.assertNotContains(response, '>JSON<', html=False)
+        self.assertNotContains(response, 'name="offline_action_segment_id"', html=False)
+        self.assertNotContains(response, 'name="offline_action_time_window"', html=False)
+        self.assertNotContains(
+            response,
+            f'{reverse("dashboard_offline_limbo")}?segment_id=sales-20260404-080B',
+        )
+        self.assertNotContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-080B',
+        )
+
+    def test_offline_retention_csv_export_returns_only_retention_subset(self):
+        purged = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-082',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'purged_after_usb'},
+            correlation_id='sales-20260404-082',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_operational_review_marked',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-083',
+            payload_json={'segment_status': 'corrupt', 'audit_result': 'review_marked'},
+            correlation_id='sales-20260404-083',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard_offline_retention_export_csv'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn(
+            'attachment; filename="offline-retention-actions.csv"',
+            response['Content-Disposition'],
+        )
+        content = response.content.decode('utf-8')
+        self.assertIn(
+            'audit_log_id,created_at,event_type,segment_id,segment_status,audit_result,footer_present,organization_name,location_name,actor_username,critical,segment_has_review,retention_hint,receipt_json_url,auditlog_url',
+            content,
+        )
+        self.assertIn(str(purged.id), content)
+        self.assertIn('offline.segment_purged_after_usb', content)
+        self.assertIn('purged_after_usb', content)
+        self.assertIn('MODE=N/A | override=NO', content)
+        self.assertIn(
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={purged.id}',
+            content,
+        )
+        self.assertIn(
+            reverse('admin:pos_auditlog_change', args=[purged.id]),
+            content,
+        )
+        self.assertNotIn('offline.segment_operational_review_marked', content)
+
     def test_offline_incident_batches_view_renders_filtered_batches(self):
         selected_batch = AuditLog.objects.create(
             organization=self.location.organization,
@@ -1803,8 +2446,24 @@ class AnalyticsReplayTimelineTests(TestCase):
             event_type='offline.segment_bulk_revalidated',
             target_model='OfflineJournalSegmentBatch',
             target_id='revalidate-batch-view-001',
-            payload_json={'processed': 7, 'succeeded': 6, 'failed': 1},
+            payload_json={
+                'processed': 7,
+                'succeeded': 6,
+                'failed': 1,
+                'segment_ids': ['sales-20260404-701'],
+                'successful_segment_ids': ['sales-20260404-701'],
+            },
             correlation_id='revalidate-batch-view-001',
+        )
+        AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-701',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-701',
         )
         AuditLog.objects.create(
             organization=self.location.organization,
@@ -1846,7 +2505,76 @@ class AnalyticsReplayTimelineTests(TestCase):
             f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
             count=2,
         )
+        retention_audit = AuditLog.objects.get(
+            event_type='offline.segment_usb_exported',
+            target_id='sales-20260404-701',
+        )
         self.assertContains(response, 'Batch ID')
+        self.assertContains(response, 'USB_EXPORTED x1')
+        self.assertContains(response, 'Receipt JSON')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={retention_audit.id}',
+        )
+
+    def test_offline_incident_batches_view_keeps_retention_hint_plain_for_multiple_receipts(self):
+        selected_batch = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_bulk_revalidated',
+            target_model='OfflineJournalSegmentBatch',
+            target_id='revalidate-batch-view-002',
+            payload_json={
+                'processed': 2,
+                'succeeded': 2,
+                'failed': 0,
+                'segment_ids': ['sales-20260404-702', 'sales-20260404-703'],
+                'successful_segment_ids': ['sales-20260404-702', 'sales-20260404-703'],
+            },
+            correlation_id='revalidate-batch-view-002',
+        )
+        first_receipt = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-702',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-702',
+        )
+        second_receipt = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-703',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'purged_after_usb'},
+            correlation_id='sales-20260404-703',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('dashboard_offline_incident_batches'),
+            {
+                'periodo': 'semana',
+                'offline_bulk_action_type': 'offline.segment_bulk_revalidated',
+                'offline_bulk_audit_log': str(selected_batch.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'PURGED_AFTER_USB x1; USB_EXPORTED x1')
+        self.assertNotContains(
+            response,
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={first_receipt.id}',
+        )
+        self.assertNotContains(
+            response,
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={second_receipt.id}',
+        )
 
     def test_offline_incident_batches_view_filters_by_batch_id(self):
         selected_batch = AuditLog.objects.create(
@@ -1928,6 +2656,23 @@ class AnalyticsReplayTimelineTests(TestCase):
         )
 
     def test_offline_incident_batch_json_returns_single_run_payload(self):
+        retention_audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-001',
+            payload_json={
+                'segment_status': 'sealed',
+                'audit_result': 'usb_exported',
+                'receipt_type': 'usb_export_receipt',
+                'receipt_signature': '1234567890abcdef1234567890abcdef',
+                'retention_reason': 'manual backup',
+                'usb_root': 'E:\\\\BOSCO',
+            },
+            correlation_id='sales-001',
+        )
         selected_batch = AuditLog.objects.create(
             organization=self.location.organization,
             location=self.location,
@@ -1939,6 +2684,8 @@ class AnalyticsReplayTimelineTests(TestCase):
                 'processed': 9,
                 'succeeded': 8,
                 'failed': 1,
+                'segment_ids': ['sales-001'],
+                'successful_segment_ids': ['sales-001'],
                 'failed_details': [{'segment_id': 'sales-001', 'detail': 'footer missing'}],
             },
             correlation_id='revalidate-batch-detail-001',
@@ -1958,6 +2705,12 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(payload['failed'], 1)
         self.assertEqual(payload['correlation_id'], 'revalidate-batch-detail-001')
         self.assertEqual(payload['payload_json']['processed'], 9)
+        self.assertEqual(payload['retention_hint'], 'USB_EXPORTED x1')
+        self.assertEqual(payload['retention_receipt_audit_log_id'], retention_audit.id)
+        self.assertEqual(
+            payload['retention_receipt_json_url'],
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={retention_audit.id}',
+        )
 
     def test_offline_incident_batch_detail_renders_single_run_payload(self):
         with TemporaryDirectory() as temp_dir:
@@ -2017,6 +2770,24 @@ class AnalyticsReplayTimelineTests(TestCase):
                 },
                 correlation_id='corr-detail-html-001',
             )
+            retention_audit = AuditLog.objects.create(
+                organization=self.location.organization,
+                location=self.location,
+                actor_user=self.user,
+                event_type='offline.segment_usb_exported',
+                target_model='OfflineJournalSegment',
+                target_id=sealed_segment_id,
+                payload_json={
+                    'segment_status': 'sealed',
+                    'footer_present': True,
+                    'audit_result': 'usb_exported',
+                    'receipt_type': 'usb_export_receipt',
+                    'receipt_signature': '1234567890abcdef1234567890abcdef',
+                    'retention_reason': 'manual backup',
+                    'usb_root': 'E:\\\\BOSCO',
+                },
+                correlation_id=sealed_segment_id,
+            )
 
             self.client.force_login(self.user)
             with override_settings(
@@ -2030,6 +2801,26 @@ class AnalyticsReplayTimelineTests(TestCase):
                 )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context['batch_detail']['detail_json_url'],
+            f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
+        )
+        self.assertEqual(
+            response.context['batch_detail']['detail_html_url'],
+            f'{reverse("dashboard_offline_incident_batch_detail")}?audit_log_id={selected_batch.id}',
+        )
+        self.assertEqual(
+            response.context['batch_detail']['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[selected_batch.id]),
+        )
+        self.assertEqual(
+            response.context['batch_detail']['retention_receipt_json_url'],
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={retention_audit.id}',
+        )
+        self.assertEqual(
+            response.context['batch_detail_retention_receipt_json_href'],
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={retention_audit.id}',
+        )
         self.assertEqual(response.context['batch_detail_segment_summary']['total_segments'], 2)
         self.assertEqual(response.context['batch_detail_segment_summary']['resolved_segments'], 2)
         self.assertEqual(response.context['batch_detail_segment_summary']['sealed_segments'], 1)
@@ -2062,6 +2853,14 @@ class AnalyticsReplayTimelineTests(TestCase):
             response,
             f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
         )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={retention_audit.id}',
+            count=2,
+        )
+        self.assertContains(response, 'usb_export_receipt')
+        self.assertContains(response, 'USB_EXPORTED')
+        self.assertContains(response, 'Retention: USB_EXPORTED x1')
         self.assertContains(
             response,
             reverse('admin:pos_auditlog_change', args=[selected_batch.id]),
@@ -2153,8 +2952,24 @@ class AnalyticsReplayTimelineTests(TestCase):
             event_type='offline.segment_bulk_revalidated',
             target_model='OfflineJournalSegmentBatch',
             target_id='revalidate-batch-export-001',
-            payload_json={'processed': 5, 'succeeded': 4, 'failed': 1},
+            payload_json={
+                'processed': 5,
+                'succeeded': 4,
+                'failed': 1,
+                'segment_ids': ['sales-20260404-601'],
+                'successful_segment_ids': ['sales-20260404-601'],
+            },
             correlation_id='revalidate-batch-export-001',
+        )
+        retention_audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-601',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'usb_exported'},
+            correlation_id='sales-20260404-601',
         )
         AuditLog.objects.create(
             organization=self.location.organization,
@@ -2184,6 +2999,17 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(payload['items'][0]['processed'], 5)
         self.assertEqual(payload['selected_run']['audit_log_id'], selected_batch.id)
         self.assertEqual(payload['filters']['action_type'], 'offline.segment_bulk_revalidated')
+        self.assertEqual(payload['items'][0]['retention_hint'], 'USB_EXPORTED x1')
+        self.assertEqual(payload['selected_run']['retention_hint'], 'USB_EXPORTED x1')
+        self.assertEqual(payload['items'][0]['retention_receipt_audit_log_id'], retention_audit.id)
+        self.assertEqual(
+            payload['items'][0]['retention_receipt_json_url'],
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={retention_audit.id}',
+        )
+        self.assertEqual(
+            payload['selected_run']['retention_receipt_json_url'],
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={retention_audit.id}',
+        )
         self.assertEqual(
             payload['items'][0]['detail_json_url'],
             f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
@@ -2191,6 +3017,22 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(
             payload['selected_run']['detail_json_url'],
             f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={selected_batch.id}',
+        )
+        self.assertEqual(
+            payload['items'][0]['detail_html_url'],
+            f'{reverse("dashboard_offline_incident_batch_detail")}?audit_log_id={selected_batch.id}',
+        )
+        self.assertEqual(
+            payload['selected_run']['detail_html_url'],
+            f'{reverse("dashboard_offline_incident_batch_detail")}?audit_log_id={selected_batch.id}',
+        )
+        self.assertEqual(
+            payload['items'][0]['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[selected_batch.id]),
+        )
+        self.assertEqual(
+            payload['selected_run']['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[selected_batch.id]),
         )
 
     def test_offline_incident_batches_json_export_preserves_batch_id_filter(self):
@@ -2269,8 +3111,24 @@ class AnalyticsReplayTimelineTests(TestCase):
             event_type='offline.segment_bulk_revalidated',
             target_model='OfflineJournalSegmentBatch',
             target_id='revalidate-batch-csv-001',
-            payload_json={'processed': 8, 'succeeded': 7, 'failed': 1},
+            payload_json={
+                'processed': 8,
+                'succeeded': 7,
+                'failed': 1,
+                'segment_ids': ['sales-20260404-602'],
+                'successful_segment_ids': ['sales-20260404-602'],
+            },
             correlation_id='revalidate-batch-csv-001',
+        )
+        retention_audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-602',
+            payload_json={'segment_status': 'sealed', 'audit_result': 'purged_after_usb'},
+            correlation_id='sales-20260404-602',
         )
 
         self.client.force_login(self.user)
@@ -2285,11 +3143,24 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
         self.assertIn('attachment; filename="offline-batch-runs.csv"', response['Content-Disposition'])
         content = response.content.decode('utf-8')
-        self.assertIn('audit_log_id,created_at,event_type,action_label,batch_id,processed,succeeded,failed,organization_name,location_name,actor_username,selected,detail_json_url', content)
+        self.assertIn('audit_log_id,created_at,event_type,action_label,batch_id,processed,succeeded,failed,organization_name,location_name,actor_username,selected,retention_hint,retention_receipt_json_url,detail_json_url,detail_html_url,auditlog_url', content)
         self.assertIn('revalidate-batch-csv-001', content)
         self.assertIn('REVALIDACION_MASIVA', content)
+        self.assertIn('PURGED_AFTER_USB x1', content)
+        self.assertIn(
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={retention_audit.id}',
+            content,
+        )
         self.assertIn(
             f'{reverse("dashboard_offline_incident_batch_json")}?audit_log_id={batch.id}',
+            content,
+        )
+        self.assertIn(
+            f'{reverse("dashboard_offline_incident_batch_detail")}?audit_log_id={batch.id}',
+            content,
+        )
+        self.assertIn(
+            reverse('admin:pos_auditlog_change', args=[batch.id]),
             content,
         )
 
@@ -2329,6 +3200,10 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(payload['count'], 1)
         self.assertEqual(payload['items'][0]['segment_id'], 'sales-20260404-082')
         self.assertEqual(payload['items'][0]['audit_result'], 'footer_missing')
+        self.assertEqual(
+            payload['items'][0]['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[payload['items'][0]['audit_log_id']]),
+        )
 
     def test_offline_critical_incidents_csv_export_returns_filtered_rows(self):
         AuditLog.objects.create(
@@ -2349,9 +3224,11 @@ class AnalyticsReplayTimelineTests(TestCase):
         self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
         self.assertIn('attachment; filename="offline-critical-incidents.csv"', response['Content-Disposition'])
         content = response.content.decode('utf-8')
-        self.assertIn('audit_log_id,created_at,event_type,segment_id,segment_status,audit_result,footer_present,organization_name,location_name,actor_username,critical,segment_has_review', content)
+        self.assertIn('audit_log_id,created_at,event_type,segment_id,segment_status,audit_result,footer_present,organization_name,location_name,actor_username,critical,segment_has_review,auditlog_url', content)
         self.assertIn('sales-20260404-091', content)
         self.assertIn('review_marked', content)
+        audit = AuditLog.objects.get(target_id='sales-20260404-091')
+        self.assertIn(reverse('admin:pos_auditlog_change', args=[audit.id]), content)
 
     def test_audit_log_admin_change_view_is_available_for_offline_audited_action(self):
         audit = AuditLog.objects.create(
@@ -2383,6 +3260,97 @@ class AnalyticsReplayTimelineTests(TestCase):
             response,
             f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-013',
         )
+        self.assertNotContains(response, reverse('dashboard_offline_retention'))
+        self.assertContains(response, 'Offline retention receipt')
+        self.assertContains(response, 'No aplica')
+
+    def test_audit_log_admin_change_view_links_offline_retention_navigation(self):
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_usb_exported',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-014',
+            payload_json={
+                'segment_status': 'sealed',
+                'audit_result': 'usb_exported',
+                'receipt_type': 'usb_export_receipt',
+                'receipt_signature': '1234567890abcdef1234567890abcdef',
+                'retention_reason': 'manual backup',
+                'usb_root': 'E:\\bosco-usb',
+            },
+            correlation_id='sales-20260404-014',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('admin:pos_auditlog_change', args=[audit.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'offline.segment_usb_exported')
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo")}?segment_id=sales-20260404-014',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id=sales-20260404-014',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id=sales-20260404-014',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_retention")}?offline_action_segment_id=sales-20260404-014&amp;offline_action_type=offline.segment_usb_exported&amp;offline_action_result=usb_exported',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("dashboard_offline_retention_receipt_json")}?audit_log_id={audit.id}',
+        )
+        self.assertContains(response, 'Offline retention receipt')
+        self.assertContains(response, 'usb_export_receipt')
+        self.assertContains(response, 'usb_exported')
+        self.assertContains(response, 'manual backup')
+        self.assertContains(response, '1234567890abcdef...')
+        self.assertContains(response, 'Retention hint')
+        self.assertContains(response, 'usb_export_receipt | USB=E:\\bosco-usb | sig=1234567890abcdef...')
+
+    def test_audit_log_admin_change_view_shows_purge_retention_receipt_summary(self):
+        audit = AuditLog.objects.create(
+            organization=self.location.organization,
+            location=self.location,
+            actor_user=self.user,
+            event_type='offline.segment_purged_after_usb',
+            target_model='OfflineJournalSegment',
+            target_id='sales-20260404-015',
+            payload_json={
+                'segment_status': 'sealed',
+                'audit_result': 'purged_after_usb',
+                'receipt_type': 'purge_receipt',
+                'receipt_signature': 'abcdef1234567890abcdef1234567890',
+                'purge_mode': 'manual_usb_override',
+                'manager_override_confirmed': True,
+                'usb_export_receipt_signature': 'fedcba0987654321fedcba0987654321',
+                'retention_reason': 'manual override',
+            },
+            correlation_id='sales-20260404-015',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('admin:pos_auditlog_change', args=[audit.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'offline.segment_purged_after_usb')
+        self.assertContains(response, 'purge_receipt')
+        self.assertContains(response, 'purged_after_usb')
+        self.assertContains(response, 'manual_usb_override')
+        self.assertContains(response, 'YES')
+        self.assertContains(response, 'manual override')
+        self.assertContains(response, 'abcdef1234567890...')
+        self.assertContains(response, 'fedcba0987654321...')
+        self.assertContains(response, 'Retention hint')
+        self.assertContains(response, 'purge_receipt | MODE=manual_usb_override | override=YES')
 
     def test_audit_log_admin_change_view_hides_offline_links_for_non_segment_targets(self):
         audit = AuditLog.objects.create(
@@ -2503,6 +3471,33 @@ class OfflineLimboDashboardTests(TestCase):
                 queue_session_id='offline-view-session',
                 session_seq_no=4,
             )
+            current_segment_id = runtime.get_limbo_view()['segment_id']
+            current_audit = AuditLog.objects.create(
+                organization=self.location.organization,
+                location=self.location,
+                actor_user=self.admin_user,
+                event_type='offline.segment_operational_review_marked',
+                target_model='OfflineJournalSegment',
+                target_id=current_segment_id,
+                payload_json={'segment_status': 'open', 'audit_result': 'review_marked'},
+                correlation_id=current_segment_id,
+            )
+            rebuild_projection_in_place(
+                config=OfflineProjectionConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                    window_hours=24,
+                )
+            )
+            export_segment_bundle_to_usb(
+                root_dir=Path(temp_dir),
+                stream_name='sales',
+                segment_id=current_segment_id,
+                usb_root=Path(temp_dir) / 'usb-device',
+                actor='offline-limbo-tests',
+                reason='Manual export for dashboard visibility',
+                receipt_secret='offline-limbo-secret',
+            )
 
             self.client.force_login(self.admin_user)
             with override_settings(
@@ -2510,6 +3505,8 @@ class OfflineLimboDashboardTests(TestCase):
                 OFFLINE_JOURNAL_ROOT=temp_dir,
                 OFFLINE_JOURNAL_STREAM_NAME='sales',
                 OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+                OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS=24,
+                OFFLINE_JOURNAL_SIDECAR_MAX_BYTES=64 * 1024,
             ):
                 response = self.client.get(reverse('dashboard_offline_limbo'))
 
@@ -2517,10 +3514,27 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(response.context['status'], 'ready')
         self.assertEqual(response.context['limbo']['summary']['total_sales'], 1)
         self.assertEqual(response.context['limbo']['summary']['amount_total'], '7.25')
+        self.assertEqual(response.context['runtime_mode'], 'healthy')
+        self.assertTrue(response.context['projection']['available'])
+        self.assertEqual(response.context['projection']['window_hours'], 24)
+        self.assertEqual(response.context['projection']['row_count'], 1)
+        self.assertEqual(response.context['sidecar']['format_version'], 'fixed_v1')
+        self.assertEqual(response.context['sidecar']['recent_lookup_count'], 1)
+        self.assertGreater(response.context['sidecar']['current_bytes'], 0)
+        self.assertEqual(response.context['retention']['receipt_files_count'], 1)
+        self.assertEqual(response.context['retention']['usb_export_receipt_files_count'], 1)
         self.assertEqual(len(response.context['recent_events']), 1)
         self.assertEqual(response.context['recent_events'][0]['payment_reference'], 'OFFLINE-VIEW-001')
         self.assertContains(response, 'Limbo Offline')
         self.assertContains(response, 'OFFLINE-VIEW-001')
+        self.assertContains(response, 'Projection SQLite')
+        self.assertContains(response, 'Sidecar Fijo')
+        self.assertContains(response, 'Retencion Local')
+        self.assertContains(response, 'Ultimo AuditLog Central')
+        self.assertContains(response, 'OPERATIONAL_REVIEW')
+        self.assertContains(response, reverse('admin:pos_auditlog_change', args=[current_audit.id]))
+        self.assertContains(response, reverse('dashboard_offline_limbo_segment_export_usb_json'))
+        self.assertContains(response, reverse('dashboard_offline_limbo_segment_purge_after_usb_json'))
 
     def test_dashboard_offline_limbo_preserves_initial_segment_id_from_query(self):
         self.client.force_login(self.admin_user)
@@ -2579,6 +3593,16 @@ class OfflineLimboDashboardTests(TestCase):
                 client_transaction_id='offline-sealed-001',
             )
             sealed_snapshot = runtime.seal_active_segment()
+            sealed_audit = AuditLog.objects.create(
+                organization=self.location.organization,
+                location=self.location,
+                actor_user=self.admin_user,
+                event_type='offline.segment_footer_revalidated',
+                target_model='OfflineJournalSegment',
+                target_id=sealed_snapshot['segment_id'],
+                payload_json={'segment_status': 'sealed', 'audit_result': 'footer_present', 'footer_present': True},
+                correlation_id=sealed_snapshot['segment_id'],
+            )
             runtime.append_sale_event(
                 event_id='evt-offline-active-1',
                 payload={
@@ -2606,6 +3630,9 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertContains(response, 'Historial De Segmentos Sellados')
         self.assertContains(response, sealed_snapshot['segment_id'])
         self.assertContains(response, 'Ver detalle')
+        self.assertContains(response, 'Audit Central')
+        self.assertContains(response, 'FOOTER_REVALIDATED')
+        self.assertContains(response, reverse('admin:pos_auditlog_change', args=[sealed_audit.id]))
         self.assertContains(
             response,
             f'{reverse("dashboard_offline_limbo_segment_detail")}?segment_id={sealed_snapshot["segment_id"]}',
@@ -2641,6 +3668,33 @@ class OfflineLimboDashboardTests(TestCase):
                 },
                 client_transaction_id='offline-json-001',
             )
+            current_segment_id = runtime.get_limbo_view()['segment_id']
+            current_audit = AuditLog.objects.create(
+                organization=self.location.organization,
+                location=self.location,
+                actor_user=self.admin_user,
+                event_type='offline.segment_operational_review_marked',
+                target_model='OfflineJournalSegment',
+                target_id=current_segment_id,
+                payload_json={'segment_status': 'open', 'audit_result': 'review_marked'},
+                correlation_id=current_segment_id,
+            )
+            rebuild_projection_in_place(
+                config=OfflineProjectionConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                    window_hours=24,
+                )
+            )
+            export_segment_bundle_to_usb(
+                root_dir=Path(temp_dir),
+                stream_name='sales',
+                segment_id=current_segment_id,
+                usb_root=Path(temp_dir) / 'usb-device',
+                actor='offline-limbo-tests',
+                reason='Manual export for limbo JSON visibility',
+                receipt_secret='offline-limbo-secret',
+            )
 
             self.client.force_login(self.admin_user)
             with override_settings(
@@ -2648,14 +3702,31 @@ class OfflineLimboDashboardTests(TestCase):
                 OFFLINE_JOURNAL_ROOT=temp_dir,
                 OFFLINE_JOURNAL_STREAM_NAME='sales',
                 OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS=True,
+                OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS=24,
+                OFFLINE_JOURNAL_SIDECAR_MAX_BYTES=64 * 1024,
             ):
                 response = self.client.get(reverse('dashboard_offline_limbo_json'))
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload['status'], 'ready')
+        self.assertEqual(payload['runtime_mode'], 'healthy')
         self.assertEqual(payload['limbo']['summary']['total_sales'], 1)
+        self.assertTrue(payload['projection']['available'])
+        self.assertEqual(payload['projection']['window_hours'], 24)
+        self.assertEqual(payload['projection']['row_count'], 1)
+        self.assertEqual(payload['sidecar']['recent_lookup_count'], 1)
+        self.assertEqual(payload['sidecar']['last_verify_status'], 'verified')
+        self.assertEqual(payload['retention']['receipt_files_count'], 1)
+        self.assertEqual(payload['retention']['usb_export_receipt_files_count'], 1)
         self.assertEqual(payload['recent_events'][0]['payment_reference'], 'OFFLINE-JSON-001')
+        self.assertEqual(payload['limbo']['latest_audit_log_id'], current_audit.id)
+        self.assertEqual(payload['limbo']['latest_audit_log_event_type'], 'offline.segment_operational_review_marked')
+        self.assertEqual(payload['limbo']['latest_audit_badge']['label'], 'OPERATIONAL_REVIEW')
+        self.assertEqual(
+            payload['limbo']['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[current_audit.id]),
+        )
         self.assertIn('refreshed_at', payload)
 
     def test_dashboard_offline_limbo_json_reports_rotation_needed_for_oversized_active_segment(self):
@@ -2719,6 +3790,16 @@ class OfflineLimboDashboardTests(TestCase):
                 client_transaction_id='offline-history-001',
             )
             sealed_snapshot = runtime.seal_active_segment()
+            sealed_audit = AuditLog.objects.create(
+                organization=self.location.organization,
+                location=self.location,
+                actor_user=self.admin_user,
+                event_type='offline.segment_footer_revalidated',
+                target_model='OfflineJournalSegment',
+                target_id=sealed_snapshot['segment_id'],
+                payload_json={'segment_status': 'sealed', 'audit_result': 'footer_present', 'footer_present': True},
+                correlation_id=sealed_snapshot['segment_id'],
+            )
             runtime.append_sale_event(
                 event_id='evt-offline-sealed-json-2',
                 payload={
@@ -2750,6 +3831,12 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertTrue(payload['sealed_segments'][0]['footer_present'])
         self.assertEqual(payload['sealed_segments'][0]['summary_total_sales'], 1)
         self.assertEqual(payload['sealed_segments'][0]['summary_amount_total'], '3.15')
+        self.assertEqual(payload['sealed_segments'][0]['latest_audit_log_id'], sealed_audit.id)
+        self.assertEqual(payload['sealed_segments'][0]['latest_audit_badge']['label'], 'FOOTER_REVALIDATED')
+        self.assertEqual(
+            payload['sealed_segments'][0]['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[sealed_audit.id]),
+        )
 
     def test_dashboard_offline_limbo_json_includes_latest_sealed_segment_when_no_open_segment(self):
         with TemporaryDirectory() as temp_dir:
@@ -2811,6 +3898,16 @@ class OfflineLimboDashboardTests(TestCase):
                 client_transaction_id='offline-detail-001',
             )
             sealed_snapshot = runtime.seal_active_segment()
+            sealed_audit = AuditLog.objects.create(
+                organization=self.location.organization,
+                location=self.location,
+                actor_user=self.admin_user,
+                event_type='offline.segment_footer_revalidated',
+                target_model='OfflineJournalSegment',
+                target_id=sealed_snapshot['segment_id'],
+                payload_json={'segment_status': 'sealed', 'audit_result': 'footer_present', 'footer_present': True},
+                correlation_id=sealed_snapshot['segment_id'],
+            )
 
             self.client.force_login(self.admin_user)
             with override_settings(
@@ -2831,6 +3928,16 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertEqual(payload['summary']['total_sales'], 1)
         self.assertEqual(payload['summary']['amount_total'], '6.90')
         self.assertEqual(payload['recent_events'][0]['payment_reference'], 'OFFLINE-DETAIL-001')
+        self.assertEqual(payload['latest_audit_log_id'], sealed_audit.id)
+        self.assertEqual(payload['latest_audit_log_event_type'], 'offline.segment_footer_revalidated')
+        self.assertEqual(payload['latest_audit_badge']['label'], 'FOOTER_REVALIDATED')
+        self.assertEqual(
+            payload['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[sealed_audit.id]),
+        )
+        self.assertTrue(payload['retention']['allow_export_usb'])
+        self.assertFalse(payload['retention']['allow_purge_after_usb'])
+        self.assertIn('usb_export_receipt', payload['retention']['purge_after_usb_block_reason'])
 
     def test_dashboard_offline_limbo_segment_detail_renders_html_payload(self):
         with TemporaryDirectory() as temp_dir:
@@ -2853,6 +3960,16 @@ class OfflineLimboDashboardTests(TestCase):
                 client_transaction_id='offline-detail-html-001',
             )
             sealed_snapshot = runtime.seal_active_segment()
+            sealed_audit = AuditLog.objects.create(
+                organization=self.location.organization,
+                location=self.location,
+                actor_user=self.admin_user,
+                event_type='offline.segment_footer_revalidated',
+                target_model='OfflineJournalSegment',
+                target_id=sealed_snapshot['segment_id'],
+                payload_json={'segment_status': 'sealed', 'audit_result': 'footer_present', 'footer_present': True},
+                correlation_id=sealed_snapshot['segment_id'],
+            )
 
             self.client.force_login(self.admin_user)
             with override_settings(
@@ -2867,6 +3984,10 @@ class OfflineLimboDashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['segment_detail']['segment_id'], sealed_snapshot['segment_id'])
+        self.assertEqual(
+            response.context['segment_detail']['auditlog_url'],
+            reverse('admin:pos_auditlog_change', args=[sealed_audit.id]),
+        )
         self.assertContains(response, 'DETALLE DE SEGMENTO OFFLINE')
         self.assertContains(response, sealed_snapshot['segment_id'])
         self.assertContains(response, 'OFFLINE-DETAIL-HTML-001')
@@ -2874,6 +3995,9 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertContains(response, 'Reseal Segment')
         self.assertContains(response, 'Revalidar Footer')
         self.assertContains(response, 'Marcar Revision')
+        self.assertContains(response, 'Export USB')
+        self.assertNotContains(response, 'Purge After USB')
+        self.assertContains(response, 'Requiere usb_export_receipt valido antes de habilitar purge.')
         self.assertContains(
             response,
             f'{reverse("dashboard_offline_limbo_segment_json")}?segment_id={sealed_snapshot["segment_id"]}',
@@ -2882,10 +4006,216 @@ class OfflineLimboDashboardTests(TestCase):
         self.assertContains(response, reverse('dashboard_offline_limbo_segment_reseal_json'))
         self.assertContains(response, reverse('dashboard_offline_limbo_segment_revalidate_json'))
         self.assertContains(response, reverse('dashboard_offline_limbo_segment_review_json'))
+        self.assertContains(response, reverse('dashboard_offline_limbo_segment_export_usb_json'))
+        self.assertContains(response, reverse('dashboard_offline_limbo_segment_purge_after_usb_json'))
+        self.assertContains(response, reverse('admin:pos_auditlog_change', args=[sealed_audit.id]))
         self.assertContains(
             response,
             f'{reverse("dashboard_offline_limbo")}?segment_id={sealed_snapshot["segment_id"]}',
         )
+
+    def test_dashboard_offline_limbo_segment_export_usb_json_generates_receipt(self):
+        with TemporaryDirectory() as temp_dir:
+            usb_root = Path(temp_dir) / 'usb-device'
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-export-usb-1',
+                payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
+                    'sale_total': '8.60',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-EXPORT-USB-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-export-usb-001',
+            )
+            sealed_snapshot = runtime.seal_active_segment()
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_RECEIPT_SECRET='test-secret',
+            ):
+                response = self.client.post(
+                    reverse('dashboard_offline_limbo_segment_export_usb_json'),
+                    data=json.dumps(
+                        {
+                            'segment_id': sealed_snapshot['segment_id'],
+                            'usb_root': str(usb_root),
+                            'reason': 'manual backup',
+                        }
+                    ),
+                    content_type='application/json',
+                )
+            exported_segment_exists = (
+                usb_root / 'sales' / sealed_snapshot['segment_id'] / f'{sealed_snapshot["segment_id"]}.jsonl'
+            ).exists()
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'export_usb')
+        self.assertTrue(payload['action']['performed'])
+        self.assertEqual(payload['receipt']['receipt_type'], 'usb_export_receipt')
+        self.assertEqual(payload['retention']['usb_export_receipts_count'], 1)
+        self.assertTrue(payload['retention']['allow_purge_after_usb'])
+        self.assertTrue(payload['audit_log']['recorded'])
+        self.assertEqual(payload['audit_log']['event_type'], 'offline.segment_usb_exported')
+        self.assertEqual(
+            payload['ops_metadata']['last_usb_export']['audit_log']['audit_log_id'],
+            payload['audit_log']['audit_log_id'],
+        )
+        self.assertTrue(exported_segment_exists)
+        audit_log = AuditLog.objects.get(id=payload['audit_log']['audit_log_id'])
+        self.assertEqual(audit_log.organization_id, self.location.organization_id)
+        self.assertEqual(audit_log.location_id, self.location.id)
+        self.assertEqual(audit_log.event_type, 'offline.segment_usb_exported')
+        self.assertEqual(audit_log.payload_json.get('receipt_type'), 'usb_export_receipt')
+
+    def test_dashboard_offline_limbo_segment_purge_after_usb_json_requires_manager_override(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-purge-usb-guard-1',
+                payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
+                    'sale_total': '4.90',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-PURGE-USB-GUARD-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-purge-usb-guard-001',
+            )
+            sealed_snapshot = runtime.seal_active_segment()
+            receipt = export_segment_bundle_to_usb(
+                root_dir=Path(temp_dir),
+                stream_name='sales',
+                segment_id=sealed_snapshot['segment_id'],
+                usb_root=Path(temp_dir) / 'usb-device',
+                actor='manager',
+                reason='manual backup',
+                receipt_secret='test-secret',
+            )
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_RECEIPT_SECRET='test-secret',
+            ):
+                response = self.client.post(
+                    reverse('dashboard_offline_limbo_segment_purge_after_usb_json'),
+                    data=json.dumps(
+                        {
+                            'segment_id': sealed_snapshot['segment_id'],
+                            'reason': 'manual override',
+                            'usb_export_receipt_signature': receipt['signature'],
+                            'manager_override': False,
+                        }
+                    ),
+                    content_type='application/json',
+                )
+            segment_path = Path(temp_dir) / f'{sealed_snapshot["segment_id"]}.jsonl'
+            snapshot_path = Path(temp_dir) / f'{sealed_snapshot["segment_id"]}.snapshot.json'
+            segment_still_exists = segment_path.exists()
+            snapshot_still_exists = snapshot_path.exists()
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('override explicito de gerente', response.json()['detail'])
+        self.assertTrue(segment_still_exists)
+        self.assertTrue(snapshot_still_exists)
+
+    def test_dashboard_offline_limbo_segment_purge_after_usb_json_removes_segment_after_override(self):
+        with TemporaryDirectory() as temp_dir:
+            runtime = SegmentedJournalRuntime(
+                config=OfflineJournalRuntimeConfig(
+                    root_dir=Path(temp_dir),
+                    stream_name='sales',
+                )
+            )
+            runtime.append_sale_event(
+                event_id='evt-offline-purge-usb-1',
+                payload={
+                    'organization_id': self.location.organization_id,
+                    'location_id': self.location.id,
+                    'sale_total': '4.30',
+                    'payment_status': 'PAID',
+                    'payment_reference': 'OFFLINE-PURGE-USB-001',
+                    'journal_capture_source': 'server_django_sales',
+                    'capture_event_type': 'sale.payment_confirmed',
+                    'sale_origin': 'POS',
+                },
+                client_transaction_id='offline-purge-usb-001',
+            )
+            sealed_snapshot = runtime.seal_active_segment()
+            receipt = export_segment_bundle_to_usb(
+                root_dir=Path(temp_dir),
+                stream_name='sales',
+                segment_id=sealed_snapshot['segment_id'],
+                usb_root=Path(temp_dir) / 'usb-device',
+                actor='manager',
+                reason='manual backup',
+                receipt_secret='test-secret',
+            )
+
+            self.client.force_login(self.admin_user)
+            with override_settings(
+                OFFLINE_JOURNAL_ENABLED=True,
+                OFFLINE_JOURNAL_ROOT=temp_dir,
+                OFFLINE_JOURNAL_STREAM_NAME='sales',
+                OFFLINE_JOURNAL_RECEIPT_SECRET='test-secret',
+            ):
+                response = self.client.post(
+                    reverse('dashboard_offline_limbo_segment_purge_after_usb_json'),
+                    data=json.dumps(
+                        {
+                            'segment_id': sealed_snapshot['segment_id'],
+                            'reason': 'manual override',
+                            'usb_export_receipt_signature': receipt['signature'],
+                            'manager_override': True,
+                        }
+                    ),
+                    content_type='application/json',
+                )
+            segment_path = Path(temp_dir) / f'{sealed_snapshot["segment_id"]}.jsonl'
+            snapshot_path = Path(temp_dir) / f'{sealed_snapshot["segment_id"]}.snapshot.json'
+            segment_exists_after_purge = segment_path.exists()
+            snapshot_exists_after_purge = snapshot_path.exists()
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['action']['name'], 'purge_after_usb')
+        self.assertTrue(payload['action']['performed'])
+        self.assertTrue(payload['removed'])
+        self.assertEqual(payload['receipt']['purge_mode'], 'manual_usb_override')
+        self.assertTrue(payload['receipt']['manager_override_confirmed'])
+        self.assertTrue(payload['audit_log']['recorded'])
+        self.assertEqual(payload['audit_log']['event_type'], 'offline.segment_purged_after_usb')
+        self.assertFalse(segment_exists_after_purge)
+        self.assertFalse(snapshot_exists_after_purge)
+        audit_log = AuditLog.objects.get(id=payload['audit_log']['audit_log_id'])
+        self.assertEqual(audit_log.organization_id, self.location.organization_id)
+        self.assertEqual(audit_log.location_id, self.location.id)
+        self.assertEqual(audit_log.event_type, 'offline.segment_purged_after_usb')
+        self.assertEqual(audit_log.payload_json.get('purge_mode'), 'manual_usb_override')
 
     def test_dashboard_offline_limbo_segment_reconcile_json_repairs_requested_segment(self):
         with TemporaryDirectory() as temp_dir:

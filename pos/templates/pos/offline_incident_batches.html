@@ -91,6 +91,11 @@
                 <p class="text-white font-black mt-1">{{ offline_bulk_selected_run.bulk_succeeded }}/{{ offline_bulk_selected_run.bulk_processed }} OK</p>
             </div>
         </div>
+        {% if offline_bulk_selected_run.bulk_retention_hint %}
+        <p class="text-violet-200 text-[11px] font-black mt-4">
+            {{ offline_bulk_selected_run.bulk_retention_hint }}
+        </p>
+        {% endif %}
         <div class="flex justify-end gap-2 mt-4">
             <a
                 href="{{ offline_bulk_selected_run_html_href }}"
@@ -106,6 +111,16 @@
             >
                 JSON
             </a>
+            {% if offline_bulk_selected_run_retention_receipt_json_href %}
+            <a
+                href="{{ offline_bulk_selected_run_retention_receipt_json_href }}"
+                target="_blank"
+                rel="noopener"
+                class="bg-violet-900/50 text-violet-200 px-3 py-2 rounded-lg text-[11px] font-black hover:bg-violet-800/50 transition"
+            >
+                Receipt JSON
+            </a>
+            {% endif %}
             <a
                 href="{% url 'admin:pos_auditlog_change' offline_bulk_selected_run.id %}"
                 target="_blank"
@@ -246,6 +261,20 @@
                     <td class="py-3 text-gray-300 text-xs">{% if batch.actor_user %}{{ batch.actor_user.username }}{% else %}SIN_USUARIO{% endif %}</td>
                     <td class="py-3 text-gray-300 text-xs">{% if batch.location %}{{ batch.location.name }}{% else %}{{ batch.organization.name|default:"SIN_UBICACION" }}{% endif %}</td>
                     <td class="py-3 text-right text-xs">
+                        {% if batch.bulk_retention_hint %}
+                        {% if batch.bulk_retention_receipt_audit_log_id %}
+                        <a
+                            href="{% url 'dashboard_offline_retention_receipt_json' %}?audit_log_id={{ batch.bulk_retention_receipt_audit_log_id }}"
+                            target="_blank"
+                            rel="noopener"
+                            class="block text-violet-200 text-[10px] font-black mb-2 hover:text-violet-100 transition"
+                        >
+                            {{ batch.bulk_retention_hint }}
+                        </a>
+                        {% else %}
+                        <p class="text-violet-200 text-[10px] font-black mb-2">{{ batch.bulk_retention_hint }}</p>
+                        {% endif %}
+                        {% endif %}
                         <div class="flex justify-end gap-2">
                             <a
                                 href="?periodo={{ periodo }}{% if desde %}&desde={{ desde }}{% endif %}{% if hasta %}&hasta={{ hasta }}{% endif %}{% if offline_bulk_action_filter_time_window %}&offline_action_time_window={{ offline_bulk_action_filter_time_window|urlencode }}{% endif %}{% if offline_bulk_action_filter_type %}&offline_bulk_action_type={{ offline_bulk_action_filter_type|urlencode }}{% endif %}{% if offline_bulk_action_filter_organization %}&offline_action_organization={{ offline_bulk_action_filter_organization|urlencode }}{% endif %}{% if offline_bulk_action_filter_location %}&offline_action_location={{ offline_bulk_action_filter_location|urlencode }}{% endif %}{% if offline_bulk_action_filter_actor %}&offline_action_actor={{ offline_bulk_action_filter_actor|urlencode }}{% endif %}&offline_bulk_correlation_id={{ batch.correlation_id|urlencode }}&offline_bulk_batch_id={{ batch.target_id|urlencode }}&offline_bulk_audit_log={{ batch.id }}"

@@ -100,6 +100,35 @@ class SegmentedJournalRuntimeTests(SimpleTestCase):
         self.assertEqual(repaired['summary']['amount_total'], '10.25')
         self.assertEqual(repaired['summary']['recent_sales'][0]['event_id'], 'evt-sale-2')
 
+    def test_runtime_rebuilds_recent_lookup_ring_when_sidecar_is_corrupted(self):
+        runtime = SegmentedJournalRuntime(
+            config=OfflineJournalRuntimeConfig(root_dir=self.root_dir, stream_name='sales')
+        )
+        runtime.append_sale_event(
+            event_id='evt-sale-1',
+            payload={'sale_total': '7.00', 'payment_status': 'PAID', 'payment_reference': 'pay-1'},
+            client_transaction_id='tx-1',
+        )
+        runtime.append_sale_event(
+            event_id='evt-sale-2',
+            payload={'sale_total': '3.25', 'payment_status': 'PAID', 'payment_reference': 'pay-2'},
+            client_transaction_id='tx-2',
+        )
+
+        view = runtime.get_limbo_view()
+        snapshot_path = Path(view['snapshot_path'])
+        snapshot = load_snapshot_payload(snapshot_path)
+        snapshot['recent_lookup_ring'] = [{} for _ in range(50)]
+        snapshot['recent_lookup_ring_count'] = 0
+        snapshot['recent_lookup_ring_cursor'] = -1
+        persist_snapshot_payload(snapshot_path, snapshot)
+
+        repaired = runtime.get_limbo_view()
+
+        self.assertEqual(repaired['summary']['recent_sales'][0]['event_id'], 'evt-sale-2')
+        self.assertEqual(repaired['summary']['recent_sales'][1]['event_id'], 'evt-sale-1')
+        self.assertEqual(repaired['recent_lookup_ring'][0]['event_id'], 'evt-sale-2')
+
     def test_runtime_rotates_and_seals_segment_when_size_threshold_is_reached(self):
         runtime = SegmentedJournalRuntime(
             config=OfflineJournalRuntimeConfig(

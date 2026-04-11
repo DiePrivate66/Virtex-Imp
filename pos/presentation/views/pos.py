@@ -148,10 +148,11 @@ def reconciliar_pago(request):
     admission = None
     try:
         data = json.loads(request.body)
+        replay_location = _resolve_replay_location(request)
         admission = admit_replay_request(
             replay_header=request.headers.get('X-POS-Replay'),
             payload=data,
-            location=_resolve_replay_location(request),
+            location=replay_location,
         )
         result = reconcile_payment_confirmation(
             venta_id=data.get('venta_id'),
@@ -160,6 +161,7 @@ def reconciliar_pago(request):
             payment_reference=data.get('payment_reference') or data.get('referencia_pago', ''),
             payment_provider=data.get('payment_provider', ''),
             gateway_payload=data.get('gateway_payload') or {},
+            location=replay_location,
         )
         return admission.attach_headers(JsonResponse({'status': 'ok', **result})) if admission else JsonResponse({'status': 'ok', **result})
     except ReplayAdmissionError as exc:

@@ -9,7 +9,11 @@ import time
 
 from django.test import SimpleTestCase
 
-from pos.infrastructure.replay_gateway import ReplayGatewayConfig, build_gateway_server
+from pos.infrastructure.replay_gateway import (
+    ReplayGatewayConfig,
+    build_gateway_server,
+    stable_replay_bucket_index,
+)
 
 
 def _get_free_port() -> int:
@@ -131,6 +135,7 @@ class ReplayGatewayProxyTests(SimpleTestCase):
         cold_lane_hours: int = 48,
         cold_slice_seconds: float = 120.0,
         waiter_ttl_seconds: float = 30.0,
+        bucket_count: int = 8,
     ):
         gateway_port = _get_free_port()
         config = ReplayGatewayConfig(
@@ -147,6 +152,7 @@ class ReplayGatewayProxyTests(SimpleTestCase):
             replay_cold_lane_slots=cold_lane_slots,
             replay_cold_slice_seconds=cold_slice_seconds,
             replay_waiter_ttl_seconds=waiter_ttl_seconds,
+            replay_bucket_count=bucket_count,
         )
         gateway_server = build_gateway_server(config)
         gateway_thread = threading.Thread(target=gateway_server.serve_forever, daemon=True)
@@ -180,6 +186,7 @@ class ReplayGatewayProxyTests(SimpleTestCase):
         self.assertEqual(payload['status'], 'ok')
         self.assertEqual(response.getheader('X-Bosco-Replay-Gateway'), 'active')
         self.assertEqual(response.getheader('X-Bosco-Replay-Lane'), 'cold')
+        self.assertTrue(str(response.getheader('X-Bosco-Replay-Bucket') or '').startswith('{replay:b'))
 
     def test_replay_gateway_enforces_idle_timeout_before_first_byte(self):
         gateway_port = self._start_gateway(total_timeout=2.0, idle_timeout=0.2)
@@ -256,6 +263,7 @@ class ReplayGatewayProxyTests(SimpleTestCase):
             cold_lane_slots=1,
             cold_slice_seconds=0.1,
             waiter_ttl_seconds=2.0,
+            bucket_count=1,
         )
         _StubUpstreamHandler.hold_started_event.clear()
         first_headers, first_body = self._replay_headers(organization='org-a')
@@ -301,3 +309,46 @@ class ReplayGatewayProxyTests(SimpleTestCase):
 
         self.assertEqual(winner_response.status, 200)
         self.assertEqual(winner_payload['status'], 'ok')
+
+    def test_replay_gateway_isolates_cold_lane_capacity_by_bucket(self):
+        bucket_count = 2
+        org_a = 'org-bucket-a'
+        org_b = 'org-bucket-b'
+        while stable_replay_bucket_index(organization_key=org_b, bucket_count=bucket_count) == stable_replay_bucket_index(
+            organization_key=org_a,
+            bucket_count=bucket_count,
+        ):
+            org_b += '-x'
+
+        gateway_port = self._start_gateway(
+            total_timeout=2.0,
+            idle_timeout=1.0,
+            cold_lane_slots=1,
+            cold_slice_seconds=1.0,
+            bucket_count=bucket_count,
+        )
+        _StubUpstreamHandler.hold_started_event.clear()
+        first_headers, first_body = self._replay_headers(organization=org_a)
+        first_result = {}
+
+        def _first_request():
+            connection = http.client.HTTPConnection('127.0.0.1', gateway_port, timeout=5)
+            connection.request('POST', '/registrar_venta/hold-first-byte', body=first_body, headers=first_headers)
+            response = connection.getresponse()
+            first_result['status'] = response.status
+            first_result['payload'] = json.loads(response.read().decode('utf-8'))
+
+        first_thread = threading.Thread(target=_first_request, daemon=True)
+        first_thread.start()
+        self.assertTrue(_StubUpstreamHandler.hold_started_event.wait(timeout=1.0))
+
+        second_headers, second_body = self._replay_headers(organization=org_b)
+        second_connection = http.client.HTTPConnection('127.0.0.1', gateway_port, timeout=5)
+        second_connection.request('POST', '/registrar_venta/fast', body=second_body, headers=second_headers)
+        second_response = second_connection.getresponse()
+        second_payload = json.loads(second_response.read().decode('utf-8'))
+
+        first_thread.join(timeout=2.0)
+        self.assertEqual(first_result.get('status'), 200)
+        self.assertEqual(second_response.status, 200)
+        self.assertEqual(second_payload['status'], 'ok')

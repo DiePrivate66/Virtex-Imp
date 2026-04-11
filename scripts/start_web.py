@@ -94,6 +94,7 @@ def _build_gateway_config(*, external_port: int, upstream_port: int) -> ReplayGa
                 str(max(retry_after_seconds * 3, 30)),
             )
         ),
+        replay_bucket_count=int(os.environ.get('REPLAY_GATEWAY_BUCKET_COUNT', '8')),
     )
 
 

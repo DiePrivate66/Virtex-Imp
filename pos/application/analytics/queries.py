@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -14,6 +15,7 @@ from pos.infrastructure.offline import (
     OfflineJournalRuntimeConfig,
     SegmentedJournalRuntime,
     load_snapshot_payload,
+    recent_lookup_entries_from_snapshot,
     recover_segment_prefix,
 )
 from pos.models import AccountingAdjustment, Asistencia, AuditLog, DetalleVenta, MovimientoCaja, Venta
@@ -23,6 +25,19 @@ OFFLINE_AUDIT_EVENT_TYPE_OPTIONS = (
     ('', 'Todas'),
     ('offline.segment_footer_revalidated', 'Revalidacion footer'),
     ('offline.segment_operational_review_marked', 'Revision operativa'),
+    ('offline.segment_usb_exported', 'Exportacion USB'),
+    ('offline.segment_purged_after_usb', 'Purge tras USB'),
+)
+
+OFFLINE_AUDIT_RETENTION_EVENT_TYPES = (
+    'offline.segment_usb_exported',
+    'offline.segment_purged_after_usb',
+)
+
+OFFLINE_AUDIT_RETENTION_EVENT_TYPE_OPTIONS = (
+    ('', 'Todas'),
+    ('offline.segment_usb_exported', 'Exportacion USB'),
+    ('offline.segment_purged_after_usb', 'Purge tras USB'),
 )
 
 OFFLINE_AUDIT_RESULT_OPTIONS = (
@@ -30,6 +45,14 @@ OFFLINE_AUDIT_RESULT_OPTIONS = (
     ('footer_present', 'Footer OK'),
     ('footer_missing', 'Footer faltante'),
     ('review_marked', 'Revision registrada'),
+    ('usb_exported', 'USB exportado'),
+    ('purged_after_usb', 'Purge tras USB'),
+)
+
+OFFLINE_AUDIT_RETENTION_RESULT_OPTIONS = (
+    ('', 'Todos'),
+    ('usb_exported', 'USB exportado'),
+    ('purged_after_usb', 'Purge tras USB'),
 )
 
 OFFLINE_AUDIT_TIME_WINDOW_OPTIONS = (
@@ -49,6 +72,10 @@ OFFLINE_AUDIT_SORT_OPTIONS = (
     ('recent', 'Mas recientes'),
     ('footer_missing', 'Footer missing primero'),
     ('unreviewed', 'Sin revisar primero'),
+)
+
+OFFLINE_AUDIT_RETENTION_SORT_OPTIONS = (
+    ('recent', 'Mas recientes'),
 )
 
 OFFLINE_AUDIT_BULK_EVENT_TYPE_MAP = {
@@ -179,6 +206,10 @@ def _resolve_offline_audit_result(event_type: str, payload_json: dict) -> str:
         return stored_result
     if event_type == 'offline.segment_footer_revalidated':
         return 'footer_present' if payload.get('footer_present') else 'footer_missing'
+    if event_type == 'offline.segment_usb_exported':
+        return 'usb_exported'
+    if event_type == 'offline.segment_purged_after_usb':
+        return 'purged_after_usb'
     return 'review_marked'
 
 
@@ -187,7 +218,82 @@ def _resolve_offline_audit_result_label(audit_result: str) -> str:
         'footer_present': 'FOOTER_OK',
         'footer_missing': 'FOOTER_MISSING',
         'review_marked': 'REVIEW_MARKED',
+        'usb_exported': 'USB_EXPORTED',
+        'purged_after_usb': 'PURGED_AFTER_USB',
     }.get(str(audit_result or '').strip(), 'UNKNOWN')
+
+
+def _resolve_offline_audit_event_type_label(event_type: str) -> str:
+    return {
+        'offline.segment_footer_revalidated': 'FOOTER_REVALIDATED',
+        'offline.segment_operational_review_marked': 'OPERATIONAL_REVIEW',
+        'offline.segment_usb_exported': 'USB_EXPORTED',
+        'offline.segment_purged_after_usb': 'PURGED_AFTER_USB',
+    }.get(str(event_type or '').strip(), 'OFFLINE_EVENT')
+
+
+def _resolve_offline_audit_event_type_tone(event_type: str) -> str:
+    if event_type == 'offline.segment_footer_revalidated':
+        return 'bg-sky-900/40 text-sky-300'
+    if event_type == 'offline.segment_operational_review_marked':
+        return 'bg-violet-900/40 text-violet-300'
+    if event_type == 'offline.segment_usb_exported':
+        return 'bg-emerald-900/40 text-emerald-300'
+    if event_type == 'offline.segment_purged_after_usb':
+        return 'bg-amber-900/40 text-amber-300'
+    return 'bg-gray-800 text-gray-300'
+
+
+def _build_latest_offline_segment_audit_badge(event_type: str) -> dict:
+    normalized_event_type = str(event_type or '').strip()
+    if not normalized_event_type:
+        return {
+            'label': 'SIN_AUDITLOG',
+            'tone': 'bg-gray-800 text-gray-300',
+        }
+    return {
+        'label': _resolve_offline_audit_event_type_label(normalized_event_type),
+        'tone': _resolve_offline_audit_event_type_tone(normalized_event_type),
+    }
+
+
+def _shorten_offline_retention_value(value: str, *, limit: int = 16) -> str:
+    normalized = str(value or '').strip()
+    if not normalized:
+        return 'N/A'
+    if len(normalized) <= limit:
+        return normalized
+    return f'{normalized[:limit]}...'
+
+
+def _build_offline_retention_summary(event_type: str, payload_json: dict) -> dict:
+    payload = dict(payload_json or {})
+    if event_type not in OFFLINE_AUDIT_RETENTION_EVENT_TYPES:
+        return {'applicable': False}
+
+    receipt_type = str(payload.get('receipt_type') or '').strip() or 'N/A'
+    receipt_signature = _shorten_offline_retention_value(payload.get('receipt_signature') or '')
+    reason = _shorten_offline_retention_value(payload.get('retention_reason') or '', limit=24)
+    if event_type == 'offline.segment_usb_exported':
+        detail_label = 'USB'
+        detail_value = _shorten_offline_retention_value(payload.get('usb_root') or '', limit=24)
+        meta_value = f'sig={receipt_signature}'
+    else:
+        detail_label = 'MODE'
+        detail_value = _shorten_offline_retention_value(payload.get('purge_mode') or '', limit=24)
+        override_value = 'YES' if bool(payload.get('manager_override_confirmed')) else 'NO'
+        meta_value = f'override={override_value}'
+
+    return {
+        'applicable': True,
+        'receipt_type': receipt_type,
+        'event_label': _resolve_offline_audit_event_type_label(event_type),
+        'detail_label': detail_label,
+        'detail_value': detail_value,
+        'meta_value': meta_value,
+        'reason': reason,
+        'hint': f'{receipt_type} | {detail_label}={detail_value} | {meta_value}',
+    }
 
 
 def _build_offline_audited_actions(
@@ -205,13 +311,21 @@ def _build_offline_audited_actions(
     footer_presence: str = '',
     sort_order: str = 'recent',
     critical_only: bool = False,
+    retention_only: bool = False,
 ):
+    event_types = (
+        list(OFFLINE_AUDIT_RETENTION_EVENT_TYPES)
+        if retention_only
+        else [
+            'offline.segment_footer_revalidated',
+            'offline.segment_operational_review_marked',
+            'offline.segment_usb_exported',
+            'offline.segment_purged_after_usb',
+        ]
+    )
     base_queryset = (
         AuditLog.objects.filter(
-            event_type__in=[
-                'offline.segment_footer_revalidated',
-                'offline.segment_operational_review_marked',
-            ],
+            event_type__in=event_types,
             created_at__date__gte=desde,
             created_at__date__lte=hasta,
         )
@@ -235,6 +349,11 @@ def _build_offline_audited_actions(
         .distinct()
         .order_by('actor_user__username')
     )
+    present_event_types = {
+        str(value or '').strip()
+        for value in base_queryset.values_list('event_type', flat=True).distinct()
+        if str(value or '').strip()
+    }
     segment_status_options = []
     for value in base_queryset.values_list('payload_json__segment_status', flat=True).distinct():
         normalized_value = str(value or '').strip()
@@ -281,14 +400,24 @@ def _build_offline_audited_actions(
         queryset = queryset.filter(payload_json__segment_status=normalized_segment_status)
 
     normalized_footer_presence = str(footer_presence or '').strip()
-    if normalized_footer_presence == 'present':
-        queryset = queryset.filter(payload_json__footer_present=True)
+    if retention_only:
+        normalized_footer_presence = ''
+    elif normalized_footer_presence == 'present':
+        queryset = queryset.filter(
+            event_type='offline.segment_footer_revalidated',
+            payload_json__footer_present=True,
+        )
     elif normalized_footer_presence == 'missing':
-        queryset = queryset.exclude(payload_json__footer_present=True)
+        queryset = queryset.filter(
+            event_type='offline.segment_footer_revalidated',
+        ).exclude(payload_json__footer_present=True)
     else:
         normalized_footer_presence = ''
 
     normalized_audit_result = str(audit_result or '').strip()
+    if retention_only and normalized_audit_result not in {'', 'usb_exported', 'purged_after_usb'}:
+        normalized_audit_result = ''
+
     if normalized_audit_result == 'footer_present':
         queryset = queryset.filter(
             event_type='offline.segment_footer_revalidated',
@@ -300,6 +429,10 @@ def _build_offline_audited_actions(
         ).exclude(payload_json__footer_present=True)
     elif normalized_audit_result == 'review_marked':
         queryset = queryset.filter(event_type='offline.segment_operational_review_marked')
+    elif normalized_audit_result == 'usb_exported':
+        queryset = queryset.filter(event_type='offline.segment_usb_exported')
+    elif normalized_audit_result == 'purged_after_usb':
+        queryset = queryset.filter(event_type='offline.segment_purged_after_usb')
     else:
         normalized_audit_result = ''
 
@@ -321,10 +454,10 @@ def _build_offline_audited_actions(
                 then=Value(1),
             ),
             When(
-                event_type='offline.segment_operational_review_marked',
-                then=Value(1),
+                event_type='offline.segment_footer_revalidated',
+                then=Value(0),
             ),
-            default=Value(0),
+            default=Value(1),
             output_field=IntegerField(),
         ),
         critical_priority=Case(
@@ -335,7 +468,10 @@ def _build_offline_audited_actions(
                 then=Value(0),
             ),
             When(
-                event_type='offline.segment_operational_review_marked',
+                event_type='offline.segment_footer_revalidated',
+                then=Value(1),
+            ),
+            When(
                 payload_json__segment_status='sealed',
                 then=Value(0),
             ),
@@ -354,6 +490,25 @@ def _build_offline_audited_actions(
 
     items = [_decorate_offline_audit_item(item) for item in queryset[:10]]
 
+    if retention_only:
+        action_type_options = tuple(
+            option
+            for option in OFFLINE_AUDIT_RETENTION_EVENT_TYPE_OPTIONS
+            if not option[0] or option[0] in present_event_types
+        )
+        result_options = tuple(
+            option
+            for option in OFFLINE_AUDIT_RETENTION_RESULT_OPTIONS
+            if (
+                not option[0]
+                or (option[0] == 'usb_exported' and 'offline.segment_usb_exported' in present_event_types)
+                or (option[0] == 'purged_after_usb' and 'offline.segment_purged_after_usb' in present_event_types)
+            )
+        )
+    else:
+        action_type_options = OFFLINE_AUDIT_EVENT_TYPE_OPTIONS
+        result_options = OFFLINE_AUDIT_RESULT_OPTIONS
+
     return {
         'queryset': queryset,
         'items': items,
@@ -368,19 +523,74 @@ def _build_offline_audited_actions(
         'selected_footer_presence': normalized_footer_presence,
         'selected_sort_order': normalized_sort_order,
         'time_window_options': OFFLINE_AUDIT_TIME_WINDOW_OPTIONS,
-        'action_type_options': OFFLINE_AUDIT_EVENT_TYPE_OPTIONS,
+        'action_type_options': action_type_options,
         'organization_options': organization_options,
         'location_options': location_options,
         'actor_options': actor_options,
         'segment_status_options': segment_status_options,
-        'audit_result_options': OFFLINE_AUDIT_RESULT_OPTIONS,
+        'audit_result_options': result_options,
         'footer_presence_options': OFFLINE_AUDIT_FOOTER_PRESENCE_OPTIONS,
-        'sort_options': OFFLINE_AUDIT_SORT_OPTIONS,
+        'sort_options': (
+            OFFLINE_AUDIT_RETENTION_SORT_OPTIONS
+            if retention_only
+            else OFFLINE_AUDIT_SORT_OPTIONS
+        ),
         'critical_only': bool(critical_only),
+        'retention_only': bool(retention_only),
     }
 
 
 def _build_offline_audit_context_fields(offline_audit_bundle: dict) -> dict:
+    retention_only = offline_audit_bundle['retention_only']
+    selected_segment_id = offline_audit_bundle['selected_segment_id']
+    action_type_options = offline_audit_bundle['action_type_options']
+    organization_options = offline_audit_bundle['organization_options']
+    location_options = offline_audit_bundle['location_options']
+    actor_options = offline_audit_bundle['actor_options']
+    result_options = offline_audit_bundle['audit_result_options']
+    distinct_target_ids = list(
+        offline_audit_bundle['queryset']
+        .values_list('target_id', flat=True)
+        .distinct()[:2]
+    )
+    distinct_location_keys = {
+        str(item.location_id or item.organization_id or '').strip()
+        for item in offline_audit_bundle['items']
+        if str(item.location_id or item.organization_id or '').strip()
+    }
+    distinct_actor_keys = {
+        str(item.actor_user_id or '').strip()
+        for item in offline_audit_bundle['items']
+        if str(item.actor_user_id or '').strip()
+    }
+    distinct_status_values = {
+        str(value or '').strip()
+        for value in offline_audit_bundle['queryset'].values_list('payload_json__segment_status', flat=True).distinct()
+        if str(value or '').strip()
+    }
+    distinct_result_values = {
+        _resolve_offline_audit_result(str(event_type or '').strip(), {'audit_result': stored_result})
+        for event_type, stored_result in offline_audit_bundle['queryset'].values_list(
+            'event_type',
+            'payload_json__audit_result',
+        ).distinct()
+        if str(event_type or '').strip()
+    }
+    hide_segment_drilldown_filters = (
+        retention_only
+        and bool(selected_segment_id)
+        and len(distinct_target_ids) <= 1
+    )
+    show_segment_id_filter = not hide_segment_drilldown_filters
+    show_time_window_filter = not hide_segment_drilldown_filters
+    show_type_filter = not retention_only or sum(1 for value, _label in action_type_options if value) > 1
+    show_organization_filter = not retention_only or len(organization_options) > 1
+    show_location_filter = not retention_only or len(location_options) > 1
+    show_actor_filter = not retention_only or len(actor_options) > 1
+    show_segment_status_filter = not retention_only
+    show_result_filter = not retention_only or sum(1 for value, _label in result_options if value) > 1
+    show_footer_presence_filter = not retention_only
+    show_sort_filter = not retention_only
     return {
         'offline_audited_actions': offline_audit_bundle['items'],
         'offline_audited_actions_count': offline_audit_bundle['queryset'].count(),
@@ -404,6 +614,55 @@ def _build_offline_audit_context_fields(offline_audit_bundle: dict) -> dict:
         'offline_audited_action_footer_presence_options': offline_audit_bundle['footer_presence_options'],
         'offline_audited_action_sort_options': offline_audit_bundle['sort_options'],
         'offline_audited_actions_critical_only': offline_audit_bundle['critical_only'],
+        'offline_audited_actions_retention_only': retention_only,
+        'offline_audited_actions_single_segment_drilldown': hide_segment_drilldown_filters,
+        'offline_audited_actions_drilldown_segment_id': (
+            str(distinct_target_ids[0] or '').strip() if hide_segment_drilldown_filters and distinct_target_ids else ''
+        ),
+        'offline_audited_actions_show_segment_id_filter': show_segment_id_filter,
+        'offline_audited_actions_show_time_window_filter': show_time_window_filter,
+        'offline_audited_actions_show_type_filter': show_type_filter,
+        'offline_audited_actions_show_organization_filter': show_organization_filter,
+        'offline_audited_actions_show_location_filter': show_location_filter,
+        'offline_audited_actions_show_actor_filter': show_actor_filter,
+        'offline_audited_actions_show_segment_status_filter': show_segment_status_filter,
+        'offline_audited_actions_show_result_filter': show_result_filter,
+        'offline_audited_actions_show_footer_presence_filter': show_footer_presence_filter,
+        'offline_audited_actions_show_sort_filter': show_sort_filter,
+        'offline_audited_actions_show_filter_form': any(
+            (
+                show_segment_id_filter,
+                show_time_window_filter,
+                show_type_filter,
+                show_organization_filter,
+                show_location_filter,
+                show_actor_filter,
+                show_segment_status_filter,
+                show_result_filter,
+                show_footer_presence_filter,
+                show_sort_filter,
+            )
+        ),
+        'offline_audited_actions_show_status_column': not (
+            retention_only
+            and hide_segment_drilldown_filters
+            and len(distinct_status_values) <= 1
+        ),
+        'offline_audited_actions_show_result_column': not (
+            retention_only
+            and hide_segment_drilldown_filters
+            and len(distinct_result_values) <= 1
+        ),
+        'offline_audited_actions_show_actor_column': not (
+            retention_only
+            and hide_segment_drilldown_filters
+            and len(distinct_actor_keys) <= 1
+        ),
+        'offline_audited_actions_show_location_column': not (
+            retention_only
+            and hide_segment_drilldown_filters
+            and len(distinct_location_keys) <= 1
+        ),
     }
 
 
@@ -411,6 +670,9 @@ def _decorate_offline_audit_item(item):
     item.offline_segment_status = str((item.payload_json or {}).get('segment_status') or '').strip()
     item.offline_audit_result = _resolve_offline_audit_result(item.event_type, item.payload_json)
     item.offline_audit_result_label = _resolve_offline_audit_result_label(item.offline_audit_result)
+    item.offline_event_type_label = _resolve_offline_audit_event_type_label(item.event_type)
+    item.offline_event_type_tone = _resolve_offline_audit_event_type_tone(item.event_type)
+    item.offline_retention_summary = _build_offline_retention_summary(item.event_type, item.payload_json)
     item.offline_is_critical = bool(getattr(item, 'critical_priority', 0))
     return item
 
@@ -421,6 +683,7 @@ def _serialize_offline_audit_item(item) -> dict:
         'audit_log_id': item.id,
         'created_at': timezone.localtime(item.created_at).isoformat(),
         'event_type': item.event_type,
+        'event_type_label': item.offline_event_type_label,
         'segment_id': str(item.target_id or ''),
         'target_model': str(item.target_model or ''),
         'segment_status': item.offline_segment_status,
@@ -435,6 +698,7 @@ def _serialize_offline_audit_item(item) -> dict:
         'actor_username': item.actor_user.username if item.actor_user_id and item.actor_user else '',
         'critical': bool(item.offline_is_critical),
         'segment_has_review': bool(getattr(item, 'segment_has_review', False)),
+        'retention_summary': item.offline_retention_summary,
     }
 
 
@@ -619,6 +883,181 @@ def build_offline_critical_incidents_context(
     }
     context.update(_build_offline_audit_context_fields(offline_audit_bundle))
     return context
+
+
+def build_offline_retention_actions_context(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_action_segment_id: str = '',
+    offline_action_time_window: str = '',
+    offline_action_type: str = '',
+    offline_action_organization: str = '',
+    offline_action_location: str = '',
+    offline_action_actor: str = '',
+    offline_action_segment_status: str = '',
+    offline_action_result: str = '',
+    offline_action_sort: str = 'recent',
+):
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    offline_audit_bundle = _build_offline_audited_actions(
+        desde,
+        hasta,
+        segment_id=offline_action_segment_id,
+        time_window=offline_action_time_window,
+        action_type=offline_action_type,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+        segment_status=offline_action_segment_status,
+        audit_result=offline_action_result,
+        sort_order=offline_action_sort,
+        critical_only=False,
+        retention_only=True,
+    )
+    context = {
+        'periodo': periodo,
+        'desde': desde,
+        'hasta': hasta,
+        'periods': [('hoy', 'Hoy'), ('semana', '7 dias'), ('mes', '30 dias')],
+        'offline_retention_actions_count': offline_audit_bundle['queryset'].count(),
+    }
+    context.update(_build_offline_audit_context_fields(offline_audit_bundle))
+    return context
+
+
+def build_offline_audited_actions_export_payload(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_action_segment_id: str = '',
+    offline_action_time_window: str = '',
+    offline_action_type: str = '',
+    offline_action_organization: str = '',
+    offline_action_location: str = '',
+    offline_action_actor: str = '',
+    offline_action_segment_status: str = '',
+    offline_action_result: str = '',
+    offline_action_footer_presence: str = '',
+    offline_action_sort: str = 'recent',
+) -> dict:
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    offline_audit_bundle = _build_offline_audited_actions(
+        desde,
+        hasta,
+        segment_id=offline_action_segment_id,
+        time_window=offline_action_time_window,
+        action_type=offline_action_type,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+        segment_status=offline_action_segment_status,
+        audit_result=offline_action_result,
+        footer_presence=offline_action_footer_presence,
+        sort_order=offline_action_sort,
+        critical_only=False,
+    )
+    items = [_decorate_offline_audit_item(item) for item in offline_audit_bundle['queryset']]
+    return {
+        'periodo': periodo,
+        'desde': str(desde),
+        'hasta': str(hasta),
+        'critical_only': False,
+        'sort_order': offline_audit_bundle['selected_sort_order'],
+        'count': len(items),
+        'items': [_serialize_offline_audit_item(item) for item in items],
+    }
+
+
+def build_offline_retention_actions_export_payload(
+    periodo: str = 'semana',
+    desde_param=None,
+    hasta_param=None,
+    offline_action_segment_id: str = '',
+    offline_action_time_window: str = '',
+    offline_action_type: str = '',
+    offline_action_organization: str = '',
+    offline_action_location: str = '',
+    offline_action_actor: str = '',
+    offline_action_segment_status: str = '',
+    offline_action_result: str = '',
+    offline_action_sort: str = 'recent',
+) -> dict:
+    hoy = timezone.localdate()
+    desde, hasta = _resolve_period(periodo, hoy, desde_param, hasta_param)
+    offline_audit_bundle = _build_offline_audited_actions(
+        desde,
+        hasta,
+        segment_id=offline_action_segment_id,
+        time_window=offline_action_time_window,
+        action_type=offline_action_type,
+        organization_id=offline_action_organization,
+        location_id=offline_action_location,
+        actor_id=offline_action_actor,
+        segment_status=offline_action_segment_status,
+        audit_result=offline_action_result,
+        sort_order=offline_action_sort,
+        critical_only=False,
+        retention_only=True,
+    )
+    items = [_decorate_offline_audit_item(item) for item in offline_audit_bundle['queryset']]
+    return {
+        'periodo': periodo,
+        'desde': str(desde),
+        'hasta': str(hasta),
+        'critical_only': False,
+        'retention_only': True,
+        'sort_order': offline_audit_bundle['selected_sort_order'],
+        'count': len(items),
+        'items': [_serialize_offline_audit_item(item) for item in items],
+    }
+
+
+def build_offline_retention_receipt_payload(audit_log_id='') -> dict:
+    normalized_audit_log_id = str(audit_log_id or '').strip()
+    if not normalized_audit_log_id:
+        raise ValueError('audit_log_id requerido')
+    try:
+        resolved_audit_log_id = int(normalized_audit_log_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('audit_log_id invalido') from exc
+    if resolved_audit_log_id <= 0:
+        raise ValueError('audit_log_id invalido')
+
+    item = (
+        AuditLog.objects.filter(
+            id=resolved_audit_log_id,
+            event_type__in=OFFLINE_AUDIT_RETENTION_EVENT_TYPES,
+        )
+        .select_related('organization', 'location', 'actor_user')
+        .first()
+    )
+    if not item:
+        raise ValueError('No existe un AuditLog de retencion offline con ese id.')
+
+    payload = dict(item.payload_json or {})
+    retention_summary = _build_offline_retention_summary(item.event_type, payload)
+    return {
+        'audit_log_id': item.id,
+        'created_at': timezone.localtime(item.created_at).isoformat(),
+        'event_type': item.event_type,
+        'event_type_label': _resolve_offline_audit_event_type_label(item.event_type),
+        'segment_id': str(item.target_id or '').strip(),
+        'target_model': str(item.target_model or '').strip(),
+        'segment_status': str(payload.get('segment_status') or '').strip(),
+        'audit_result': _resolve_offline_audit_result(item.event_type, payload),
+        'organization_id': item.organization_id,
+        'organization_name': item.organization.name if item.organization_id and item.organization else '',
+        'location_id': item.location_id,
+        'location_name': item.location.name if item.location_id and item.location else '',
+        'actor_user_id': item.actor_user_id,
+        'actor_username': item.actor_user.username if item.actor_user_id and item.actor_user else '',
+        'retention_summary': retention_summary,
+        'retention_hint': retention_summary.get('hint', ''),
+        'payload_json': payload,
+    }
 
 
 def build_offline_critical_incidents_export_payload(
@@ -849,6 +1288,11 @@ def build_offline_bulk_run_detail_payload(audit_log_id='', batch_id='', correlat
         'offline.segment_bulk_review_marked': 'REVISION_MASIVA',
     }.get(item.event_type, item.event_type)
     item.bulk_is_selected = True
+    _apply_offline_bulk_retention_state(
+        item,
+        payload,
+        _build_latest_offline_retention_by_segment(_extract_offline_bulk_segment_ids(payload)),
+    )
 
     serialized = _serialize_offline_bulk_run(item)
     serialized.update(
@@ -946,7 +1390,23 @@ def _build_offline_bulk_audit_runs(
         queryset = queryset.filter(correlation_id__icontains=normalized_correlation_id)
     items = []
     selected_run = None
-    for item in queryset.order_by('-created_at'):
+    candidate_items = list(queryset.order_by('-created_at'))
+    all_segment_ids = []
+    seen_segment_ids = set()
+    item_segment_ids_map = {}
+    for item in candidate_items:
+        payload = dict(item.payload_json or {})
+        segment_ids = _extract_offline_bulk_segment_ids(payload)
+        item_segment_ids_map[item.id] = segment_ids
+        for segment_id in segment_ids:
+            if segment_id in seen_segment_ids:
+                continue
+            seen_segment_ids.add(segment_id)
+            all_segment_ids.append(segment_id)
+
+    latest_retention_by_segment = _build_latest_offline_retention_by_segment(all_segment_ids)
+
+    for item in candidate_items:
         payload = dict(item.payload_json or {})
         item.bulk_processed = int(payload.get('processed') or 0)
         item.bulk_succeeded = int(payload.get('succeeded') or 0)
@@ -966,6 +1426,7 @@ def _build_offline_bulk_audit_runs(
                 and str(item.correlation_id or '').strip() == normalized_correlation_id
             )
         )
+        _apply_offline_bulk_retention_state(item, payload, latest_retention_by_segment)
         if item.bulk_is_selected:
             selected_run = item
         items.append(item)
@@ -1098,6 +1559,238 @@ def _serialize_offline_bulk_run(item):
         'location_name': item.location.name if item.location_id and item.location else '',
         'actor_username': item.actor_user.username if item.actor_user_id and item.actor_user else '',
         'selected': bool(getattr(item, 'bulk_is_selected', False)),
+        'retention_hint': str(getattr(item, 'bulk_retention_hint', '') or ''),
+        'retention_receipt_audit_log_id': int(getattr(item, 'bulk_retention_receipt_audit_log_id', 0) or 0),
+    }
+
+
+def _extract_offline_bulk_segment_ids(payload: dict) -> list[str]:
+    segment_ids = []
+    seen = set()
+
+    def push(raw_segment_id):
+        normalized = str(raw_segment_id or '').strip()
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        segment_ids.append(normalized)
+
+    payload = dict(payload or {})
+    for raw_segment_id in payload.get('segment_ids') or []:
+        push(raw_segment_id)
+    for raw_segment_id in payload.get('successful_segment_ids') or []:
+        push(raw_segment_id)
+    for raw_segment_id in payload.get('failed_segment_ids') or []:
+        push(raw_segment_id)
+    for item in payload.get('failed_details') or []:
+        push((item or {}).get('segment_id'))
+    return segment_ids
+
+
+def _build_latest_offline_retention_by_segment(segment_ids: list[str]) -> dict[str, AuditLog]:
+    normalized_segment_ids = []
+    seen = set()
+    for raw_segment_id in segment_ids or []:
+        normalized = str(raw_segment_id or '').strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        normalized_segment_ids.append(normalized)
+
+    latest_retention_by_segment = {}
+    if not normalized_segment_ids:
+        return latest_retention_by_segment
+
+    for audit in (
+        AuditLog.objects.filter(
+            target_model='OfflineJournalSegment',
+            target_id__in=normalized_segment_ids,
+            event_type__in=OFFLINE_AUDIT_RETENTION_EVENT_TYPES,
+        )
+        .order_by('target_id', '-created_at', '-id')
+    ):
+        if audit.target_id not in latest_retention_by_segment:
+            latest_retention_by_segment[audit.target_id] = audit
+    return latest_retention_by_segment
+
+
+def _build_latest_offline_segment_audit_by_segment(segment_ids: list[str]) -> dict[str, AuditLog]:
+    normalized_segment_ids = []
+    seen = set()
+    for raw_segment_id in segment_ids or []:
+        normalized = str(raw_segment_id or '').strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        normalized_segment_ids.append(normalized)
+
+    latest_audit_by_segment = {}
+    if not normalized_segment_ids:
+        return latest_audit_by_segment
+
+    for audit in (
+        AuditLog.objects.filter(
+            target_model='OfflineJournalSegment',
+            target_id__in=normalized_segment_ids,
+        )
+        .order_by('target_id', '-created_at', '-id')
+    ):
+        if audit.target_id not in latest_audit_by_segment:
+            latest_audit_by_segment[audit.target_id] = audit
+    return latest_audit_by_segment
+
+
+def _build_offline_bulk_retention_hint(segment_ids: list[str], latest_retention_by_segment: dict[str, AuditLog]) -> str:
+    if not segment_ids:
+        return ''
+
+    labels = Counter()
+    for segment_id in segment_ids:
+        audit = latest_retention_by_segment.get(segment_id)
+        if not audit:
+            continue
+        labels[_resolve_offline_audit_event_type_label(audit.event_type)] += 1
+
+    if not labels:
+        return ''
+    return '; '.join(f'{label} x{count}' for label, count in sorted(labels.items()))
+
+
+def _apply_offline_bulk_retention_state(item, payload: dict, latest_retention_by_segment: dict[str, AuditLog]) -> list[str]:
+    segment_ids = _extract_offline_bulk_segment_ids(payload)
+    item.bulk_retention_hint = _build_offline_bulk_retention_hint(segment_ids, latest_retention_by_segment)
+    retention_audit_ids = {
+        int(audit.id)
+        for segment_id in segment_ids
+        for audit in [latest_retention_by_segment.get(segment_id)]
+        if audit is not None
+    }
+    item.bulk_retention_receipt_audit_log_id = (
+        next(iter(retention_audit_ids))
+        if len(retention_audit_ids) == 1
+        else 0
+    )
+    return segment_ids
+
+
+def _empty_offline_projection_status(*, window_hours: int) -> dict:
+    return {
+        'available': False,
+        'mode': 'journal_only',
+        'db_path': '',
+        'window_hours': max(1, int(window_hours or 24)),
+        'reason': '',
+        'row_count': 0,
+        'last_event_id': '',
+        'last_record_hash': '',
+        'last_segment_id': '',
+        'projected_at': '',
+        'disk_free_bytes': 0,
+    }
+
+
+def _build_offline_sidecar_status(
+    *,
+    snapshot_path: Path | None,
+    snapshot: dict | None,
+    configured_max_bytes: int,
+) -> dict:
+    normalized_snapshot = dict(snapshot or {})
+    effective_max_bytes = max(
+        1024,
+        int(normalized_snapshot.get('sidecar_max_bytes') or configured_max_bytes or 64 * 1024),
+    )
+    current_bytes = int(snapshot_path.stat().st_size) if snapshot_path and snapshot_path.exists() else 0
+    recent_lookup_capacity = max(1, int(normalized_snapshot.get('recent_lookup_ring_capacity') or 50))
+    recent_lookup_count = max(
+        0,
+        min(int(normalized_snapshot.get('recent_lookup_ring_count') or 0), recent_lookup_capacity),
+    )
+    return {
+        'format_version': str(normalized_snapshot.get('sidecar_format_version') or 'fixed_v1'),
+        'max_bytes': effective_max_bytes,
+        'current_bytes': current_bytes,
+        'usage_percent': round((current_bytes / effective_max_bytes) * 100, 2) if effective_max_bytes else 0.0,
+        'recent_lookup_count': recent_lookup_count,
+        'recent_lookup_capacity': recent_lookup_capacity,
+        'verify_path_available': bool(normalized_snapshot.get('verify_path_available', False)),
+        'last_verify_status': str(normalized_snapshot.get('last_verify_status') or 'unknown'),
+        'last_verify_error': str(normalized_snapshot.get('last_verify_error') or ''),
+    }
+
+
+def _build_offline_retention_status(*, root_dir: Path, snapshot: dict | None) -> dict:
+    receipts_dir = Path(root_dir) / 'receipts'
+    all_receipt_files = sorted(receipts_dir.glob('*.json')) if receipts_dir.exists() else []
+    purge_receipt_files = [path for path in all_receipt_files if path.name.startswith('purge_receipt-')]
+    usb_export_receipt_files = [path for path in all_receipt_files if path.name.startswith('usb_export_receipt-')]
+    latest_receipt_at = ''
+    if all_receipt_files:
+        latest_timestamp = max(path.stat().st_mtime for path in all_receipt_files)
+        latest_receipt_at = timezone.localtime(
+            datetime.fromtimestamp(latest_timestamp, tz=timezone.get_current_timezone())
+        ).isoformat()
+
+    normalized_snapshot = dict(snapshot or {})
+    snapshot_receipts = dict(normalized_snapshot.get('receipts') or {})
+    return {
+        'receipts_dir': str(receipts_dir),
+        'receipt_files_count': len(all_receipt_files),
+        'purge_receipt_files_count': len(purge_receipt_files),
+        'usb_export_receipt_files_count': len(usb_export_receipt_files),
+        'latest_receipt_at': latest_receipt_at,
+        'current_segment_purge_receipts_count': len(list(snapshot_receipts.get('purge') or [])),
+        'current_segment_usb_export_receipts_count': len(list(snapshot_receipts.get('usb_export') or [])),
+    }
+
+
+def _build_offline_segment_retention_state(
+    *,
+    root_dir: Path,
+    snapshot: dict | None,
+    segment_id: str,
+) -> dict:
+    normalized_snapshot = dict(snapshot or {})
+    snapshot_receipts = dict(normalized_snapshot.get('receipts') or {})
+    purge_receipts = list(snapshot_receipts.get('purge') or [])
+    usb_export_receipts = list(snapshot_receipts.get('usb_export') or [])
+    latest_usb_export_receipt = dict(usb_export_receipts[-1] or {}) if usb_export_receipts else {}
+    latest_purge_receipt = dict(purge_receipts[-1] or {}) if purge_receipts else {}
+
+    active_segment_id = ''
+    active_segment_is_open = False
+    try:
+        limbo_context = build_offline_limbo_context()
+        active_segment_id = str((limbo_context.get('limbo') or {}).get('segment_id') or '').strip()
+        active_segment_is_open = not bool((limbo_context.get('limbo') or {}).get('sealed'))
+    except Exception:
+        active_segment_id = ''
+        active_segment_is_open = False
+
+    is_active_segment = active_segment_is_open and active_segment_id == segment_id
+    allow_export_usb = not is_active_segment
+    allow_purge_after_usb = False
+    purge_after_usb_block_reason = ''
+    if is_active_segment:
+        purge_after_usb_block_reason = 'El segmento activo no puede purgarse desde esta vista.'
+    elif latest_purge_receipt:
+        purge_after_usb_block_reason = 'El segmento ya tiene un purge_receipt local.'
+    elif not latest_usb_export_receipt:
+        purge_after_usb_block_reason = 'Requiere usb_export_receipt valido antes de habilitar purge.'
+    else:
+        allow_purge_after_usb = True
+
+    return {
+        'receipts_dir': str(Path(root_dir) / 'receipts'),
+        'purge_receipts_count': len(purge_receipts),
+        'usb_export_receipts_count': len(usb_export_receipts),
+        'latest_usb_export_receipt': latest_usb_export_receipt,
+        'latest_purge_receipt': latest_purge_receipt,
+        'is_active_segment': is_active_segment,
+        'allow_export_usb': allow_export_usb,
+        'allow_purge_after_usb': allow_purge_after_usb,
+        'purge_after_usb_requires_manager_override': True,
+        'purge_after_usb_block_reason': purge_after_usb_block_reason,
     }
 
 
@@ -1109,6 +1802,9 @@ def build_offline_limbo_context() -> dict:
     recent_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50)))
     history_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_HISTORY_LIMIT', 5)))
     segment_max_bytes = int(getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024))
+    sidecar_max_bytes = int(getattr(settings, 'OFFLINE_JOURNAL_SIDECAR_MAX_BYTES', 64 * 1024))
+    projection_window_hours = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS', 24)))
+    receipts_dir = str(Path(root_value) / 'receipts') if root_value else ''
 
     context = {
         'offline_journal_enabled': enabled,
@@ -1117,6 +1813,28 @@ def build_offline_limbo_context() -> dict:
         'root_dir': root_value,
         'status': 'disabled' if not enabled else 'ready',
         'detail': '',
+        'runtime_mode': 'journal_only',
+        'projection': _empty_offline_projection_status(window_hours=projection_window_hours),
+        'sidecar': {
+            'format_version': 'fixed_v1',
+            'max_bytes': sidecar_max_bytes,
+            'current_bytes': 0,
+            'usage_percent': 0.0,
+            'recent_lookup_count': 0,
+            'recent_lookup_capacity': 50,
+            'verify_path_available': False,
+            'last_verify_status': 'unknown',
+            'last_verify_error': '',
+        },
+        'retention': {
+            'receipts_dir': receipts_dir,
+            'receipt_files_count': 0,
+            'purge_receipt_files_count': 0,
+            'usb_export_receipt_files_count': 0,
+            'latest_receipt_at': '',
+            'current_segment_purge_receipts_count': 0,
+            'current_segment_usb_export_receipts_count': 0,
+        },
         'limbo': {
             'segment_id': '',
             'segment_path': '',
@@ -1171,10 +1889,17 @@ def build_offline_limbo_context() -> dict:
                 stream_name=stream_name,
                 segment_max_bytes=getattr(settings, 'OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', 100 * 1024 * 1024),
                 limbo_recent_limit=recent_limit,
+                sidecar_max_bytes=sidecar_max_bytes,
+                projection_window_hours=projection_window_hours,
             )
         )
         limbo = runtime.get_limbo_view()
         context['limbo'] = limbo
+        projection_status = dict(limbo.get('projection') or _empty_offline_projection_status(window_hours=projection_window_hours))
+        context['projection'] = projection_status
+        context['runtime_mode'] = str(
+            limbo.get('mode') or ('healthy' if projection_status.get('available') else 'journal_only')
+        )
         context['sealed_segments'] = _build_sealed_segment_history(
             root_dir=root_dir,
             stream_name=stream_name,
@@ -1185,15 +1910,45 @@ def build_offline_limbo_context() -> dict:
             ),
             limit=history_limit,
         )
+        latest_audit_by_segment = _build_latest_offline_segment_audit_by_segment(
+            [str(limbo.get('segment_id') or '').strip()]
+            + [str(item.get('segment_id') or '').strip() for item in context['sealed_segments']]
+        )
+        limbo_segment_id = str(limbo.get('segment_id') or '').strip()
+        if limbo_segment_id:
+            latest_audit = latest_audit_by_segment.get(limbo_segment_id)
+            context['limbo']['latest_audit_log_id'] = int(latest_audit.id) if latest_audit else 0
+            context['limbo']['latest_audit_log_event_type'] = str(latest_audit.event_type or '') if latest_audit else ''
+            context['limbo']['latest_audit_badge'] = _build_latest_offline_segment_audit_badge(
+                context['limbo']['latest_audit_log_event_type']
+            )
+        else:
+            context['limbo']['latest_audit_log_id'] = 0
+            context['limbo']['latest_audit_log_event_type'] = ''
+            context['limbo']['latest_audit_badge'] = _build_latest_offline_segment_audit_badge('')
+        for item in context['sealed_segments']:
+            latest_audit = latest_audit_by_segment.get(str(item.get('segment_id') or '').strip())
+            item['latest_audit_log_id'] = int(latest_audit.id) if latest_audit else 0
+            item['latest_audit_log_event_type'] = str(latest_audit.event_type or '') if latest_audit else ''
+            item['latest_audit_badge'] = _build_latest_offline_segment_audit_badge(
+                item['latest_audit_log_event_type']
+            )
         segment_path_value = str(limbo.get('segment_path') or '').strip()
+        snapshot_path_value = str(limbo.get('snapshot_path') or '').strip()
+        snapshot_path = Path(snapshot_path_value) if snapshot_path_value else None
+        snapshot = load_snapshot_payload(snapshot_path) if snapshot_path and snapshot_path.exists() else {}
+        context['sidecar'] = _build_offline_sidecar_status(
+            snapshot_path=snapshot_path,
+            snapshot=snapshot,
+            configured_max_bytes=sidecar_max_bytes,
+        )
+        context['retention'] = _build_offline_retention_status(root_dir=root_dir, snapshot=snapshot)
         if not segment_path_value:
             context['status'] = 'empty'
             context['detail'] = 'No hay segmentos activos para este stream.'
             return context
 
         segment_path = Path(segment_path_value)
-        snapshot_path = Path(str(limbo.get('snapshot_path') or '').strip())
-        snapshot = load_snapshot_payload(snapshot_path)
         recovery = recover_segment_prefix(segment_path)
         context['segment_health'] = {
             'truncated_tail': recovery.truncated_tail,
@@ -1396,10 +2151,37 @@ def build_offline_segment_detail_payload(segment_id: str) -> dict:
     snapshot = load_snapshot_payload(snapshot_path)
     recovery = recover_segment_prefix(segment_path)
     recent_limit = max(1, int(getattr(settings, 'OFFLINE_JOURNAL_LIMBO_RECENT_LIMIT', 50)))
-    summary = snapshot.get('summary') or rebuild_limbo_summary_from_records(
+    base_summary = snapshot.get('summary') or rebuild_limbo_summary_from_records(
         recovery.records,
         limbo_recent_limit=recent_limit,
+        segment_id=normalized_segment_id,
     )
+    recent_lookup = recent_lookup_entries_from_snapshot(snapshot, limit=recent_limit)
+    summary = {
+        **base_summary,
+        'recent_sales': [
+            {
+                'event_id': str(entry.get('event_id') or ''),
+                'created_at': entry.get('created_at'),
+                'client_transaction_id': str(entry.get('client_transaction_id') or ''),
+                'queue_session_id': str(entry.get('queue_session_id') or ''),
+                'session_seq_no': entry.get('session_seq_no'),
+                'sale_total': str(entry.get('sale_total') or '0.00'),
+                'payment_status': str(entry.get('status') or ''),
+                'payment_reference': str(entry.get('payment_reference') or ''),
+                'display_name': str(entry.get('display_name_truncated') or ''),
+                'ticket_number': str(entry.get('ticket_number') or ''),
+                'segment_id': str(entry.get('segment_id') or ''),
+                'offset': int(entry.get('offset') or 0),
+            }
+            for entry in recent_lookup
+        ],
+        'recent_lookup_count': min(
+            int(snapshot.get('recent_lookup_ring_count') or 0),
+            int(snapshot.get('recent_lookup_ring_capacity') or recent_limit),
+        ),
+        'recent_lookup_capacity': int(snapshot.get('recent_lookup_ring_capacity') or recent_limit),
+    }
 
     if recovery.truncated_tail or recovery.corrupted_tail:
         status = 'integrity_error'
@@ -1414,10 +2196,17 @@ def build_offline_segment_detail_payload(segment_id: str) -> dict:
         status = 'open'
         detail = 'El segmento aun no esta sellado.'
 
+    latest_audit = _build_latest_offline_segment_audit_by_segment([normalized_segment_id]).get(normalized_segment_id)
+
     return {
         'segment_id': normalized_segment_id,
         'segment_path': str(segment_path),
         'snapshot_path': str(snapshot_path),
+        'latest_audit_log_id': int(latest_audit.id) if latest_audit else 0,
+        'latest_audit_log_event_type': str(latest_audit.event_type or '') if latest_audit else '',
+        'latest_audit_badge': _build_latest_offline_segment_audit_badge(
+            str(latest_audit.event_type or '') if latest_audit else ''
+        ),
         'status': status,
         'detail': detail,
         'record_count': recovery.record_count,
@@ -1439,8 +2228,34 @@ def build_offline_segment_detail_payload(segment_id: str) -> dict:
         'ops_metadata': {
             'operational_review': dict((snapshot.get('ops_metadata') or {}).get('operational_review') or {}),
             'last_footer_revalidation': dict((snapshot.get('ops_metadata') or {}).get('last_footer_revalidation') or {}),
+            'last_usb_export': dict((snapshot.get('ops_metadata') or {}).get('last_usb_export') or {}),
         },
+        'retention': _build_offline_segment_retention_state(
+            root_dir=root_dir,
+            snapshot=snapshot,
+            segment_id=normalized_segment_id,
+        ),
         'summary': summary,
+        'recent_lookup_ring': [
+            {
+                'event_id': str(entry.get('event_id') or ''),
+                'client_transaction_id': str(entry.get('client_transaction_id') or ''),
+                'ticket_number': str(entry.get('ticket_number') or ''),
+                'payment_reference': str(entry.get('payment_reference') or ''),
+                'segment_id': str(entry.get('segment_id') or ''),
+                'offset': int(entry.get('offset') or 0),
+                'status': str(entry.get('status') or ''),
+                'sale_total': str(entry.get('sale_total') or '0.00'),
+                'created_at': str(entry.get('created_at') or ''),
+                'display_name_truncated': str(entry.get('display_name_truncated') or ''),
+                'queue_session_id': str(entry.get('queue_session_id') or ''),
+                'session_seq_no': entry.get('session_seq_no'),
+            }
+            for entry in recent_lookup_entries_from_snapshot(snapshot)
+        ],
+        'verify_path_available': bool(snapshot.get('verify_path_available', True)),
+        'last_verify_status': str(snapshot.get('last_verify_status') or 'unknown'),
+        'last_verify_error': str(snapshot.get('last_verify_error') or ''),
         'segment_health': {
             'truncated_tail': recovery.truncated_tail,
             'corrupted_tail': recovery.corrupted_tail,

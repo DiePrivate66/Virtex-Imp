@@ -76,6 +76,36 @@ urlpatterns = [
 
     # Analytics
     path('dashboard/', analytics_views.dashboard_analytics, name='dashboard_analytics'),
+    path(
+        'dashboard/offline-audited-actions/export.json',
+        analytics_views.dashboard_offline_audited_actions_export_json,
+        name='dashboard_offline_audited_actions_export_json',
+    ),
+    path(
+        'dashboard/offline-audited-actions/export.csv',
+        analytics_views.dashboard_offline_audited_actions_export_csv,
+        name='dashboard_offline_audited_actions_export_csv',
+    ),
+    path(
+        'dashboard/retencion-offline/',
+        analytics_views.dashboard_offline_retention,
+        name='dashboard_offline_retention',
+    ),
+    path(
+        'dashboard/retencion-offline/export.json',
+        analytics_views.dashboard_offline_retention_export_json,
+        name='dashboard_offline_retention_export_json',
+    ),
+    path(
+        'dashboard/retencion-offline/export.csv',
+        analytics_views.dashboard_offline_retention_export_csv,
+        name='dashboard_offline_retention_export_csv',
+    ),
+    path(
+        'dashboard/retencion-offline/receipt.json',
+        analytics_views.dashboard_offline_retention_receipt_json,
+        name='dashboard_offline_retention_receipt_json',
+    ),
     path('dashboard/incidentes-offline/', analytics_views.dashboard_offline_incidents, name='dashboard_offline_incidents'),
     path(
         'dashboard/incidentes-offline/lotes/',
@@ -148,6 +178,16 @@ urlpatterns = [
         'dashboard/limbo-offline/segment/reseal/',
         analytics_views.dashboard_offline_limbo_segment_reseal_json,
         name='dashboard_offline_limbo_segment_reseal_json',
+    ),
+    path(
+        'dashboard/limbo-offline/segment/export-usb/',
+        analytics_views.dashboard_offline_limbo_segment_export_usb_json,
+        name='dashboard_offline_limbo_segment_export_usb_json',
+    ),
+    path(
+        'dashboard/limbo-offline/segment/purge-after-usb/',
+        analytics_views.dashboard_offline_limbo_segment_purge_after_usb_json,
+        name='dashboard_offline_limbo_segment_purge_after_usb_json',
     ),
     path(
         'dashboard/limbo-offline/segment/review/',

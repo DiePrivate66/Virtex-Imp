@@ -53,6 +53,7 @@ from pos.models import (
     Organization,
     OrganizationMembership,
     OutboxEvent,
+    PendingOfflineOrphanEvent,
     PrintJob,
     Producto,
     StaffProfile,
@@ -564,6 +565,60 @@ class BoscoV2SalesTests(TestCase):
         self.assertTrue(audit.payload_json['inventory_snapshot'])
         self.assertEqual(alert_event.status, OutboxEvent.Status.PENDING)
         self.assertEqual(alert_event.priority, OutboxEvent.Priority.CRITICAL)
+
+    def test_reconcile_payment_confirmation_for_missing_sale_creates_pending_orphan_event(self):
+        result = reconcile_payment_confirmation(
+            client_transaction_id='sale-v2-missing-base',
+            user=self.user,
+            payment_reference='BANK-PENDING-001',
+            payment_provider='TEST_GATEWAY',
+            gateway_payload={'status': 'succeeded'},
+            location=self.turno.location,
+        )
+
+        orphan_event = PendingOfflineOrphanEvent.objects.get(
+            client_transaction_id='sale-v2-missing-base',
+            event_type='payment_confirmation',
+        )
+
+        self.assertEqual(result['status'], 'orphan_pending')
+        self.assertEqual(orphan_event.status, PendingOfflineOrphanEvent.Status.PENDING)
+        self.assertEqual(orphan_event.location, self.turno.location)
+        self.assertEqual(orphan_event.organization, self.turno.location.organization)
+
+    def test_register_sale_resolves_pending_orphan_event_for_same_client_transaction(self):
+        reconcile_payment_confirmation(
+            client_transaction_id='sale-v2-pending-inbox',
+            user=self.user,
+            payment_reference='BANK-PENDING-002',
+            payment_provider='TEST_GATEWAY',
+            gateway_payload={'status': 'succeeded'},
+            location=self.turno.location,
+        )
+
+        sale = register_sale(
+            self.user,
+            self._payload(
+                client_transaction_id='sale-v2-pending-inbox',
+                referencia_pago='BANK-PENDING-002',
+            ),
+        ).venta
+
+        orphan_event = PendingOfflineOrphanEvent.objects.get(
+            client_transaction_id='sale-v2-pending-inbox',
+            event_type='payment_confirmation',
+        )
+
+        self.assertEqual(orphan_event.status, PendingOfflineOrphanEvent.Status.RESOLVED)
+        self.assertEqual(orphan_event.resolved_sale, sale)
+        self.assertIsNotNone(orphan_event.resolved_at)
+        self.assertTrue(
+            AuditLog.objects.filter(
+                event_type='sale.pending_orphan_resolved',
+                target_model='PendingOfflineOrphanEvent',
+                target_id=str(orphan_event.id),
+            ).exists()
+        )
 
     def test_resolve_payment_exception_marks_alert_as_resolved(self):
         with patch('pos.application.sales.commands._process_payment', side_effect=TimeoutError('gateway timeout')):

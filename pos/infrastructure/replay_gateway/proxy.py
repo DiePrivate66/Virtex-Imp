@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import hashlib
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -52,6 +53,7 @@ class ReplayGatewayConfig:
     replay_cold_lane_slots: int
     replay_cold_slice_seconds: float
     replay_waiter_ttl_seconds: float
+    replay_bucket_count: int = 8
     gateway_header_value: str = 'active'
 
 
@@ -74,11 +76,29 @@ class ReplayRequestContext:
     is_replay: bool = False
     lane: str = 'normal'
     organization_key: str = ''
+    bucket_index: int = 0
+    bucket_key: str = '{replay:b0}'
 
 
 @dataclass(frozen=True)
 class ReplayColdLaneTicket:
     organization_key: str
+
+
+@dataclass(frozen=True)
+class ReplayCoordinatorTicket:
+    organization_key: str
+    bucket_index: int
+    bucket_key: str
+    cold_lane_ticket: ReplayColdLaneTicket | None = None
+
+
+class ReplayCoordinator:
+    def admit(self, *, organization_key: str) -> ReplayCoordinatorTicket:
+        raise NotImplementedError
+
+    def release(self, ticket: ReplayCoordinatorTicket | None) -> None:
+        raise NotImplementedError
 
 
 class ReplayColdLaneCoordinator:
@@ -162,6 +182,68 @@ class ReplayColdLaneCoordinator:
             self._slice_started_at.pop(org_key, None)
 
 
+def stable_replay_bucket_index(*, organization_key: str, bucket_count: int) -> int:
+    normalized_key = str(organization_key or 'unknown').strip() or 'unknown'
+    normalized_bucket_count = max(1, int(bucket_count))
+    digest = hashlib.sha256(normalized_key.encode('utf-8')).hexdigest()
+    return int(digest[:12], 16) % normalized_bucket_count
+
+
+def stable_replay_bucket_key(*, organization_key: str, bucket_count: int) -> str:
+    bucket_index = stable_replay_bucket_index(
+        organization_key=organization_key,
+        bucket_count=bucket_count,
+    )
+    return f'{{replay:b{bucket_index}}}'
+
+
+class InMemoryBucketedReplayCoordinator(ReplayCoordinator):
+    def __init__(
+        self,
+        *,
+        bucket_count: int,
+        slots: int,
+        slice_seconds: float,
+        waiter_ttl_seconds: float,
+    ):
+        self._bucket_count = max(1, int(bucket_count))
+        self._coordinators = {
+            bucket_index: ReplayColdLaneCoordinator(
+                slots=slots,
+                slice_seconds=slice_seconds,
+                waiter_ttl_seconds=waiter_ttl_seconds,
+            )
+            for bucket_index in range(self._bucket_count)
+        }
+
+    def admit(self, *, organization_key: str) -> ReplayCoordinatorTicket:
+        bucket_index = stable_replay_bucket_index(
+            organization_key=organization_key,
+            bucket_count=self._bucket_count,
+        )
+        bucket_key = stable_replay_bucket_key(
+            organization_key=organization_key,
+            bucket_count=self._bucket_count,
+        )
+        cold_lane_ticket = self._coordinators[bucket_index].admit(
+            organization_key=organization_key,
+        )
+        return ReplayCoordinatorTicket(
+            organization_key=organization_key,
+            bucket_index=bucket_index,
+            bucket_key=bucket_key,
+            cold_lane_ticket=cold_lane_ticket,
+        )
+
+    def release(self, ticket: ReplayCoordinatorTicket | None) -> None:
+        if ticket is None:
+            return
+        coordinator = self._coordinators.get(ticket.bucket_index)
+        if coordinator is None:
+            return
+        coordinator.release(ticket.cold_lane_ticket)
+
+
 def is_replay_mutation_request(
     *,
     method: str,
@@ -184,7 +266,8 @@ class ReplayGatewayServer(ThreadingHTTPServer):
 
     def __init__(self, server_address, RequestHandlerClass, *, config: ReplayGatewayConfig):
         self.gateway_config = config
-        self.cold_lane_coordinator = ReplayColdLaneCoordinator(
+        self.replay_coordinator = InMemoryBucketedReplayCoordinator(
+            bucket_count=config.replay_bucket_count,
             slots=config.replay_cold_lane_slots,
             slice_seconds=config.replay_cold_slice_seconds,
             waiter_ttl_seconds=config.replay_waiter_ttl_seconds,
@@ -238,7 +321,7 @@ class ReplayProxyHandler(BaseHTTPRequestHandler):
                 body=body,
             )
             if replay_context.is_replay and replay_context.lane == 'cold':
-                cold_lane_ticket = self.server.cold_lane_coordinator.admit(
+                cold_lane_ticket = self.server.replay_coordinator.admit(
                     organization_key=replay_context.organization_key,
                 )
             upstream = http.client.HTTPConnection(
@@ -272,6 +355,7 @@ class ReplayProxyHandler(BaseHTTPRequestHandler):
             if replay_context.is_replay:
                 self.send_header('X-Bosco-Replay-Gateway', config.gateway_header_value)
                 self.send_header('X-Bosco-Replay-Lane', replay_context.lane)
+                self.send_header('X-Bosco-Replay-Bucket', replay_context.bucket_key)
             self.end_headers()
 
             while True:
@@ -318,7 +402,7 @@ class ReplayProxyHandler(BaseHTTPRequestHandler):
         finally:
             if upstream is not None:
                 upstream.close()
-            self.server.cold_lane_coordinator.release(cold_lane_ticket)
+            self.server.replay_coordinator.release(cold_lane_ticket)
 
     def _build_upstream_headers(self) -> dict[str, str]:
         headers = {}
@@ -355,10 +439,16 @@ class ReplayProxyHandler(BaseHTTPRequestHandler):
         payload = self._parse_json_body(body)
         lane = self._resolve_replay_lane(payload)
         organization_key = self._resolve_organization_key(payload)
+        bucket_index = stable_replay_bucket_index(
+            organization_key=organization_key,
+            bucket_count=self.server.gateway_config.replay_bucket_count,
+        )
         return ReplayRequestContext(
             is_replay=True,
             lane=lane,
             organization_key=organization_key,
+            bucket_index=bucket_index,
+            bucket_key=f'{{replay:b{bucket_index}}}',
         )
 
     def _parse_json_body(self, body: bytes | None) -> dict:
@@ -447,6 +537,7 @@ class ReplayProxyHandler(BaseHTTPRequestHandler):
         self.send_header('X-POS-Replay', '1')
         self.send_header('X-Bosco-Replay-Gateway', 'timeout')
         self.send_header('X-Bosco-Replay-Lane', replay_context.lane)
+        self.send_header('X-Bosco-Replay-Bucket', replay_context.bucket_key)
         self.send_header('X-Bosco-Replay-Scope', 'gateway')
         self.send_header('X-Bosco-Replay-Reason', reason)
         self.end_headers()
@@ -476,6 +567,7 @@ class ReplayProxyHandler(BaseHTTPRequestHandler):
             'draining' if error.reason == 'replay_cold_lane_draining' else 'backpressure',
         )
         self.send_header('X-Bosco-Replay-Lane', error.lane or replay_context.lane)
+        self.send_header('X-Bosco-Replay-Bucket', replay_context.bucket_key)
         self.send_header('X-Bosco-Replay-Scope', error.scope)
         self.send_header('X-Bosco-Replay-Reason', error.reason)
         self.end_headers()

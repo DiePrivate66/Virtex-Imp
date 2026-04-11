@@ -17,6 +17,11 @@ from django.utils import timezone
 JOURNAL_SCHEMA_VERSION = 1
 EVENT_KIND = 'event'
 FOOTER_KIND = 'footer'
+SIDECAR_FORMAT_VERSION = 'fixed_v1'
+DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES = 50
+DEFAULT_SIDECAR_MAX_BYTES = 64 * 1024
+MAX_RECENT_LOOKUP_TEXT_BYTES = 120
+MAX_VERIFICATION_ERROR_BYTES = 255
 
 
 class JournalIntegrityError(RuntimeError):
@@ -86,9 +91,16 @@ def _extend_rolling_crc32(previous_crc32: str, record_hash: str) -> str:
     return f'{checksum:08x}'
 
 
-def _snapshot_base(*, segment_path: Path, segment_id: str) -> dict[str, Any]:
+def _snapshot_base(
+    *,
+    segment_path: Path,
+    segment_id: str,
+    sidecar_max_bytes: int = DEFAULT_SIDECAR_MAX_BYTES,
+) -> dict[str, Any]:
     return {
         'schema_version': JOURNAL_SCHEMA_VERSION,
+        'sidecar_format_version': SIDECAR_FORMAT_VERSION,
+        'sidecar_max_bytes': max(1024, min(int(sidecar_max_bytes), DEFAULT_SIDECAR_MAX_BYTES)),
         'segment_id': segment_id,
         'segment_filename': segment_path.name,
         'record_count': 0,
@@ -100,7 +112,194 @@ def _snapshot_base(*, segment_path: Path, segment_id: str) -> dict[str, Any]:
         'seal_pending': False,
         'pending_footer': {},
         'summary': {},
+        'recent_lookup_ring': _empty_recent_lookup_ring(),
+        'recent_lookup_ring_capacity': DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES,
+        'recent_lookup_ring_count': 0,
+        'recent_lookup_ring_cursor': -1,
+        'ops_metadata': {},
+        'receipts': {
+            'purge': [],
+            'usb_export': [],
+        },
+        'verify_path_available': True,
+        'last_verify_status': 'unknown',
+        'last_verify_error': '',
     }
+
+
+def _truncate_text(value: Any, *, limit: int = MAX_RECENT_LOOKUP_TEXT_BYTES) -> str:
+    return str(value or '').strip()[: max(1, int(limit))]
+
+
+def _empty_recent_lookup_entry() -> dict[str, Any]:
+    return {
+        'event_id': '',
+        'client_transaction_id': '',
+        'ticket_number': '',
+        'payment_reference': '',
+        'segment_id': '',
+        'offset': 0,
+        'status': '',
+        'sale_total': '0.00',
+        'created_at': '',
+        'display_name_truncated': '',
+        'queue_session_id': '',
+        'session_seq_no': None,
+    }
+
+
+def _empty_recent_lookup_ring(
+    *,
+    capacity: int = DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES,
+) -> list[dict[str, Any]]:
+    return [_empty_recent_lookup_entry() for _ in range(max(1, int(capacity)))]
+
+
+def _normalize_recent_lookup_entry(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(raw, Mapping):
+        return _empty_recent_lookup_entry()
+    entry = _empty_recent_lookup_entry()
+    entry.update(
+        {
+            'event_id': _truncate_text(raw.get('event_id')),
+            'client_transaction_id': _truncate_text(raw.get('client_transaction_id')),
+            'ticket_number': _truncate_text(raw.get('ticket_number')),
+            'payment_reference': _truncate_text(raw.get('payment_reference')),
+            'segment_id': _truncate_text(raw.get('segment_id')),
+            'offset': max(0, int(raw.get('offset') or 0)),
+            'status': _truncate_text(raw.get('status')),
+            'sale_total': _truncate_text(raw.get('sale_total') or '0.00', limit=32),
+            'created_at': _truncate_text(raw.get('created_at')),
+            'display_name_truncated': _truncate_text(raw.get('display_name_truncated')),
+            'queue_session_id': _truncate_text(raw.get('queue_session_id')),
+            'session_seq_no': raw.get('session_seq_no'),
+        }
+    )
+    return entry
+
+
+def _normalize_recent_lookup_ring(
+    raw: Any,
+    *,
+    capacity: int = DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES,
+) -> list[dict[str, Any]]:
+    normalized_capacity = max(1, int(capacity))
+    source = list(raw or []) if isinstance(raw, list) else []
+    entries = [_normalize_recent_lookup_entry(item) for item in source[:normalized_capacity]]
+    if len(entries) < normalized_capacity:
+        entries.extend(_empty_recent_lookup_ring(capacity=normalized_capacity - len(entries)))
+    return entries[:normalized_capacity]
+
+
+def _normalize_snapshot_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload or {})
+    capacity = max(
+        1,
+        min(
+            DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES,
+            int(normalized.get('recent_lookup_ring_capacity') or DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES),
+        ),
+    )
+    ring = _normalize_recent_lookup_ring(
+        normalized.get('recent_lookup_ring') or [],
+        capacity=capacity,
+    )
+    raw_cursor = normalized.get('recent_lookup_ring_cursor', -1)
+    cursor = -1 if raw_cursor in {'', None} else int(raw_cursor)
+    count = max(0, min(int(normalized.get('recent_lookup_ring_count') or 0), capacity))
+    if count <= 0:
+        cursor = -1
+    elif cursor < 0 or cursor >= capacity:
+        cursor = count - 1
+
+    normalized['sidecar_format_version'] = SIDECAR_FORMAT_VERSION
+    normalized['sidecar_max_bytes'] = max(
+        1024,
+        min(int(normalized.get('sidecar_max_bytes') or DEFAULT_SIDECAR_MAX_BYTES), DEFAULT_SIDECAR_MAX_BYTES),
+    )
+    normalized['recent_lookup_ring_capacity'] = capacity
+    normalized['recent_lookup_ring'] = ring
+    normalized['recent_lookup_ring_count'] = count
+    normalized['recent_lookup_ring_cursor'] = cursor
+    normalized['ops_metadata'] = dict(normalized.get('ops_metadata') or {})
+    receipts = dict(normalized.get('receipts') or {})
+    normalized['receipts'] = {
+        'purge': list(receipts.get('purge') or [])[-50:],
+        'usb_export': list(receipts.get('usb_export') or [])[-50:],
+    }
+    normalized['verify_path_available'] = bool(normalized.get('verify_path_available', True))
+    normalized['last_verify_status'] = _truncate_text(normalized.get('last_verify_status') or 'unknown', limit=32)
+    normalized['last_verify_error'] = _truncate_text(
+        normalized.get('last_verify_error'),
+        limit=MAX_VERIFICATION_ERROR_BYTES,
+    )
+    return normalized
+
+
+def _serialize_snapshot_payload(payload: Mapping[str, Any]) -> bytes:
+    normalized = _normalize_snapshot_payload(payload)
+    encoded = canonical_json_dumps(normalized).encode('utf-8')
+    max_bytes = max(1024, int(normalized.get('sidecar_max_bytes') or DEFAULT_SIDECAR_MAX_BYTES))
+    if len(encoded) > max_bytes:
+        raise JournalIntegrityError(
+            f'sidecar exceeded max size: {len(encoded)} > {max_bytes}'
+        )
+    return encoded
+
+
+def _append_recent_lookup_entry_to_snapshot(
+    snapshot: dict[str, Any],
+    *,
+    entry: Mapping[str, Any] | None,
+) -> None:
+    if not entry:
+        return
+    capacity = max(
+        1,
+        min(
+            DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES,
+            int(snapshot.get('recent_lookup_ring_capacity') or DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES),
+        ),
+    )
+    ring = _normalize_recent_lookup_ring(snapshot.get('recent_lookup_ring') or [], capacity=capacity)
+    current_count = max(0, min(int(snapshot.get('recent_lookup_ring_count') or 0), capacity))
+    raw_cursor = snapshot.get('recent_lookup_ring_cursor', -1)
+    current_cursor = -1 if raw_cursor in {'', None} else int(raw_cursor)
+    next_cursor = (current_cursor + 1) % capacity
+    ring[next_cursor] = _normalize_recent_lookup_entry(entry)
+    snapshot['recent_lookup_ring'] = ring
+    snapshot['recent_lookup_ring_capacity'] = capacity
+    snapshot['recent_lookup_ring_cursor'] = next_cursor
+    snapshot['recent_lookup_ring_count'] = min(capacity, current_count + 1)
+
+
+def recent_lookup_entries_from_snapshot(
+    snapshot: Mapping[str, Any],
+    *,
+    limit: int | None = None,
+) -> tuple[dict[str, Any], ...]:
+    capacity = max(
+        1,
+        min(
+            DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES,
+            int(snapshot.get('recent_lookup_ring_capacity') or DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES),
+        ),
+    )
+    ring = _normalize_recent_lookup_ring(snapshot.get('recent_lookup_ring') or [], capacity=capacity)
+    count = max(0, min(int(snapshot.get('recent_lookup_ring_count') or 0), capacity))
+    raw_cursor = snapshot.get('recent_lookup_ring_cursor', -1)
+    cursor = -1 if raw_cursor in {'', None} else int(raw_cursor)
+    if count <= 0 or cursor < 0:
+        return ()
+
+    entries: list[dict[str, Any]] = []
+    max_items = min(count, max(1, int(limit))) if limit is not None else count
+    for index in range(max_items):
+        ring_index = (cursor - index) % capacity
+        entry = ring[ring_index]
+        if entry.get('event_id'):
+            entries.append(entry)
+    return tuple(entries)
 
 
 def _read_json_file(path: Path) -> dict[str, Any] | None:
@@ -112,8 +311,9 @@ def _read_json_file(path: Path) -> dict[str, Any] | None:
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = _serialize_snapshot_payload(payload)
     with NamedTemporaryFile('w', encoding='utf-8', delete=False, dir=str(path.parent), suffix='.tmp') as handle:
-        handle.write(canonical_json_dumps(payload))
+        handle.write(encoded.decode('utf-8'))
         handle.flush()
         os.fsync(handle.fileno())
         temp_name = handle.name
@@ -121,11 +321,14 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def load_snapshot_payload(snapshot_path: str | Path) -> dict[str, Any]:
-    return _read_json_file(Path(snapshot_path)) or {}
+    payload = _read_json_file(Path(snapshot_path)) or {}
+    if not payload:
+        return {}
+    return _normalize_snapshot_payload(payload)
 
 
 def persist_snapshot_payload(snapshot_path: str | Path, payload: Mapping[str, Any]) -> None:
-    _atomic_write_json(Path(snapshot_path), dict(payload))
+    _atomic_write_json(Path(snapshot_path), _normalize_snapshot_payload(dict(payload)))
 
 
 def _read_tail(path: Path, length: int) -> bytes:
@@ -297,6 +500,7 @@ def recover_segment_prefix(segment_path: str | Path) -> RecoveryResult:
 
     with path.open('rb') as handle:
         for raw_line in handle:
+            line_start_offset = current_offset
             current_offset += len(raw_line)
             if not raw_line.endswith(b'\n'):
                 truncated_tail = True
@@ -317,7 +521,9 @@ def recover_segment_prefix(segment_path: str | Path) -> RecoveryResult:
                         expected_prev_record_hash=last_record_hash,
                     )
                     rolling_crc32 = _extend_rolling_crc32(rolling_crc32, last_record_hash)
-                    valid_records.append(record)
+                    event_record = dict(record)
+                    event_record['record_offset'] = line_start_offset
+                    valid_records.append(event_record)
                     last_event_id = str(record.get('event_id') or '')
                 elif kind == FOOTER_KIND:
                     _validate_footer_record(
@@ -362,6 +568,7 @@ def reconcile_snapshot_with_segment(
     snapshot_path: str | Path,
     *,
     segment_id: str | None = None,
+    sidecar_max_bytes: int = DEFAULT_SIDECAR_MAX_BYTES,
 ) -> dict[str, Any]:
     segment_file = Path(segment_path)
     snapshot_file = Path(snapshot_path)
@@ -372,7 +579,11 @@ def reconcile_snapshot_with_segment(
     if int(snapshot.get('last_offset_confirmed') or 0) > recovery.last_valid_offset:
         raise JournalIntegrityError('snapshot claims confirmed data beyond valid journal prefix')
 
-    reconciled = _snapshot_base(segment_path=segment_file, segment_id=effective_segment_id)
+    reconciled = _snapshot_base(
+        segment_path=segment_file,
+        segment_id=effective_segment_id,
+        sidecar_max_bytes=sidecar_max_bytes,
+    )
     reconciled.update(
         {
             'record_count': recovery.record_count,
@@ -384,6 +595,18 @@ def reconcile_snapshot_with_segment(
             'seal_pending': False,
             'pending_footer': {},
             'summary': snapshot.get('summary', {}),
+            'recent_lookup_ring': snapshot.get('recent_lookup_ring') or [],
+            'recent_lookup_ring_capacity': snapshot.get(
+                'recent_lookup_ring_capacity',
+                DEFAULT_RECENT_LOOKUP_RING_MAX_ENTRIES,
+            ),
+            'recent_lookup_ring_count': snapshot.get('recent_lookup_ring_count', 0),
+            'recent_lookup_ring_cursor': snapshot.get('recent_lookup_ring_cursor', -1),
+            'ops_metadata': snapshot.get('ops_metadata') or {},
+            'receipts': snapshot.get('receipts') or {},
+            'verify_path_available': snapshot.get('verify_path_available', True),
+            'last_verify_status': snapshot.get('last_verify_status', 'unknown'),
+            'last_verify_error': snapshot.get('last_verify_error', ''),
         }
     )
 
@@ -443,13 +666,26 @@ def reseal_segment_from_snapshot(segment_path: str | Path, snapshot_path: str | 
 
 
 class SegmentJournal:
-    def __init__(self, *, segment_path: str | Path, snapshot_path: str | Path, segment_id: str | None = None):
+    def __init__(
+        self,
+        *,
+        segment_path: str | Path,
+        snapshot_path: str | Path,
+        segment_id: str | None = None,
+        sidecar_max_bytes: int = DEFAULT_SIDECAR_MAX_BYTES,
+    ):
         self.segment_path = Path(segment_path)
         self.snapshot_path = Path(snapshot_path)
         self.segment_id = segment_id or self.segment_path.stem
+        self.sidecar_max_bytes = max(1024, min(int(sidecar_max_bytes), DEFAULT_SIDECAR_MAX_BYTES))
         self.segment_path.parent.mkdir(parents=True, exist_ok=True)
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-        reconcile_snapshot_with_segment(self.segment_path, self.snapshot_path, segment_id=self.segment_id)
+        reconcile_snapshot_with_segment(
+            self.segment_path,
+            self.snapshot_path,
+            segment_id=self.segment_id,
+            sidecar_max_bytes=self.sidecar_max_bytes,
+        )
 
     def append_event(
         self,
@@ -462,11 +698,13 @@ class SegmentJournal:
         client_created_at_raw: str = '',
         client_monotonic_ms: int | None = None,
         summary: Mapping[str, Any] | None = None,
+        recent_lookup_entry: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         snapshot = reconcile_snapshot_with_segment(
             self.segment_path,
             self.snapshot_path,
             segment_id=self.segment_id,
+            sidecar_max_bytes=self.sidecar_max_bytes,
         )
         if snapshot.get('sealed'):
             raise JournalIntegrityError('cannot append to sealed segment')
@@ -482,11 +720,16 @@ class SegmentJournal:
             client_monotonic_ms=client_monotonic_ms,
         )
         line = _encode_record_line(record)
+        record_offset = int(snapshot.get('last_offset_confirmed') or 0)
         with self.segment_path.open('ab') as handle:
             handle.write(line)
             handle.flush()
             os.fsync(handle.fileno())
         if _read_tail(self.segment_path, len(line)) != line:
+            snapshot['verify_path_available'] = True
+            snapshot['last_verify_status'] = 'failed'
+            snapshot['last_verify_error'] = 'tail verification failed after append'
+            _atomic_write_json(self.snapshot_path, snapshot)
             raise JournalIntegrityError('tail verification failed after append')
 
         snapshot.update(
@@ -500,7 +743,18 @@ class SegmentJournal:
                     record['record_hash'],
                 ),
                 'summary': dict(summary or snapshot.get('summary') or {}),
+                'verify_path_available': True,
+                'last_verify_status': 'verified',
+                'last_verify_error': '',
             }
+        )
+        _append_recent_lookup_entry_to_snapshot(
+            snapshot,
+            entry={
+                **dict(recent_lookup_entry or {}),
+                'segment_id': self.segment_id,
+                'offset': record_offset,
+            } if recent_lookup_entry else None,
         )
         _atomic_write_json(self.snapshot_path, snapshot)
         return record
@@ -510,6 +764,7 @@ class SegmentJournal:
             self.segment_path,
             self.snapshot_path,
             segment_id=self.segment_id,
+            sidecar_max_bytes=self.sidecar_max_bytes,
         )
         if snapshot.get('sealed'):
             return snapshot
@@ -531,6 +786,7 @@ class SegmentJournal:
         return _read_json_file(self.snapshot_path) or _snapshot_base(
             segment_path=self.segment_path,
             segment_id=self.segment_id,
+            sidecar_max_bytes=self.sidecar_max_bytes,
         )
 
     def recover(self) -> RecoveryResult:
