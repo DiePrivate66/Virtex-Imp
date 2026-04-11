@@ -252,6 +252,7 @@ Hoy la arquitectura ya esta en migracion activa. Estado real del repo:
 - `pos/presentation/integrations/whatsapp_requests.py` y `pos/presentation/integrations/whatsapp_responses.py` ya encapsulan validacion/parsing y respuestas del webhook de WhatsApp
 - `pos/presentation/integrations/whatsapp_endpoint.py` ya concentra el flujo HTTP del webhook; `whatsapp_webhook.py` queda como view minima con decoradores
 - `pos/presentation/integrations/print_job_endpoints.py` y `pos/presentation/integrations/whatsapp_confirmation_endpoint.py` ya concentran el flujo HTTP de print jobs y confirmacion por WhatsApp; sus views quedan como wrappers minimos con decoradores
+- la operacion vigente de WhatsApp es Meta-only; la guia canonica de setup y smoke test vive en `guides/whatsapp_bot_setup.md`
 - `pos/presentation/integrations/health_endpoint.py` ya concentra el flujo HTTP del health check de integraciones y `views.py` queda como fachada canonica de presentation para ese dominio
 - `pos/application/integrations/print_jobs.py` ya es fachada de compatibilidad; errores, consultas y comandos de print jobs viven en modulos dedicados
 - los wrappers legacy restantes ya apuntan a fachadas de paquete (`presentation.*`, `application.*`, `infrastructure.*`) en lugar de depender de modulos internos concretos

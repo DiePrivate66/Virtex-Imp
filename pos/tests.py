@@ -5480,7 +5480,6 @@ class SaleReceiptEmailTests(TestCase):
 
 
 @override_settings(
-    WHATSAPP_PROVIDER='META',
     META_WHATSAPP_VERIFY_TOKEN='verify-token-demo',
     META_SIGNATURE_VALIDATION=False,
     CELERY_TASK_ALWAYS_EAGER=True,
