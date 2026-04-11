@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#1a1a1a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>RAMÓN — Pide tu Comida</title>
+    <title>RAMÃƒÆ’Ã¢â‚¬Å“N ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Pide tu Comida</title>
     <link rel="manifest" href="{% load static %}{% static 'pedidos/manifest.json' %}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -49,16 +49,16 @@
 </head>
 <body class="bg-[#111] text-white min-h-screen">
 
-    <!-- ══════════════ HEADER FIJO ══════════════ -->
+    <!-- ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â HEADER FIJO ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â -->
     <header class="sticky top-0 z-40 bg-[#111]/98 backdrop-blur-md border-b border-gray-800/50">
         <div class="flex items-center justify-between px-5 py-4">
             <div>
-                <h1 class="text-2xl font-black text-bosco-orange tracking-[0.25em]">RAMÓN</h1>
-                <p class="text-[9px] text-gray-600 tracking-[0.2em] font-bold mt-0.5">ALITAS · BONELESS · MÁS</p>
+                <h1 class="text-2xl font-black text-bosco-orange tracking-[0.25em]">RAMÃƒÆ’Ã¢â‚¬Å“N</h1>
+                <p class="text-[9px] text-gray-600 tracking-[0.2em] font-bold mt-0.5">ALITAS Ãƒâ€šÃ‚Â· BONELESS Ãƒâ€šÃ‚Â· MÃƒÆ’Ã‚ÂS</p>
             </div>
         </div>
         
-        <!-- Categorías -->
+        <!-- CategorÃƒÆ’Ã‚Â­as -->
         <div class="flex gap-2 px-5 pb-3 overflow-x-auto" id="cat-bar">
             <button onclick="filtrar(this, 'todos')" class="cat-pill active whitespace-nowrap px-5 py-2 rounded-full text-xs font-black uppercase bg-bosco-orange text-black border border-transparent transition-all">
                 TODO
@@ -71,23 +71,23 @@
         </div>
     </header>
 
-    <!-- Banner horario cuando está cerrado -->
+    <!-- Banner horario cuando estÃƒÆ’Ã‚Â¡ cerrado -->
     {% if not local_abierto %}
     <div class="bg-red-900/40 border-b border-red-800 px-5 py-3 flex items-center gap-3">
-        <span class="text-2xl">🕐</span>
+        <span class="text-2xl">ÃƒÂ°Ã…Â¸Ã¢â‚¬Â¢Ã‚Â</span>
         <div>
             <p class="text-red-400 font-black text-sm">ESTAMOS CERRADOS</p>
-            <p class="text-red-400/60 text-xs font-bold">{{ dia_hoy }}: {{ horario_hoy }} · Puedes ver el menú pero los pedidos están deshabilitados</p>
+            <p class="text-red-400/60 text-xs font-bold">{{ dia_hoy }}: {{ horario_hoy }} Ãƒâ€šÃ‚Â· Puedes ver el menÃƒÆ’Ã‚Âº pero los pedidos estÃƒÆ’Ã‚Â¡n deshabilitados</p>
         </div>
     </div>
     {% else %}
     <div class="bg-green-900/20 border-b border-green-900/30 px-5 py-1.5 flex items-center justify-center gap-2">
         <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-        <p class="text-green-500 text-[10px] font-black uppercase tracking-widest">Abierto · {{ dia_hoy }} {{ horario_hoy }}</p>
+        <p class="text-green-500 text-[10px] font-black uppercase tracking-widest">Abierto Ãƒâ€šÃ‚Â· {{ dia_hoy }} {{ horario_hoy }}</p>
     </div>
     {% endif %}
 
-    <!-- ══════════════ LISTA DE PRODUCTOS ══════════════ -->
+    <!-- ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â LISTA DE PRODUCTOS ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â -->
     <main class="px-4 pt-3 pb-28 space-y-2" id="grid-productos">
         {% for prod in productos %}
         <div class="producto-item bg-bosco-gray rounded-2xl p-4 border border-gray-700/40 active:scale-[0.98] transition-transform"
@@ -109,7 +109,7 @@
         {% endfor %}
     </main>
 
-    <!-- ══════════════ BOTTOM BAR (CARRITO FLOTANTE) ══════════════ -->
+    <!-- ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â BOTTOM BAR (CARRITO FLOTANTE) ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â -->
     <div id="bottom-bar" class="hidden fixed bottom-0 left-0 right-0 z-50 p-3 anim-slide">
         <button onclick="abrirCarrito()" class="w-full max-w-lg mx-auto bg-bosco-orange rounded-2xl p-4 flex items-center justify-between shadow-2xl shadow-black/60 active:scale-[0.97] transition-transform block">
             <div class="flex items-center gap-3">
@@ -120,7 +120,7 @@
         </button>
     </div>
 
-    <!-- ══════════════ MODAL: PERSONALIZACIÓN ══════════════ -->
+    <!-- ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â MODAL: PERSONALIZACIÃƒÆ’Ã¢â‚¬Å“N ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â -->
     <div id="modal-opciones" class="hidden fixed inset-0 z-50 bg-black/80 modal-overlay flex items-end justify-center" onclick="if(event.target===this)cerrarModal()">
         <div class="bg-bosco-gray w-full max-w-lg rounded-t-[28px] anim-slide border-t border-gray-600/50 max-h-[85vh] overflow-y-auto">
             <!-- Barra de arrastre visual -->
@@ -134,14 +134,14 @@
                         <h3 id="modal-nombre" class="text-xl font-black text-white uppercase"></h3>
                         <span id="modal-precio" class="text-bosco-orange font-black text-lg"></span>
                     </div>
-                    <button onclick="cerrarModal()" class="w-9 h-9 bg-[#1a1a1a] rounded-full flex items-center justify-center text-gray-500 font-bold text-sm">✕</button>
+                    <button onclick="cerrarModal()" class="w-9 h-9 bg-[#1a1a1a] rounded-full flex items-center justify-center text-gray-500 font-bold text-sm">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢</button>
                 </div>
 
                 <!-- Cantidad -->
                 <div class="flex items-center justify-between bg-[#1a1a1a] p-4 rounded-2xl">
                     <span class="text-gray-400 font-bold text-sm uppercase">Cantidad</span>
                     <div class="flex items-center gap-5">
-                        <button onclick="cambCant(-1)" class="w-11 h-11 bg-gray-700 rounded-xl text-white font-bold text-xl active:bg-gray-600 transition-colors flex items-center justify-center">−</button>
+                        <button onclick="cambCant(-1)" class="w-11 h-11 bg-gray-700 rounded-xl text-white font-bold text-xl active:bg-gray-600 transition-colors flex items-center justify-center">ÃƒÂ¢Ã‹â€ Ã¢â‚¬â„¢</button>
                         <span id="modal-cant" class="text-2xl font-black text-white w-6 text-center">1</span>
                         <button onclick="cambCant(1)" class="w-11 h-11 bg-bosco-orange rounded-xl text-black font-bold text-xl active:bg-orange-500 transition-colors flex items-center justify-center">+</button>
                     </div>
@@ -151,25 +151,25 @@
                 <div id="sec-salsas" class="hidden space-y-4">
                     <p id="label-salsas" class="text-gray-400 text-xs font-black uppercase tracking-wider">Elige tu salsa</p>
                     
-                    <!-- Salsas Clásicas -->
+                    <!-- Salsas ClÃƒÆ’Ã‚Â¡sicas -->
                     <div class="grid grid-cols-2 gap-2">
-                        <button onclick="selSalsa(this,'BBQ Original')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🔥 BBQ Original</button>
-                        <button onclick="selSalsa(this,'BBQ Picante')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🌶️ BBQ Picante</button>
-                        <button onclick="selSalsa(this,'Miel y Mostaza')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🍯 Miel Mostaza</button>
-                        <button onclick="selSalsa(this,'Sin Salsa')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">❌ Sin Salsa</button>
+                        <button onclick="selSalsa(this,'BBQ Original')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â¥ BBQ Original</button>
+                        <button onclick="selSalsa(this,'BBQ Picante')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â¶ÃƒÂ¯Ã‚Â¸Ã‚Â BBQ Picante</button>
+                        <button onclick="selSalsa(this,'Miel y Mostaza')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â¯ Miel Mostaza</button>
+                        <button onclick="selSalsa(this,'Sin Salsa')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">ÃƒÂ¢Ã‚ÂÃ…â€™ Sin Salsa</button>
                     </div>
 
                     <!-- Salsas Premium (NUEVO) -->
-                    <p class="text-yellow-500 text-[10px] font-black uppercase tracking-wider mt-2">🌟 SALSAS PREMIUM</p>
+                    <p class="text-yellow-500 text-[10px] font-black uppercase tracking-wider mt-2">ÃƒÂ°Ã…Â¸Ã…â€™Ã…Â¸ SALSAS PREMIUM</p>
                     <div class="grid grid-cols-2 gap-2">
-                        <button onclick="selSalsa(this,'Maiz Dulce')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🌽 Maíz Dulce</button>
-                        <button onclick="selSalsa(this,'Honey Chipotle')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🐝 Honey Chipotle</button>
-                        <button onclick="selSalsa(this,'Maple Picante')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🍁 Maple Picante</button>
-                        <button onclick="selSalsa(this,'Salsa de Queso')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">🧀 Salsa de Queso</button>
+                        <button onclick="selSalsa(this,'Maiz Dulce')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â½ MaÃƒÆ’Ã‚Â­z Dulce</button>
+                        <button onclick="selSalsa(this,'Honey Chipotle')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â Honey Chipotle</button>
+                        <button onclick="selSalsa(this,'Maple Picante')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â Maple Picante</button>
+                        <button onclick="selSalsa(this,'Salsa de Queso')" class="btn-salsa p-3.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-gray-300 text-sm font-bold transition-all">ÃƒÂ°Ã…Â¸Ã‚Â§Ã¢â€šÂ¬ Salsa de Queso</button>
                     </div>
 
                     <!-- Custom Sauce Input -->
-                    <input type="text" id="modal-salsa-extra" placeholder="🔤 O escribe otra salsa aquí..." 
+                    <input type="text" id="modal-salsa-extra" placeholder="ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â¤ O escribe otra salsa aquÃƒÆ’Ã‚Â­..." 
                         class="w-full mt-2 bg-[#1a1a1a] text-white p-3 rounded-xl border border-gray-700 text-xs focus:border-bosco-orange outline-none placeholder-gray-600 font-bold"
                         oninput="onSalsaInput(this)">
                 </div>
@@ -181,7 +181,7 @@
                         class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm placeholder-gray-600"></textarea>
                 </div>
 
-                <!-- Botón Agregar -->
+                <!-- BotÃƒÆ’Ã‚Â³n Agregar -->
                 <button onclick="confirmarAgregar()" class="w-full bg-bosco-orange text-black font-black py-4 rounded-2xl text-base active:scale-[0.97] transition-transform shadow-lg shadow-orange-600/30 flex items-center justify-center gap-2">
                     <span>AGREGAR AL PEDIDO</span>
                     <span id="modal-subtotal" class="bg-black/20 px-3 py-1 rounded-lg text-sm"></span>
@@ -190,20 +190,20 @@
         </div>
     </div>
 
-    <!-- ══════════════ PANTALLA COMPLETA: CARRITO + CHECKOUT ══════════════ -->
+    <!-- ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â PANTALLA COMPLETA: CARRITO + CHECKOUT ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â -->
     <div id="modal-carrito" class="hidden fixed inset-0 z-50 bg-[#111] overflow-y-auto">
         <div class="max-w-lg mx-auto min-h-screen flex flex-col">
             
             <!-- Header Carrito -->
             <div class="sticky top-0 bg-[#111]/98 backdrop-blur-md p-4 border-b border-gray-800/50 z-10 flex items-center justify-between">
-                <button onclick="cerrarCarrito()" class="text-gray-400 font-bold text-sm flex items-center gap-1">← Menú</button>
+                <button onclick="cerrarCarrito()" class="text-gray-400 font-bold text-sm flex items-center gap-1">ÃƒÂ¢Ã¢â‚¬Â Ã‚Â MenÃƒÆ’Ã‚Âº</button>
                 <h2 class="font-black text-white text-lg">Tu Pedido</h2>
                 <button onclick="vaciarCarrito()" class="text-red-500 text-xs font-bold">Vaciar</button>
             </div>
 
             <!-- Items del Carrito -->
             <div id="carrito-items" class="flex-1 p-4 space-y-2">
-                <!-- JS renderiza aquí -->
+                <!-- JS renderiza aquÃƒÆ’Ã‚Â­ -->
             </div>
 
             <!-- Subtotal -->
@@ -214,7 +214,7 @@
                 </div>
             </div>
 
-            <!-- ══════ SECCIÓN CHECKOUT ══════ -->
+            <!-- ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â SECCIÃƒÆ’Ã¢â‚¬Å“N CHECKOUT ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â -->
             <div class="p-4 space-y-4 border-t border-gray-700/50 bg-bosco-gray/50 rounded-t-3xl">
                 
                 <!-- PASO 1: Tus datos -->
@@ -225,7 +225,7 @@
                     </h3>
                     <input type="text" id="ch-nombre" placeholder="Nombre completo *"
                         class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600">
-                    <input type="tel" id="ch-telefono" placeholder="WhatsApp / Teléfono *"
+                    <input type="tel" id="ch-telefono" placeholder="WhatsApp / TelÃƒÆ’Ã‚Â©fono *"
                         class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600">
                     <input type="text" id="ch-cedula" placeholder="C.I. / RUC (para factura, opcional)"
                         class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm placeholder-gray-600">
@@ -235,67 +235,90 @@
                 <div class="space-y-3">
                     <h3 class="font-black text-white uppercase text-xs tracking-widest flex items-center gap-2">
                         <span class="w-6 h-6 bg-bosco-orange rounded-full text-black text-xs font-black flex items-center justify-center">2</span>
-                        ¿CÓMO LO QUIERES?
+                        Ãƒâ€šÃ‚Â¿CÃƒÆ’Ã¢â‚¬Å“MO LO QUIERES?
                     </h3>
                     <div class="grid grid-cols-2 gap-2">
                         <button onclick="setTipo(this,'DOMICILIO')" class="btn-tipo p-4 rounded-xl font-bold text-sm border-2 border-bosco-orange bg-bosco-orange/10 text-bosco-orange transition-all text-center">
-                            <span class="text-2xl block mb-1">🛵</span>
+                            <span class="text-2xl block mb-1">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ‚Âµ</span>
                             DELIVERY
                         </button>
                         <button onclick="setTipo(this,'LLEVAR')" class="btn-tipo p-4 rounded-xl font-bold text-sm border-2 border-gray-700 text-gray-400 transition-all text-center">
-                            <span class="text-2xl block mb-1">📦</span>
+                            <span class="text-2xl block mb-1">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦</span>
                             RETIRO
                         </button>
                     </div>
                 </div>
 
-                <!-- Dirección (solo domicilio) -->
+                <!-- DirecciÃƒÆ’Ã‚Â³n (solo domicilio) -->
                 <div id="sec-direccion" class="space-y-3">
-                    <textarea id="ch-direccion" rows="2" placeholder="Dirección de entrega * (Ej: Cdla. Las Palmas, casa 5, junto a la tienda Don Pepe)"
+                    <textarea id="ch-direccion" rows="2" placeholder="DirecciÃƒÆ’Ã‚Â³n de entrega * (Ej: Cdla. Las Palmas, casa 5, junto a la tienda Don Pepe)"
                         class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600"></textarea>
                     
-                    <!-- BOTÓN GPS -->
+                    <!-- BOTÃƒÆ’Ã¢â‚¬Å“N GPS -->
                     <button type="button" onclick="obtenerGPS()" id="btn-gps"
                         class="w-full bg-[#1a1a1a] border-2 border-dashed border-gray-600 p-4 rounded-xl text-center active:scale-[0.97] transition-all hover:border-blue-500">
                         <div id="gps-placeholder">
-                            <span class="text-3xl">📍</span>
-                            <p class="text-blue-400 font-black text-sm mt-1">ENVIAR MI UBICACIÓN GPS</p>
-                            <p class="text-gray-600 text-[10px] mt-1">Ayuda al delivery a encontrarte más rápido</p>
+                            <span class="text-3xl">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â</span>
+                            <p class="text-blue-400 font-black text-sm mt-1">ENVIAR MI UBICACIÃƒÆ’Ã¢â‚¬Å“N GPS</p>
+                            <p class="text-gray-600 text-[10px] mt-1">Ayuda al delivery a encontrarte mÃƒÆ’Ã‚Â¡s rÃƒÆ’Ã‚Â¡pido</p>
                         </div>
                         <div id="gps-success" class="hidden">
-                            <span class="text-3xl">✅</span>
-                            <p class="text-green-400 font-black text-sm mt-1">UBICACIÓN CAPTURADA</p>
+                            <span class="text-3xl">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦</span>
+                            <p class="text-green-400 font-black text-sm mt-1">UBICACIÃƒÆ’Ã¢â‚¬Å“N CAPTURADA</p>
                             <p id="gps-coords" class="text-gray-500 text-[10px] mt-1"></p>
                         </div>
                         <div id="gps-loading" class="hidden">
-                            <span class="text-3xl animate-pulse">🛰️</span>
-                            <p class="text-yellow-400 font-black text-sm mt-1">OBTENIENDO UBICACIÓN...</p>
+                            <span class="text-3xl animate-pulse">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ‚Â°ÃƒÂ¯Ã‚Â¸Ã‚Â</span>
+                            <p class="text-yellow-400 font-black text-sm mt-1">OBTENIENDO UBICACIÃƒÆ’Ã¢â‚¬Å“N...</p>
                         </div>
                         <div id="gps-error" class="hidden">
-                            <span class="text-3xl">⚠️</span>
+                            <span class="text-3xl">ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â</span>
                             <p class="text-red-400 font-bold text-sm mt-1">NO SE PUDO OBTENER GPS</p>
                             <p id="gps-error-msg" class="text-gray-500 text-[10px] mt-1"></p>
                         </div>
                     </button>
 
-                    <p class="text-gray-600 text-[10px] font-bold">📍 Te contactaremos por WhatsApp para confirmar el costo de envío.</p>
+                    <p class="text-gray-600 text-[10px] font-bold">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â Te contactaremos por WhatsApp para confirmar el costo de envÃƒÆ’Ã‚Â­o.</p>
                     <div class="bg-yellow-900/20 border border-yellow-700/50 p-3 rounded-lg mt-2">
-                        <p class="text-yellow-500 text-[10px] font-black uppercase mb-1">⚠️ IMPORTANTE</p>
+                        <p class="text-yellow-500 text-[10px] font-black uppercase mb-1">ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â IMPORTANTE</p>
                         <p class="text-gray-400 text-[10px] leading-tight">El costo del Delivery se paga <strong>DIRECTAMENTE AL MOTORIZADO</strong> al recibir tu pedido (Efectivo/Transferencia al conductor).</p>
                         <p class="text-white text-[10px] font-bold mt-1">A nosotros solo nos pagas el consumo de alimentos.</p>
                     </div>
                 </div>
-
-                <!-- PASO 3: Método de pago -->
+                <!-- PASO 3: Metodo de pago -->
                 <div class="space-y-3">
                     <h3 class="font-black text-white uppercase text-xs tracking-widest flex items-center gap-2">
                         <span class="w-6 h-6 bg-bosco-orange rounded-full text-black text-xs font-black flex items-center justify-center">3</span>
-                        MÉTODO DE PAGO
+                        METODO DE PAGO
                     </h3>
-                        <p class="text-gray-400 text-xs">C.I.: <span class="text-white font-bold">0105994735</span></p>
+                </div>
+<div class="space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <button type="button" onclick="setPago(this,'EFECTIVO')" class="btn-pago p-4 rounded-xl font-bold text-sm border-2 border-bosco-orange bg-bosco-orange/10 text-bosco-orange transition-all text-center">
+                            <span class="text-2xl block mb-1">$</span>
+                            EFECTIVO
+                        </button>
+                        <button type="button" onclick="setPago(this,'TRANSFERENCIA')" class="btn-pago p-4 rounded-xl font-bold text-sm border-2 border-gray-700 text-gray-400 transition-all text-center">
+                            <span class="text-2xl block mb-1">TR</span>
+                            TRANSFERENCIA
+                        </button>
+                        {% if payphone_enabled %}
+                        <button type="button" id="btn-payphone" onclick="setPago(this,'PAYPHONE')" class="btn-pago p-4 rounded-xl font-bold text-sm border-2 border-gray-700 text-gray-400 transition-all text-center">
+                            <span class="text-2xl block mb-1">PP</span>
+                            PAYPHONE
+                        </button>
+                        {% endif %}
                     </div>
-                    
-                    <p class="text-gray-500 text-[10px]">📧 Enviar comprobante a: <span class="text-white font-bold">juanjocastro2000@gmail.com</span></p>
+                    {% if payphone_enabled %}
+                    <p id="payphone-note" class="text-gray-500 text-[10px]">PayPhone redirige a un checkout seguro y solo esta disponible para pedidos para llevar.</p>
+                    {% endif %}
+                    <div id="sec-cuenta" class="hidden bg-[#1a1a1a] p-3 rounded-xl border border-gray-700 space-y-1">
+                        <p class="text-[10px] text-gray-600 font-black uppercase tracking-wider">CUENTA PARA TRANSFERENCIA</p>
+                        <p class="text-gray-400 text-xs">Banco: <span class="text-white font-bold">Banco Pichincha</span></p>
+                        <p class="text-gray-400 text-xs">Titular: <span class="text-white font-bold">Juan Jose Castro</span></p>
+                        <p class="text-gray-400 text-xs">C.I.: <span class="text-white font-bold">0105994735</span></p>
+                        <p class="text-gray-500 text-[10px]">Enviar comprobante a: <span class="text-white font-bold">juanjocastro2000@gmail.com</span></p>
+                    </div>
                 </div>
 
                 <!-- Upload Comprobante (solo transferencia) -->
@@ -303,33 +326,33 @@
                     <label class="block w-full bg-[#1a1a1a] border-2 border-dashed border-gray-600 rounded-xl p-6 text-center cursor-pointer hover:border-bosco-orange transition-colors">
                         <input type="file" id="ch-comprobante" accept="image/*" capture="environment" class="hidden" onchange="previewComprobante(this)">
                         <div id="comprobante-placeholder">
-                            <span class="text-4xl">📸</span>
+                            <span class="text-4xl">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¸</span>
                             <p class="text-gray-400 text-sm font-bold mt-2">TOCA PARA SUBIR COMPROBANTE</p>
                             <p class="text-gray-600 text-[10px] mt-1">Foto o captura de la transferencia</p>
                         </div>
                         <div id="comprobante-preview" class="hidden">
-                            <span class="text-4xl">✅</span>
+                            <span class="text-4xl">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦</span>
                             <p class="text-green-400 font-bold text-sm mt-2">COMPROBANTE CARGADO</p>
                             <p id="comprobante-name" class="text-gray-500 text-xs mt-1"></p>
                         </div>
                     </label>
                 </div>
 
-                <!-- Botón Confirmar -->
+                <!-- BotÃƒÆ’Ã‚Â³n Confirmar -->
                 <button onclick="enviarPedido()" id="btn-enviar" 
                     class="w-full bg-bosco-orange text-black font-black py-5 rounded-2xl text-lg active:scale-[0.97] transition-transform shadow-lg shadow-orange-600/30 mt-3">
                     CONFIRMAR PEDIDO
                 </button>
                 
-                <p class="text-gray-700 text-[9px] text-center pb-2">Al confirmar, aceptas que los precios finales incluyen envío cobrado por el delivery</p>
+                <p class="text-gray-700 text-[9px] text-center pb-2">Al confirmar, aceptas que los precios finales incluyen envÃƒÆ’Ã‚Â­o cobrado por el delivery</p>
             </div>
         </div>
     </div>
 
-    <!-- ══════════════ MODAL: ENVIANDO ══════════════ -->
+    <!-- ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â MODAL: ENVIANDO ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â -->
     <div id="modal-enviando" class="hidden fixed inset-0 z-[60] bg-black/95 flex items-center justify-center">
         <div class="text-center p-8">
-            <div class="text-6xl mb-4 animate-bounce">🍗</div>
+            <div class="text-6xl mb-4 animate-bounce">ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬â€</div>
             <p class="text-white font-black text-xl tracking-wide">ENVIANDO PEDIDO...</p>
             <p class="text-gray-500 text-sm mt-2">Un momento por favor</p>
         </div>
@@ -337,15 +360,16 @@
 
 
 <script>
-    // ══════════════ ESTADO GLOBAL ══════════════
+    // ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â ESTADO GLOBAL ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
     let carrito = [];
     let tempProd = { id: '', nombre: '', precio: 0, cantidad: 1, salsas: [] };
     let tipoPedido = 'DOMICILIO';
     let metodoPago = 'EFECTIVO';
+    const PAYPHONE_ENABLED = {{ payphone_enabled|yesno:"true,false" }};
     let ubicacionLat = null;
     let ubicacionLng = null;
 
-    // ══════════════ FILTRAR CATEGORÍAS ══════════════
+    // ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â FILTRAR CATEGORÃƒÆ’Ã‚ÂAS ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
     function filtrar(btn, catId) {
         document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
@@ -355,7 +379,7 @@
         });
     }
 
-    // ══════════════ MODAL PERSONALIZACIÓN ══════════════
+    // ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â MODAL PERSONALIZACIÃƒÆ’Ã¢â‚¬Å“N ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
     let maxSalsas = 1;
 
     function abrirModal(id, nombre, precio) {
@@ -370,7 +394,7 @@
         document.getElementById('modal-salsa-extra').value = '';
         actualizarSubModal();
 
-        // Determinar máximo salsas
+        // Determinar mÃƒÆ’Ã‚Â¡ximo salsas
         const upper = nombre.toUpperCase();
         // Tenders 8u o Boneless 14u -> 2 Salsas
         if (upper.includes('8') || upper.includes('14')) {
@@ -418,8 +442,8 @@
                     btn.classList.remove('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
                     btn.classList.add('bg-bosco-orange', 'text-black', 'border-bosco-orange');
                 } else {
-                    // Si es modo 2 salsas, aviso o reemplazo el primero? Mejor simple: reemplazo el más viejo (stack) o alerta?
-                    // UX rápida: quitamos el primero y ponemos este
+                    // Si es modo 2 salsas, aviso o reemplazo el primero? Mejor simple: reemplazo el mÃƒÆ’Ã‚Â¡s viejo (stack) o alerta?
+                    // UX rÃƒÆ’Ã‚Â¡pida: quitamos el primero y ponemos este
                     const removed = tempProd.salsas.shift(); 
                     // Buscar el boton del removed y apagarlo (complejo buscar por texto).
                     // Mejor resetear visualmente todo y repintar lo activo
@@ -443,14 +467,14 @@
 
     function updateBtnVisuals() {
         resetBtnStyles();
-        // Recorrer botones y activar si su texto coincide (HACKY pero funciona rápido)
+        // Recorrer botones y activar si su texto coincide (HACKY pero funciona rÃƒÆ’Ã‚Â¡pido)
         document.querySelectorAll('.btn-salsa').forEach(b => {
              // El texto del boton tiene emojis, usamos 'includes' con la salsa limpia
              // O pasamos el valor en atributo data. 
              // Como selSalsa recibe el string limpio, comparamos con ese
-             // Pero no tenemos ref fácil al boton. 
+             // Pero no tenemos ref fÃƒÆ’Ã‚Â¡cil al boton. 
              // Re-implementar selSalsa para gestionar mejor esto?
-             // Simplificación: al añadir tempProd.salsas, repintamos todo buscando el texto
+             // SimplificaciÃƒÆ’Ã‚Â³n: al aÃƒÆ’Ã‚Â±adir tempProd.salsas, repintamos todo buscando el texto
              const txt = b.innerText; 
              if (tempProd.salsas.some(s => txt.includes(s))) {
                  b.classList.remove('text-gray-300', 'border-gray-700', 'bg-[#1a1a1a]');
@@ -501,7 +525,7 @@
         setTimeout(() => bar.classList.remove('anim-pop'), 300);
     }
 
-    // ══════════════ RENDERIZAR UI ══════════════
+    // ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â RENDERIZAR UI ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
     function actualizarUI() {
         const count = carrito.reduce((s, i) => s + i.cantidad, 0);
         let total = 0;
@@ -521,7 +545,7 @@
         const container = document.getElementById('carrito-items');
         container.innerHTML = '';
         if (carrito.length === 0) {
-            container.innerHTML = '<div class="text-center text-gray-600 py-16"><span class="text-5xl block mb-4">🛒</span><p class="text-base font-bold">Tu pedido está vacío</p><p class="text-sm mt-2">Agrega algo rico desde el menú</p></div>';
+            container.innerHTML = '<div class="text-center text-gray-600 py-16"><span class="text-5xl block mb-4">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬â„¢</span><p class="text-base font-bold">Tu pedido estÃƒÆ’Ã‚Â¡ vacÃƒÆ’Ã‚Â­o</p><p class="text-sm mt-2">Agrega algo rico desde el menÃƒÆ’Ã‚Âº</p></div>';
         } else {
             carrito.forEach((item, idx) => {
                 const sub = (Math.round(item.precio * item.cantidad * 100) / 100).toFixed(2);
@@ -530,11 +554,11 @@
                         <div class="flex items-center gap-3">
                             <div class="flex-1">
                                 <h4 class="font-bold text-white text-sm uppercase leading-tight">${item.nombre}</h4>
-                                ${item.nota ? `<p class="text-yellow-400 text-[10px] font-bold mt-0.5">📝 ${item.nota}</p>` : ''}
+                                ${item.nota ? `<p class="text-yellow-400 text-[10px] font-bold mt-0.5">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â ${item.nota}</p>` : ''}
                                 <p class="text-gray-600 text-xs mt-1">$${item.precio.toFixed(2)} c/u</p>
                             </div>
                             <div class="flex items-center gap-3">
-                                <button onclick="modCant(${idx},-1)" class="w-8 h-8 bg-[#1a1a1a] rounded-lg text-gray-400 font-bold text-sm flex items-center justify-center active:bg-gray-600">−</button>
+                                <button onclick="modCant(${idx},-1)" class="w-8 h-8 bg-[#1a1a1a] rounded-lg text-gray-400 font-bold text-sm flex items-center justify-center active:bg-gray-600">ÃƒÂ¢Ã‹â€ Ã¢â‚¬â„¢</button>
                                 <span class="text-white font-black text-sm w-4 text-center">${item.cantidad}</span>
                                 <button onclick="modCant(${idx},1)" class="w-8 h-8 bg-bosco-orange rounded-lg text-black font-bold text-sm flex items-center justify-center active:bg-orange-500">+</button>
                             </div>
@@ -555,13 +579,13 @@
 
     function vaciarCarrito() {
         if (carrito.length === 0) return;
-        if (!confirm('¿Vaciar todo el pedido?')) return;
+        if (!confirm('Ãƒâ€šÃ‚Â¿Vaciar todo el pedido?')) return;
         carrito = [];
         actualizarUI();
         cerrarCarrito();
     }
 
-    // ══════════════ CARRITO MODAL ══════════════
+    // ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â CARRITO MODAL ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
     function abrirCarrito() {
         if (carrito.length === 0) return;
         actualizarUI();
@@ -574,7 +598,7 @@
         document.body.style.overflow = '';
     }
 
-    // ══════════════ CHECKOUT ══════════════
+    // ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â CHECKOUT ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
     function setTipo(btn, tipo) {
         tipoPedido = tipo;
         document.querySelectorAll('.btn-tipo').forEach(b => {
@@ -585,9 +609,14 @@
         btn.classList.remove('border-gray-700', 'text-gray-400');
         
         document.getElementById('sec-direccion').style.display = tipo === 'DOMICILIO' ? '' : 'none';
+        syncPayphoneAvailability();
     }
 
     function setPago(btn, metodo) {
+        if (metodo === 'PAYPHONE' && (!PAYPHONE_ENABLED || tipoPedido !== 'LLEVAR')) {
+            alert('PayPhone solo estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ disponible para pedidos para llevar');
+            return;
+        }
         metodoPago = metodo;
         document.querySelectorAll('.btn-pago').forEach(b => {
             b.classList.remove('border-bosco-orange', 'bg-bosco-orange/10', 'text-bosco-orange');
@@ -600,6 +629,25 @@
         document.getElementById('sec-cuenta').classList.toggle('hidden', metodo !== 'TRANSFERENCIA');
     }
 
+    function syncPayphoneAvailability() {
+        const payphoneButton = document.getElementById('btn-payphone');
+        if (!payphoneButton) return;
+
+        const allowed = PAYPHONE_ENABLED && tipoPedido === 'LLEVAR';
+        payphoneButton.disabled = !allowed;
+        payphoneButton.classList.toggle('opacity-40', !allowed);
+        payphoneButton.classList.toggle('cursor-not-allowed', !allowed);
+
+        if (!allowed && metodoPago === 'PAYPHONE') {
+            const efectivoButton = document.querySelector(".btn-pago[onclick=\"setPago(this,'EFECTIVO')\"]");
+            if (efectivoButton) {
+                setPago(efectivoButton, 'EFECTIVO');
+            } else {
+                metodoPago = 'EFECTIVO';
+            }
+        }
+    }
+
     function previewComprobante(input) {
         if (input.files && input.files[0]) {
             document.getElementById('comprobante-placeholder').classList.add('hidden');
@@ -608,31 +656,32 @@
         }
     }
 
-    // ══════════════ ENVIAR PEDIDO ══════════════
+    // ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â ENVIAR PEDIDO ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
     function enviarPedido() {
         let nombre = document.getElementById('ch-nombre').value.trim();
         const telefono = document.getElementById('ch-telefono').value.trim();
         const direccion = document.getElementById('ch-direccion').value.trim();
         const btn = document.getElementById('btn-enviar');
 
-        if (!nombre) { sacudir('ch-nombre'); return alert('⚠️ Ingresa tu nombre (Para llamarte al entregar)'); }
-        if (!telefono) { sacudir('ch-telefono'); return alert('⚠️ Ingresa tu WhatsApp/teléfono'); }
-        if (tipoPedido === 'DOMICILIO' && !direccion) { sacudir('ch-direccion'); return alert('⚠️ Ingresa tu dirección de entrega'); }
-        if (carrito.length === 0) return alert('⚠️ Tu carrito está vacío');
+        if (!nombre) { sacudir('ch-nombre'); return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Ingresa tu nombre (Para llamarte al entregar)'); }
+        if (!telefono) { sacudir('ch-telefono'); return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Ingresa tu WhatsApp/telÃƒÆ’Ã‚Â©fono'); }
+        if (tipoPedido === 'DOMICILIO' && !direccion) { sacudir('ch-direccion'); return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Ingresa tu direcciÃƒÆ’Ã‚Â³n de entrega'); }
+        if (metodoPago === 'PAYPHONE' && tipoPedido !== 'LLEVAR') return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â PayPhone solo estÃƒÆ’Ã‚Â¡ disponible para pedidos para llevar');
+        if (carrito.length === 0) return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Tu carrito estÃƒÆ’Ã‚Â¡ vacÃƒÆ’Ã‚Â­o');
 
-        // Lógica de Código DOMICILIO
+        // LÃƒÆ’Ã‚Â³gica de CÃƒÆ’Ã‚Â³digo DOMICILIO
         if (tipoPedido === 'DOMICILIO') {
-            const last4 = telefono.replace(/\D/g, '').slice(-4); // Solo números, últimos 4
-            // Guardamos el código al inicio del nombre para que salga en el ticket
+            const last4 = telefono.replace(/\D/g, '').slice(-4); // Solo nÃƒÆ’Ã‚Âºmeros, ÃƒÆ’Ã‚Âºltimos 4
+            // Guardamos el cÃƒÆ’Ã‚Â³digo al inicio del nombre para que salga en el ticket
             nombre = `DOMICILIO ${last4} - ${nombre}`;
         }
 
         if (metodoPago === 'TRANSFERENCIA') {
             const comp = document.getElementById('ch-comprobante').files[0];
-            if (!comp) return alert('⚠️ Sube el comprobante de transferencia');
+            if (!comp) return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Sube el comprobante de transferencia');
         }
 
-        // Desactivar botón
+        // Desactivar botÃƒÆ’Ã‚Â³n
         btn.disabled = true;
         btn.innerText = 'PROCESANDO...';
         btn.classList.add('opacity-50');
@@ -665,16 +714,20 @@
         .then(data => {
             document.getElementById('modal-enviando').classList.add('hidden');
             if (data.status === 'ok') {
-                window.location.href = '/pedido/confirmacion/' + data.pedido_id + '/';
+                if (data.payphone_checkout_url) {
+                    window.location.href = data.payphone_checkout_url;
+                    return;
+                }
+                window.location.href = data.confirmation_url || ('/pedido/confirmacion/' + data.pedido_id + '/');
             } else {
                 resetEnviarBtn();
-                alert('❌ ' + data.mensaje);
+                alert('ÃƒÂ¢Ã‚ÂÃ…â€™ ' + data.mensaje);
             }
         })
         .catch(err => {
             document.getElementById('modal-enviando').classList.add('hidden');
             resetEnviarBtn();
-            alert('❌ Error de conexión. Intenta de nuevo.');
+            alert('ÃƒÂ¢Ã‚ÂÃ…â€™ Error de conexiÃƒÆ’Ã‚Â³n. Intenta de nuevo.');
         });
     }
 
@@ -692,7 +745,7 @@
         setTimeout(() => el.classList.remove('anim-shake', 'border-red-500'), 500);
     }
 
-    // ══════════════ GEOLOCALIZACIÓN ══════════════
+    // ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GEOLOCALIZACIÃƒÆ’Ã¢â‚¬Å“N ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
     function obtenerGPS() {
         if (!navigator.geolocation) {
             document.getElementById('gps-placeholder').classList.add('hidden');
@@ -723,8 +776,8 @@
                 document.getElementById('gps-loading').classList.add('hidden');
                 document.getElementById('gps-error').classList.remove('hidden');
                 const msgs = {
-                    1: 'Permiso denegado. Toca "Permitir" cuando tu teléfono lo pida.',
-                    2: 'No se pudo determinar tu ubicación. ¿Estás en interiores?',
+                    1: 'Permiso denegado. Toca "Permitir" cuando tu telÃƒÆ’Ã‚Â©fono lo pida.',
+                    2: 'No se pudo determinar tu ubicaciÃƒÆ’Ã‚Â³n. Ãƒâ€šÃ‚Â¿EstÃƒÆ’Ã‚Â¡s en interiores?',
                     3: 'Tiempo agotado. Intenta de nuevo al aire libre.'
                 };
                 document.getElementById('gps-error-msg').innerText = msgs[err.code] || 'Error desconocido';
@@ -735,12 +788,13 @@
 
     // Init
     actualizarUI();
+    syncPayphoneAvailability();
 </script>
 
-<!-- Footer Ü Systems -->
+<!-- Footer ÃƒÆ’Ã…â€œ Systems -->
 <div class="text-center py-4 text-gray-700 text-[9px] font-bold tracking-widest flex items-center justify-center gap-2">
-    Powered by Ü Systems
-    <a href="/login/?src=pwa" class="text-gray-800 hover:text-gray-500 transition">🔒</a>
+    Powered by ÃƒÆ’Ã…â€œ Systems
+    <a href="/login/?src=pwa" class="text-gray-800 hover:text-gray-500 transition">ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬â„¢</a>
 </div>
 
 </body>

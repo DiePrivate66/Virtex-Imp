@@ -9,6 +9,7 @@ from pos.domain.web_orders import (
     STATUS_PENDING_QUOTE,
     STATUS_READY,
 )
+from pos.infrastructure.payments import payphone_web_checkout_enabled
 from pos.models import Categoria, Producto, Venta
 
 
@@ -34,6 +35,7 @@ def get_menu_page_context() -> dict:
         'categorias': Categoria.objects.filter(organization=organization),
         'productos': Producto.objects.filter(organization=organization, activo=True).select_related('categoria'),
         'local_abierto': store_is_open(),
+        'payphone_enabled': payphone_web_checkout_enabled(),
         'horario_hoy': '4:00 PM - 9:00 PM' if weekday == 6 else '4:00 PM - 10:00 PM',
         'dia_hoy': ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'][weekday],
     }

@@ -17,6 +17,11 @@ def handle_order_status_request(request, pedido_id):
             'estado_display': venta.get_estado_display(),
             'tipo_pedido': venta.tipo_pedido,
             'metodo_pago': venta.metodo_pago,
+            'payment_status': venta.payment_status,
+            'payment_status_display': venta.get_payment_status_display(),
+            'payment_provider': venta.payment_provider,
+            'payment_reference': venta.payment_reference,
+            'payment_failure_reason': venta.payment_failure_reason,
             'cliente_nombre': venta.cliente_nombre,
             'telefono_cliente': venta.telefono_cliente,
             'total': f'{venta.total:.2f}',
@@ -35,6 +40,9 @@ def handle_order_status_request(request, pedido_id):
             'esperando_confirmacion_delivery': (
                 venta.cliente_reporto_recibido_at is not None
                 and venta.repartidor_confirmo_entrega_at is None
+            ),
+            'payphone_checkout_pending': (
+                venta.metodo_pago == 'PAYPHONE' and venta.payment_status == Venta.PaymentStatus.PENDING
             ),
         }
     )

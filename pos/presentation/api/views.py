@@ -6,6 +6,9 @@ Canonical target: ``pos.presentation.api.public``
 
 from .public import (
     api_crear_pedido,
+    api_payphone_cancel,
+    api_payphone_notify,
+    api_payphone_return,
     api_productos,
     confirmacion_pedido,
     esta_abierto,
@@ -14,6 +17,9 @@ from .public import (
 
 __all__ = [
     'api_crear_pedido',
+    'api_payphone_cancel',
+    'api_payphone_notify',
+    'api_payphone_return',
     'api_productos',
     'confirmacion_pedido',
     'esta_abierto',

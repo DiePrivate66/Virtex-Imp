@@ -9,6 +9,11 @@ from .menu_endpoint import handle_menu_request
 from .order_confirmation_endpoint import handle_order_confirmation_request
 from .order_received_endpoint import handle_order_received_request
 from .order_status_endpoint import handle_order_status_request
+from .payphone_endpoint import (
+    handle_payphone_cancel_request,
+    handle_payphone_notification_request,
+    handle_payphone_return_request,
+)
 from .product_catalog_endpoint import handle_product_catalog_request
 
 logger = logging.getLogger(__name__)
@@ -50,10 +55,25 @@ def api_reportar_pedido_recibido(request, pedido_id):
     return handle_order_received_request(request, pedido_id)
 
 
+def api_payphone_return(request):
+    return handle_payphone_return_request(request)
+
+
+def api_payphone_cancel(request):
+    return handle_payphone_cancel_request(request)
+
+
+def api_payphone_notify(request):
+    return handle_payphone_notification_request(request)
+
+
 __all__ = [
     'api_crear_pedido',
     'api_estado_pedido',
     'api_productos',
+    'api_payphone_cancel',
+    'api_payphone_notify',
+    'api_payphone_return',
     'api_reportar_pedido_recibido',
     'confirmacion_pedido',
     'esta_abierto',

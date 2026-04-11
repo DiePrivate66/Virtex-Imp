@@ -119,6 +119,7 @@ Estos son los bounded contexts que usamos:
 - confirmacion del cliente
 - panel de pedidos web
 - transiciones de estado del pedido
+- checkout web por PayPhone para `LLEVAR`, con redireccion, callback de retorno/cancelacion y notificacion externa
 
 ### Cash Register
 

@@ -431,7 +431,12 @@ class Venta(models.Model):
         FAILED = 'FAILED', 'Fallido'
         VOIDED = 'VOIDED', 'Anulado'
 
-    METODOS = [('EFECTIVO', 'Efectivo'), ('TRANSFERENCIA', 'Transferencia'), ('TARJETA', 'Tarjeta/Medianet')]
+    METODOS = [
+        ('EFECTIVO', 'Efectivo'),
+        ('TRANSFERENCIA', 'Transferencia'),
+        ('TARJETA', 'Tarjeta/Medianet'),
+        ('PAYPHONE', 'PayPhone'),
+    ]
     ESTADOS_PAGO = [
         ('PENDIENTE', 'Pendiente'),
         ('APROBADO', 'Aprobado'),

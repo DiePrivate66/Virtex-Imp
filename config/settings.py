@@ -185,6 +185,13 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 RESEND_API_BASE = os.environ.get('RESEND_API_BASE', 'https://api.resend.com')
 RESEND_API_TIMEOUT_SECONDS = int(os.environ.get('RESEND_API_TIMEOUT_SECONDS', '15'))
 
+# --- PAYPHONE ---
+PAYPHONE_ENABLED = os.environ.get('PAYPHONE_ENABLED', 'False') == 'True'
+PAYPHONE_API_BASE = os.environ.get('PAYPHONE_API_BASE', 'https://pay.payphonetodoesposible.com')
+PAYPHONE_TOKEN = os.environ.get('PAYPHONE_TOKEN', '')
+PAYPHONE_STORE_ID = os.environ.get('PAYPHONE_STORE_ID', '')
+PAYPHONE_TIMEOUT_SECONDS = int(os.environ.get('PAYPHONE_TIMEOUT_SECONDS', '15'))
+
 # --- INTEGRACIONES WHATSAPP / ASYNC ---
 PUBLIC_PWA_URL = os.environ.get('PUBLIC_PWA_URL', 'http://127.0.0.1:4200')
 PUBLIC_BACKEND_URL = os.environ.get('PUBLIC_BACKEND_URL', 'http://127.0.0.1:8000')

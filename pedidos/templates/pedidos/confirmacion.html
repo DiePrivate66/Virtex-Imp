@@ -52,7 +52,16 @@
         </div>
 
         <div class="bg-bosco-gray rounded-2xl p-5 border border-gray-700">
-            {% if venta.estado == 'PENDIENTE_COTIZACION' %}
+            {% if payment_result == 'cancelled' or venta.payment_status == 'VOIDED' %}
+                <p class="text-red-400 font-black text-sm uppercase">Pago cancelado</p>
+                <p class="text-gray-400 text-xs mt-2">El checkout de PayPhone fue cancelado. Si quieres, puedes volver a intentar el pedido.</p>
+            {% elif venta.metodo_pago == 'PAYPHONE' and venta.payment_status == 'PENDING' %}
+                <p class="text-yellow-400 font-black text-sm uppercase">Pago pendiente</p>
+                <p class="text-gray-400 text-xs mt-2">Tu pedido fue creado pero falta completar el cobro en PayPhone para procesarlo.</p>
+            {% elif venta.payment_status == 'FAILED' %}
+                <p class="text-red-400 font-black text-sm uppercase">Pago no aprobado</p>
+                <p class="text-gray-400 text-xs mt-2">No se pudo confirmar el cobro con PayPhone. Intenta nuevamente con un nuevo pedido.</p>
+            {% elif venta.estado == 'PENDIENTE_COTIZACION' %}
                 <p class="text-yellow-400 font-black text-sm uppercase">Confirmando costo de envio</p>
                 <p class="text-gray-400 text-xs mt-2">
                     Te contactaremos al <strong class="text-white">{{ venta.telefono_cliente }}</strong> para confirmar el costo del delivery.
@@ -142,6 +151,10 @@
                 <p>📍 {{ venta.direccion_envio }}</p>
             {% endif %}
             <p>💳 {{ venta.get_metodo_pago_display }}</p>
+            <p>Estado de pago: <span class="text-white font-bold">{{ venta.get_payment_status_display }}</span></p>
+            {% if venta.payment_reference %}
+                <p>Referencia: <span class="text-white font-bold">{{ venta.payment_reference }}</span></p>
+            {% endif %}
         </div>
 
         <div class="space-y-3 pt-4">
