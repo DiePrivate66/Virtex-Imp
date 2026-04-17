@@ -5556,6 +5556,13 @@ class PublicLegalPagesTests(SimpleTestCase):
         self.assertContains(response, 'Eliminacion de datos')
         self.assertContains(response, 'Solicitud de eliminacion de datos')
 
+    def test_delete_data_alias_page_is_public(self):
+        response = self.client.get(reverse('data_deletion_alias'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Eliminacion de datos')
+        self.assertContains(response, 'Solicitud de eliminacion de datos')
+
 
 class WebOrderApiRequestParsingTests(SimpleTestCase):
     def test_parse_web_order_request_rejects_invalid_json_payload(self):
