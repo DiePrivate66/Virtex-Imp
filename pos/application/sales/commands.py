@@ -175,8 +175,7 @@ def register_sale(user, data: dict) -> SaleRegistrationResult:
     )
     _resolve_pending_payment_confirmation_orphans_for_sale(venta=venta, user=user)
 
-    if cliente and cliente.email:
-        send_sale_receipt_email_async(venta, cliente.email)
+    send_sale_receipt_email_for_sale_async(venta)
 
     payload = build_sale_response_payload(venta)
     return SaleRegistrationResult(venta=venta, payload=payload, duplicated=False)
@@ -1528,6 +1527,19 @@ def send_sale_receipt_email(venta: Venta, recipient_email: str) -> None:
     )
 
 
+def resolve_sale_receipt_recipient_email(venta: Venta) -> str:
+    sale_email = str(getattr(venta, 'email_cliente', '') or '').strip()
+    if sale_email:
+        return sale_email
+
+    cliente = getattr(venta, 'cliente', None)
+    customer_email = str(getattr(cliente, 'email', '') or '').strip()
+    if customer_email:
+        return customer_email
+
+    return ''
+
+
 def send_sale_receipt_email_async(venta: Venta, recipient_email: str):
     if not recipient_email:
         return
@@ -1541,6 +1553,24 @@ def send_sale_receipt_email_async(venta: Venta, recipient_email: str):
             logger.exception('No se pudo enviar comprobante por correo para venta #%s', venta.id)
 
     threading.Thread(target=send_async, daemon=True).start()
+
+
+def send_sale_receipt_email_for_sale_async(venta: Venta) -> None:
+    recipient_email = resolve_sale_receipt_recipient_email(venta)
+    if recipient_email:
+        send_sale_receipt_email_async(venta, recipient_email)
+
+
+def send_sale_receipt_email_for_sale_after_commit(venta_id: int) -> None:
+    def send_after_commit():
+        try:
+            venta = Venta.objects.select_related('cliente').get(id=venta_id)
+        except Venta.DoesNotExist:
+            logger.warning('No se pudo enviar comprobante: venta #%s no existe', venta_id)
+            return
+        send_sale_receipt_email_for_sale_async(venta)
+
+    transaction.on_commit(send_after_commit)
 
 
 def _is_valid_identity(value: str) -> bool:

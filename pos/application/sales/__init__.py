@@ -10,6 +10,8 @@ from .commands import (
     build_sale_response_payload,
     register_sale,
     send_sale_receipt_email_async,
+    send_sale_receipt_email_for_sale_after_commit,
+    send_sale_receipt_email_for_sale_async,
 )
 from .queries import get_pos_home_context, get_user_open_cash_register
 
@@ -27,4 +29,6 @@ __all__ = [
     'build_sale_response_payload',
     'register_sale',
     'send_sale_receipt_email_async',
+    'send_sale_receipt_email_for_sale_after_commit',
+    'send_sale_receipt_email_for_sale_async',
 ]

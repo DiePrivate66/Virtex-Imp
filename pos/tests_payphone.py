@@ -33,6 +33,7 @@ class _MockUrlopenResponse:
     PAYPHONE_TOKEN='pp_test_token',
     PAYPHONE_STORE_ID='store-123',
     PUBLIC_BACKEND_URL='https://example.com',
+    ENABLE_BUSINESS_HOURS=False,
 )
 class PayPhoneWebOrdersTests(TestCase):
     def setUp(self):
@@ -142,6 +143,24 @@ class PayPhoneWebOrdersTests(TestCase):
         self.assertEqual(venta.payment_provider, 'PAYPHONE')
         self.assertEqual(venta.payment_reference, 'PAYPHONE-456789')
 
+    @patch('pos.application.web_orders.commands.send_sale_receipt_email_for_sale_after_commit')
+    @patch('pos.infrastructure.payments.payphone.urlrequest.urlopen')
+    def test_payphone_return_queues_receipt_email_after_payment(self, mock_urlopen, mock_queue_receipt):
+        mock_urlopen.side_effect = self._urlopen_side_effect
+        venta = create_web_order(self._web_order_payload(email='cliente-payphone@example.com'))
+
+        response = self.client.get(
+            reverse('pedido_api_payphone_return'),
+            {
+                'pedido_id': venta.id,
+                'id': '991',
+                'clientTransactionId': venta.client_transaction_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        mock_queue_receipt.assert_called_once_with(venta.id)
+
     def test_payphone_cancel_endpoint_voids_order(self):
         venta = create_web_order(self._web_order_payload())
 
@@ -246,3 +265,44 @@ class PayPhoneWebOrderActionsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'PAYPHONE')
         self.assertContains(response, 'ESPERANDO PAGO')
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True, SECURE_SSL_REDIRECT=False)
+class WebOrderReceiptEmailTests(TestCase):
+    def setUp(self):
+        self.location = Location.get_or_create_default()
+        self.categoria = Categoria.objects.create(
+            nombre='Comprobantes',
+            organization=self.location.organization,
+        )
+        self.producto = Producto.objects.create(
+            categoria=self.categoria,
+            organization=self.location.organization,
+            nombre='Combo Comprobante',
+            precio=Decimal('7.25'),
+            activo=True,
+        )
+
+    @patch('pos.application.web_orders.commands.send_sale_receipt_email_for_sale_after_commit')
+    def test_paid_takeaway_web_order_queues_receipt_email(self, mock_queue_receipt):
+        venta = create_web_order(
+            {
+                'nombre': 'Cliente Con Email',
+                'telefono': '0991234567',
+                'email': 'cliente@example.com',
+                'direccion': '',
+                'tipo_pedido': 'LLEVAR',
+                'metodo_pago': 'TRANSFERENCIA',
+                'carrito': [
+                    {
+                        'id': self.producto.id,
+                        'cantidad': 1,
+                        'nombre': self.producto.nombre,
+                        'nota': '',
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(venta.payment_status, Venta.PaymentStatus.PAID)
+        mock_queue_receipt.assert_called_once_with(venta.id)

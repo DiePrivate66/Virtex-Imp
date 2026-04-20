@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from pos.application.context import get_default_catalog_organization
+from pos.application.sales import send_sale_receipt_email_for_sale_after_commit
 from pos.application.sales.offline_capture import capture_paid_sale_to_offline_journal
 from pos.domain.shared import build_sale_temporal_fields, normalize_phone_to_e164
 from pos.domain.shared.sale_invariants import (
@@ -282,6 +283,8 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
                     capture_source='server_django_web_orders',
                 )
             )
+            if sale.tipo_pedido != 'DOMICILIO':
+                send_sale_receipt_email_for_sale_after_commit(sale.id)
 
     if order_type == 'DOMICILIO':
         send_delivery_quote_requests.delay(sale.id)
@@ -494,6 +497,7 @@ def _mark_web_order_payment_paid(*, venta: Venta, confirm_response: dict) -> Ven
                 capture_source='server_django_payphone',
             )
         )
+        send_sale_receipt_email_for_sale_after_commit(venta.id)
     return venta
 
 
