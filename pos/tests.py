@@ -272,6 +272,7 @@ class WebOrderCreationInvariantsTests(TestCase):
             {
                 'nombre': 'Cliente Web',
                 'telefono': '0991234567',
+                'email': 'cliente-web@example.com',
                 'direccion': 'Av. Central',
                 'metodo_pago': 'EFECTIVO',
                 'tipo_pedido': 'DOMICILIO',
@@ -287,6 +288,7 @@ class WebOrderCreationInvariantsTests(TestCase):
         self.assertFalse(venta.chronology_estimated)
         self.assertEqual(venta.payment_status, Venta.PaymentStatus.PAID)
         self.assertEqual(venta.estado_pago, 'APROBADO')
+        self.assertEqual(venta.email_cliente, 'cliente-web@example.com')
 
         detalle = venta.detalles.get()
         self.assertEqual(detalle.precio_bruto_unitario, Decimal('8.50'))
@@ -317,6 +319,7 @@ class WebOrderCreationInvariantsTests(TestCase):
                 'cedula': '0912345678',
                 'nombre': 'Cliente Web',
                 'telefono': '0991234567',
+                'email': 'cliente-web@example.com',
                 'direccion': 'Av. Central',
                 'metodo_pago': 'EFECTIVO',
                 'tipo_pedido': 'DOMICILIO',
@@ -327,6 +330,30 @@ class WebOrderCreationInvariantsTests(TestCase):
         self.assertIsNotNone(venta.cliente)
         self.assertNotEqual(venta.cliente_id, foreign_customer.id)
         self.assertEqual(venta.cliente.organization, location.organization)
+        self.assertEqual(venta.cliente.email, 'cliente-web@example.com')
+
+    def test_create_web_order_requires_customer_email_for_receipt(self):
+        location = Location.get_or_create_default()
+        categoria = Categoria.objects.create(nombre='Sin Email', organization=location.organization)
+        producto = Producto.objects.create(
+            categoria=categoria,
+            organization=location.organization,
+            nombre='Combo Sin Email',
+            precio=Decimal('6.00'),
+            activo=True,
+        )
+
+        with self.assertRaisesMessage(WebOrderError, 'Ingresa un correo valido'):
+            create_web_order(
+                {
+                    'nombre': 'Cliente Web',
+                    'telefono': '0991234567',
+                    'direccion': 'Av. Central',
+                    'metodo_pago': 'EFECTIVO',
+                    'tipo_pedido': 'DOMICILIO',
+                    'carrito': [{'id': producto.id, 'cantidad': 1, 'nombre': producto.nombre, 'nota': ''}],
+                }
+            )
 
     def test_create_web_order_appends_paid_event_to_offline_journal(self):
         location = Location.get_or_create_default()
@@ -353,6 +380,7 @@ class WebOrderCreationInvariantsTests(TestCase):
                                 {
                                     'nombre': 'Cliente Web',
                                     'telefono': '0991234567',
+                                    'email': 'cliente-web@example.com',
                                     'direccion': 'Av. Central',
                                     'metodo_pago': 'EFECTIVO',
                                     'tipo_pedido': 'SERVIR',

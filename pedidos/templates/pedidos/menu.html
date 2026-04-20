@@ -227,6 +227,8 @@
                         class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600">
                     <input type="tel" id="ch-telefono" placeholder="WhatsApp / TelÃƒÆ’Ã‚Â©fono *"
                         class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600">
+                    <input type="email" id="ch-email" placeholder="Correo para factura *"
+                        class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm font-bold placeholder-gray-600">
                     <input type="text" id="ch-cedula" placeholder="C.I. / RUC (para factura, opcional)"
                         class="w-full bg-[#1a1a1a] text-white p-3.5 rounded-xl border border-gray-700 focus:border-bosco-orange outline-none text-sm placeholder-gray-600">
                 </div>
@@ -660,11 +662,13 @@
     function enviarPedido() {
         let nombre = document.getElementById('ch-nombre').value.trim();
         const telefono = document.getElementById('ch-telefono').value.trim();
+        const email = document.getElementById('ch-email').value.trim();
         const direccion = document.getElementById('ch-direccion').value.trim();
         const btn = document.getElementById('btn-enviar');
 
         if (!nombre) { sacudir('ch-nombre'); return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Ingresa tu nombre (Para llamarte al entregar)'); }
         if (!telefono) { sacudir('ch-telefono'); return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Ingresa tu WhatsApp/telÃƒÆ’Ã‚Â©fono'); }
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { sacudir('ch-email'); return alert('Ingresa un correo valido para enviarte la factura'); }
         if (tipoPedido === 'DOMICILIO' && !direccion) { sacudir('ch-direccion'); return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Ingresa tu direcciÃƒÆ’Ã‚Â³n de entrega'); }
         if (metodoPago === 'PAYPHONE' && tipoPedido !== 'LLEVAR') return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â PayPhone solo estÃƒÆ’Ã‚Â¡ disponible para pedidos para llevar');
         if (carrito.length === 0) return alert('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Tu carrito estÃƒÆ’Ã‚Â¡ vacÃƒÆ’Ã‚Â­o');
@@ -692,6 +696,7 @@
         formData.append('nombre', nombre);
         formData.append('cedula', document.getElementById('ch-cedula').value.trim());
         formData.append('telefono', telefono);
+        formData.append('email', email);
         formData.append('direccion', direccion);
         formData.append('tipo_pedido', tipoPedido);
         formData.append('metodo_pago', metodoPago);

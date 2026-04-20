@@ -104,7 +104,9 @@
                     {% if p.cliente and p.cliente.cedula_ruc %}
                     <p class="text-gray-400 text-xs">🪪 CI/RUC: {{ p.cliente.cedula_ruc }}</p>
                     {% endif %}
-                    {% if p.cliente and p.cliente.email %}
+                    {% if p.email_cliente %}
+                    <p class="text-gray-400 text-xs">📧 {{ p.email_cliente }}</p>
+                    {% elif p.cliente and p.cliente.email %}
                     <p class="text-gray-400 text-xs">📧 {{ p.cliente.email }}</p>
                     {% endif %}
                 </div>

@@ -1559,16 +1559,31 @@ def send_sale_receipt_email_for_sale_async(venta: Venta) -> None:
     recipient_email = resolve_sale_receipt_recipient_email(venta)
     if recipient_email:
         send_sale_receipt_email_async(venta, recipient_email)
+    else:
+        logger.warning('No se envio comprobante para venta #%s: venta sin correo de cliente', venta.id)
+
+
+def send_sale_receipt_email_for_sale_sync(venta: Venta) -> None:
+    recipient_email = resolve_sale_receipt_recipient_email(venta)
+    if not recipient_email:
+        logger.warning('No se envio comprobante para venta #%s: venta sin correo de cliente', venta.id)
+        return
+    try:
+        send_sale_receipt_email(venta, recipient_email)
+    except ResendEmailError:
+        logger.exception('No se pudo enviar comprobante por Resend para venta #%s', venta.id)
+    except Exception:
+        logger.exception('No se pudo enviar comprobante por correo para venta #%s', venta.id)
 
 
 def send_sale_receipt_email_for_sale_after_commit(venta_id: int) -> None:
     def send_after_commit():
         try:
-            venta = Venta.objects.select_related('cliente').get(id=venta_id)
+            venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(id=venta_id)
         except Venta.DoesNotExist:
             logger.warning('No se pudo enviar comprobante: venta #%s no existe', venta_id)
             return
-        send_sale_receipt_email_for_sale_async(venta)
+        send_sale_receipt_email_for_sale_sync(venta)
 
     transaction.on_commit(send_after_commit)
 

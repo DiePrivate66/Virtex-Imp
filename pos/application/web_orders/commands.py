@@ -5,6 +5,8 @@ from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
 from django.urls import reverse
@@ -185,6 +187,8 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
             }
         )
 
+    email = _normalize_required_customer_email(data)
+    data = {**data, 'email': email}
     customer = _resolve_customer(data, organization=organization)
     cash_register = CajaTurno.objects.filter(fecha_cierre__isnull=True).first()
     sale_scope = build_sale_scope_fields(
@@ -228,7 +232,7 @@ def create_web_order(data: dict, comprobante=None) -> Venta:
             cliente_nombre=data.get('nombre', 'CONSUMIDOR FINAL'),
             telefono_cliente=raw_phone,
             telefono_cliente_e164=normalize_phone_to_e164(raw_phone),
-            email_cliente=(data.get('email') or '').strip(),
+            email_cliente=email,
             direccion_envio=data.get('direccion', ''),
             ubicacion_lat=float(lat) if lat else None,
             ubicacion_lng=float(lng) if lng else None,
@@ -587,6 +591,17 @@ def _normalize_payphone_notification_payload(payload: dict) -> dict:
         'reference': payload.get('Reference'),
         'amount': payload.get('Amount'),
     }
+
+
+def _normalize_required_customer_email(data: dict) -> str:
+    email = str(data.get('email') or '').strip()
+    if not email:
+        raise WebOrderError('Ingresa un correo valido para enviar tu comprobante', status_code=400)
+    try:
+        validate_email(email)
+    except ValidationError as exc:
+        raise WebOrderError('Ingresa un correo valido para enviar tu comprobante', status_code=400) from exc
+    return email
 
 
 def _resolve_customer(data: dict, *, organization):

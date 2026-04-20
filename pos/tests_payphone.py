@@ -54,6 +54,7 @@ class PayPhoneWebOrdersTests(TestCase):
         data = {
             'nombre': 'Cliente PayPhone',
             'telefono': '0991234567',
+            'email': 'cliente-payphone@example.com',
             'direccion': '',
             'tipo_pedido': 'LLEVAR',
             'metodo_pago': 'PAYPHONE',
@@ -110,6 +111,7 @@ class PayPhoneWebOrdersTests(TestCase):
             data={
                 'nombre': 'Cliente PayPhone',
                 'telefono': '0991234567',
+                'email': 'cliente-payphone@example.com',
                 'tipo_pedido': 'LLEVAR',
                 'metodo_pago': 'PAYPHONE',
                 'carrito': json.dumps([{'id': self.producto.id, 'cantidad': 2, 'nombre': self.producto.nombre, 'nota': ''}]),
@@ -214,6 +216,7 @@ class PayPhoneWebOrdersTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'PAYPHONE')
+        self.assertContains(response, 'ch-email')
 
     def test_confirmation_page_renders_pending_payphone_state(self):
         venta = create_web_order(self._web_order_payload())
