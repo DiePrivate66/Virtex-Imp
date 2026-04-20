@@ -37,6 +37,13 @@ def split_env_list(value: str):
     return [item.strip() for item in value.split(',') if item.strip()]
 
 
+def strip_wrapping_quotes(value: str):
+    normalized = (value or '').strip()
+    if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in {'"', "'"}:
+        return normalized[1:-1].strip()
+    return normalized
+
+
 DEFAULT_ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.railway.app']
 DEFAULT_CSRF_TRUSTED_ORIGINS = [
     'https://*.railway.app',
@@ -185,7 +192,7 @@ EMAIL_PORT          = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_USE_TLS       = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', f'RAMON by Bosco <{EMAIL_HOST_USER}>')
+DEFAULT_FROM_EMAIL  = strip_wrapping_quotes(os.environ.get('DEFAULT_FROM_EMAIL', f'RAMON by Bosco <{EMAIL_HOST_USER}>'))
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 RESEND_API_BASE = os.environ.get('RESEND_API_BASE', 'https://api.resend.com')
 RESEND_API_TIMEOUT_SECONDS = int(os.environ.get('RESEND_API_TIMEOUT_SECONDS', '15'))

@@ -884,7 +884,7 @@ class WhatsAppMessageLog(models.Model):
 
     direction = models.CharField(max_length=3, choices=DIRECCIONES)
     telefono_e164 = models.CharField(max_length=20, db_index=True)
-    message_sid = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    message_sid = models.CharField(max_length=255, null=True, blank=True, unique=True)
     payload_json = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=32, default='queued')
     created_at = models.DateTimeField(auto_now_add=True)

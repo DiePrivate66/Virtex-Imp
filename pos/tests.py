@@ -112,6 +112,16 @@ class WhatsAppWebhookTests(TestCase):
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(WhatsAppMessageLog.objects.filter(message_sid='wamid.DUP_001').count(), 1)
 
+    def test_webhook_accepts_long_meta_message_sid(self):
+        url = reverse('whatsapp_webhook')
+        message_sid = 'wamid.' + ('A' * 120)
+        payload = self._meta_payload('593991234569', 'hola', message_sid)
+
+        response = self.client.post(url, data=json.dumps(payload), content_type='application/json')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(WhatsAppMessageLog.objects.filter(message_sid=message_sid).exists())
+
     def test_webhook_confirms_order_when_conversation_waiting_confirmation(self):
         venta = Venta.objects.create(
             origen='WEB',
