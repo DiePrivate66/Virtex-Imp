@@ -5345,12 +5345,10 @@ class DeliveryCompletionFlowTests(TestCase):
         self.assertFalse(payload['puede_reportar_recibido'])
         self.assertTrue(payload['esperando_confirmacion_delivery'])
 
-    @patch('pos.application.delivery.commands.send_sale_receipt_email_async')
     @patch('pos.application.delivery.commands.queue_delivery_receipt_ticket.delay')
     def test_driver_can_confirm_completed_delivery_after_customer_reports_received(
         self,
         mock_queue_ticket,
-        mock_send_email,
     ):
         self.sale.cliente_reporto_recibido_at = timezone.now()
         self.sale.save(update_fields=['cliente_reporto_recibido_at'])
@@ -5366,15 +5364,12 @@ class DeliveryCompletionFlowTests(TestCase):
         self.assertEqual(self.sale.estado, 'LISTO')
         self.assertIsNotNone(self.sale.repartidor_confirmo_entrega_at)
         mock_queue_ticket.assert_called_once_with(self.sale.id)
-        mock_send_email.assert_called_once_with(self.sale, 'cliente@example.com')
         self.assertContains(response, 'ya fue confirmada')
 
-    @patch('pos.application.delivery.commands.send_sale_receipt_email_async')
     @patch('pos.application.delivery.commands.queue_delivery_receipt_ticket.delay')
     def test_driver_cannot_confirm_completed_delivery_before_customer_reports_received(
         self,
         mock_queue_ticket,
-        mock_send_email,
     ):
         token = make_delivery_delivered_token(self.sale.id, self.driver.id)
 
@@ -5388,7 +5383,6 @@ class DeliveryCompletionFlowTests(TestCase):
         self.assertEqual(self.sale.estado, 'EN_CAMINO')
         self.assertIsNone(self.sale.repartidor_confirmo_entrega_at)
         mock_queue_ticket.assert_not_called()
-        mock_send_email.assert_not_called()
         self.assertContains(response, 'cliente aun no marca el pedido como recibido')
 
 

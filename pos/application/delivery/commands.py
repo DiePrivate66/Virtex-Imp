@@ -9,7 +9,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from pos.application.notifications import notify_customer_reported_received, notify_order_claimed
-from pos.application.sales import send_sale_receipt_email_async
 from pos.infrastructure.delivery import (
     read_delivery_claim_token,
     read_delivery_delivered_token,
@@ -357,11 +356,6 @@ def confirm_delivery_completed(*, token: str, pin: str) -> DeliveryCompletionSub
         venta.save(update_fields=['repartidor_confirmo_entrega_at', 'estado'])
 
     queue_delivery_receipt_ticket.delay(venta.id)
-    recipient_email = (venta.email_cliente or '').strip()
-    if not recipient_email and venta.cliente:
-        recipient_email = (venta.cliente.email or '').strip()
-    if recipient_email:
-        send_sale_receipt_email_async(venta, recipient_email)
 
     return DeliveryCompletionSubmission(
         venta_id=venta.id,

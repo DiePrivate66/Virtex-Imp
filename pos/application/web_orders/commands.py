@@ -118,6 +118,8 @@ def accept_web_order(pedido_id) -> Venta:
     if venta.estado != STATUS_KITCHEN:
         venta.estado = STATUS_KITCHEN
         venta.save(update_fields=['estado'])
+        if venta.tipo_pedido == 'DOMICILIO':
+            send_sale_receipt_email_for_sale_after_commit(venta.id)
     return venta
 
 

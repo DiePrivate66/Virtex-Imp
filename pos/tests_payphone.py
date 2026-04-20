@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from pos.application.context import get_default_catalog_organization
-from pos.application.web_orders import WebOrderError, create_web_order
+from pos.application.web_orders import WebOrderError, accept_web_order, create_web_order
 from pos.models import Categoria, Location, PendingOfflineOrphanEvent, Producto, Venta
 
 
@@ -305,4 +305,32 @@ class WebOrderReceiptEmailTests(TestCase):
         )
 
         self.assertEqual(venta.payment_status, Venta.PaymentStatus.PAID)
+        mock_queue_receipt.assert_called_once_with(venta.id)
+
+    @patch('pos.application.web_orders.commands.send_sale_receipt_email_for_sale_after_commit')
+    def test_delivery_web_order_queues_receipt_email_when_cashier_accepts(self, mock_queue_receipt):
+        venta = create_web_order(
+            {
+                'nombre': 'Cliente Delivery',
+                'telefono': '0991234567',
+                'email': 'cliente-delivery@example.com',
+                'direccion': 'Av. Siempre Viva',
+                'tipo_pedido': 'DOMICILIO',
+                'metodo_pago': 'EFECTIVO',
+                'carrito': [
+                    {
+                        'id': self.producto.id,
+                        'cantidad': 1,
+                        'nombre': self.producto.nombre,
+                        'nota': '',
+                    }
+                ],
+            }
+        )
+
+        mock_queue_receipt.assert_not_called()
+
+        accepted = accept_web_order(venta.id)
+
+        self.assertEqual(accepted.estado, 'COCINA')
         mock_queue_receipt.assert_called_once_with(venta.id)
