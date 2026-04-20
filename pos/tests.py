@@ -79,6 +79,8 @@ from .application.web_orders.updates import build_web_order_update_request
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True,
     META_SIGNATURE_VALIDATION=False,
+    META_WHATSAPP_TOKEN='',
+    META_WHATSAPP_PHONE_NUMBER_ID='',
     SECURE_SSL_REDIRECT=False,
 )
 class WhatsAppWebhookTests(TestCase):
@@ -174,6 +176,8 @@ class WhatsAppWebhookTests(TestCase):
 @override_settings(
     DEBUG=True,
     CELERY_TASK_ALWAYS_EAGER=True,
+    META_WHATSAPP_TOKEN='',
+    META_WHATSAPP_PHONE_NUMBER_ID='',
     SECURE_SSL_REDIRECT=False,
 )
 class DeliveryQuoteRuleTests(TestCase):
@@ -201,6 +205,15 @@ class DeliveryQuoteRuleTests(TestCase):
         self.assertEqual(venta.estado, 'PENDIENTE')
         self.assertEqual(DeliveryQuote.objects.filter(venta=venta, estado='GANADORA').count(), 1)
         self.assertEqual(DeliveryQuote.objects.filter(venta=venta).count(), 2)
+        outbound_payloads = ' '.join(
+            json.dumps(log.payload_json, ensure_ascii=False)
+            for log in WhatsAppMessageLog.objects.filter(direction='OUT', telefono_e164='+593999999999')
+        )
+        self.assertIn('Total productos: $20.00', outbound_payloads)
+        self.assertIn('Envio: $2.50', outbound_payloads)
+        self.assertIn('directo al repartidor', outbound_payloads)
+        self.assertNotIn('Total referencial', outbound_payloads)
+        self.assertNotIn('$22.50', outbound_payloads)
 
     def test_timeout_keeps_pending_quote_and_logs_customer_notice(self):
         venta = Venta.objects.create(
@@ -5432,6 +5445,12 @@ class CustomerOrderConfirmationEtaTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['repartidor_nombre'], 'Carlos Repartidor')
+        self.assertEqual(response.json()['total'], '10.00')
+        self.assertEqual(response.json()['costo_envio'], '2.50')
+        self.assertEqual(response.json()['total_a_cobrar_local'], '10.00')
+        self.assertEqual(response.json()['envio_pago_repartidor'], '2.50')
+        self.assertEqual(response.json()['total_con_envio'], '10.00')
+        self.assertEqual(response.json()['total_referencial_con_envio'], '12.50')
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -5448,6 +5467,11 @@ class SaleReceiptEmailTests(TestCase):
             email_cliente='cliente@example.com',
             costo_envio=Decimal('2.50'),
         )
+
+    def test_delivery_cash_change_excludes_driver_shipping_fee(self):
+        self.sale.monto_recibido = Decimal('20.00')
+
+        self.assertEqual(self.sale.cambio, Decimal('10.00'))
 
     @override_settings(
         RESEND_API_KEY='re_test_123',
@@ -5472,6 +5496,10 @@ class SaleReceiptEmailTests(TestCase):
         self.assertEqual(payload['to'], ['agguti0@gmail.com'])
         self.assertIn('Comprobante de Venta', payload['subject'])
         self.assertIn('Bearer re_test_123', request_obj.headers['Authorization'])
+        self.assertIn('Envio (pago directo al repartidor)', payload['html'])
+        self.assertIn('El envio se paga directamente al repartidor.', payload['html'])
+        self.assertIn('TOTAL PRODUCTOS', payload['html'])
+        self.assertNotIn('$12.50', payload['html'])
 
     @override_settings(RESEND_API_KEY='')
     @patch('pos.application.sales.commands.send_mail')
@@ -5486,6 +5514,8 @@ class SaleReceiptEmailTests(TestCase):
 @override_settings(
     META_WHATSAPP_VERIFY_TOKEN='verify-token-demo',
     META_SIGNATURE_VALIDATION=False,
+    META_WHATSAPP_TOKEN='',
+    META_WHATSAPP_PHONE_NUMBER_ID='',
     CELERY_TASK_ALWAYS_EAGER=True,
     SECURE_SSL_REDIRECT=False,
 )

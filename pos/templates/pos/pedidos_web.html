@@ -78,8 +78,8 @@
                 </div>
                 <!-- TOTAL VISIBLE EN GRANDE -->
                 <div class="text-right">
-                    <span class="text-xs text-gray-500 font-bold">TOTAL</span>
-                    <p class="text-2xl font-black text-bosco-orange" data-total-pedido>${{ p.total_con_envio|floatformat:2 }}</p>
+                    <span class="text-xs text-gray-500 font-bold">PRODUCTOS</span>
+                    <p class="text-2xl font-black text-bosco-orange" data-total-pedido>${{ p.total|floatformat:2 }}</p>
                 </div>
             </div>
 
@@ -219,7 +219,7 @@
                     </div>
                     {% if p.tipo_pedido == 'DOMICILIO' %}
                     <div class="flex justify-between text-xs items-center">
-                        <span class="text-gray-500">🛵 Envío (cobra delivery)</span>
+                        <span class="text-gray-500">🛵 Envío (paga cliente al repartidor)</span>
                         <div class="flex items-center gap-1">
                             <span class="text-gray-400">$</span>
                             <input type="number" step="0.50" min="0" value="{{ p.costo_envio|floatformat:"2u" }}"
@@ -240,8 +240,8 @@
                     </div>
                     {% endif %}
                     <div class="flex justify-between border-t border-gray-700 pt-1.5 mt-1">
-                        <span class="text-white font-black text-sm">TOTAL A COBRAR</span>
-                        <span class="text-bosco-orange font-black text-lg" data-total-pedido>${{ p.total_con_envio|floatformat:2 }}</span>
+                        <span class="text-white font-black text-sm">TOTAL PRODUCTOS</span>
+                        <span class="text-bosco-orange font-black text-lg" data-total-pedido>${{ p.total|floatformat:2 }}</span>
                     </div>
                 </div>
 
@@ -294,7 +294,7 @@
 
                 <!-- BOTÓN WHATSAPP SHARE -->
                 {% if p.telefono_cliente %}
-                <button onclick="compartirWhatsApp('{{ p.telefono_cliente|escapejs }}', {{ p.id }}, '{{ p.cliente_nombre|escapejs }}', '{{ p.total_con_envio|floatformat:2 }}', '{{ p.get_estado_display|escapejs }}', '{{ p.tipo_pedido }}', '{{ p.direccion_envio|escapejs }}')"
+                <button onclick="compartirWhatsApp('{{ p.telefono_cliente|escapejs }}', {{ p.id }}, '{{ p.cliente_nombre|escapejs }}', '{{ p.total|floatformat:2 }}', '{{ p.get_estado_display|escapejs }}', '{{ p.tipo_pedido }}', '{{ p.direccion_envio|escapejs }}', '{{ p.costo_envio|floatformat:2 }}')"
                     class="w-full mt-2 bg-green-700 hover:bg-green-600 text-white font-bold py-2.5 rounded-lg text-xs uppercase active:scale-95 transition-all flex items-center justify-center gap-2">
                     📲 COMPARTIR PEDIDO POR WHATSAPP
                 </button>
@@ -437,8 +437,7 @@
         if (!card) return;
 
         const baseTotal = parseCurrencyValue(card.dataset.baseTotal);
-        const envio = parseCurrencyValue(input.value);
-        const total = baseTotal + envio;
+        const total = baseTotal;
 
         card.querySelectorAll('[data-total-pedido]').forEach((node) => {
             node.textContent = `$${total.toFixed(2)}`;
@@ -536,7 +535,7 @@
     }
 
     //  COMPARTIR POR WHATSAPP 
-    function compartirWhatsApp(telefono, pedidoId, cliente, total, estado, tipo, direccion) {
+    function compartirWhatsApp(telefono, pedidoId, cliente, total, estado, tipo, direccion, envio) {
         // Limpiar teléfono (quitar 0 inicial y agregar código Ecuador)
         let tel = telefono.replace(/\s/g, '').replace(/^0/, '');
         if (!tel.startsWith('593')) tel = '593' + tel;
@@ -555,7 +554,12 @@
         }
         
         msg += `\n`;
-        msg += `💰 *Total: $${total}*\n\n`;
+        msg += `💰 *Total productos: $${total}*\n`;
+        if (tipo === 'DOMICILIO') {
+            const envioTexto = parseCurrencyValue(envio) > 0 ? `$${parseCurrencyValue(envio).toFixed(2)}` : 'por confirmar';
+            msg += `Envio: ${envioTexto} (pago directo al repartidor)\n`;
+        }
+        msg += `\n`;
         msg += `¡Gracias por tu pedido! 🙌`;
         
         // Abrir WhatsApp

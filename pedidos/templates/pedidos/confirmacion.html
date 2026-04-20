@@ -65,6 +65,7 @@
                 <p class="text-yellow-400 font-black text-sm uppercase">Confirmando costo de envio</p>
                 <p class="text-gray-400 text-xs mt-2">
                     Te contactaremos al <strong class="text-white">{{ venta.telefono_cliente }}</strong> para confirmar el costo del delivery.
+                    Ese valor se paga directamente al repartidor al recibir tu pedido.
                 </p>
             {% elif venta.estado == 'PENDIENTE' %}
                 <p class="text-yellow-400 font-black text-sm uppercase">Pedido recibido</p>
@@ -118,17 +119,16 @@
 
             {% if venta.tipo_pedido == 'DOMICILIO' %}
             <div class="flex justify-between">
-                <span class="text-gray-400 font-bold text-sm">Envio</span>
+                <span class="text-gray-400 font-bold text-sm">Envio al repartidor</span>
                 {% if venta.costo_envio > 0 %}
                     <span class="text-white font-bold">${{ venta.costo_envio|floatformat:2 }}</span>
                 {% else %}
                     <span class="text-yellow-400 text-xs font-bold">Por confirmar</span>
                 {% endif %}
             </div>
-            <div class="flex justify-between border-t border-gray-600 pt-3">
-                <span class="text-gray-400 font-bold text-sm">Total</span>
-                <span class="text-white font-black text-lg">${{ venta.total_con_envio|floatformat:2 }}</span>
-            </div>
+            <p class="text-gray-500 text-[10px] font-bold">
+                El envio se paga directamente al repartidor. El total del local no incluye ese valor.
+            </p>
             {% endif %}
         </div>
 

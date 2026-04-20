@@ -26,7 +26,12 @@ def handle_order_status_request(request, pedido_id):
             'telefono_cliente': venta.telefono_cliente,
             'total': f'{venta.total:.2f}',
             'costo_envio': f'{venta.costo_envio:.2f}',
-            'total_con_envio': f'{venta.total_con_envio:.2f}',
+            'envio_pago_repartidor': f'{venta.costo_envio:.2f}',
+            'total_a_cobrar_local': f'{venta.total:.2f}',
+            # Legacy clients used this field as the customer-facing amount to pay.
+            # Delivery is now paid directly to the driver, so keep it product-only.
+            'total_con_envio': f'{venta.total:.2f}',
+            'total_referencial_con_envio': f'{venta.total_con_envio:.2f}',
             'tiempo_estimado_minutos': venta.tiempo_estimado_minutos,
             'minutos_restantes_estimados': venta.minutos_restantes_estimados,
             'repartidor_nombre': venta.repartidor_asignado.nombre if venta.repartidor_asignado else '',

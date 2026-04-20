@@ -101,9 +101,8 @@ def send_whatsapp_confirmation_buttons(
     to_number = to_e164 if to_e164.startswith('+') else normalize_phone_to_e164(to_e164)
     body_text = (
         f'Pedido #{venta_id}\n'
-        f'Productos: ${total_productos}\n'
-        f'Envio: ${envio} (lo cobra el motorizado)\n'
-        f'Total referencial: ${total_ref}\n\n'
+        f'Total productos: ${total_productos}\n'
+        f'Envio: ${envio} (lo pagas directo al repartidor)\n\n'
         'Confirma tu pedido:'
     )
     payload = {
@@ -127,8 +126,8 @@ def send_whatsapp_confirmation_buttons(
     return send_whatsapp_message(
         to_number,
         (
-            f'Pedido #{venta_id}. Productos: ${total_productos}. Envio: ${envio}. '
-            f'Total referencial: ${total_ref}. Responde SI o NO.'
+            f'Pedido #{venta_id}. Total productos: ${total_productos}. '
+            f'Envio: ${envio}, pago directo al repartidor. Responde SI o NO.'
         ),
         raise_on_error=raise_on_error,
     )

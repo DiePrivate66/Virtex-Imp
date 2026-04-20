@@ -83,7 +83,7 @@
 
     <!-- COBRO -->
     <div class="total-box">
-        <div class="label">TOTAL A COBRAR:</div>
+        <div class="label">TOTAL PRODUCTOS:</div>
         <div style="font-size: 20px; font-weight: black;">
             ${{ venta.total|floatformat:2 }}
         </div>
@@ -91,6 +91,18 @@
             MÉTODO: {{ venta.get_metodo_pago_display|upper }}
         </div>
     </div>
+
+    {% if venta.costo_envio > 0 %}
+    <div class="total-box">
+        <div class="label">ENVIO PARA REPARTIDOR:</div>
+        <div style="font-size: 20px; font-weight: black;">
+            ${{ venta.costo_envio|floatformat:2 }}
+        </div>
+        <div style="font-size: 10px; margin-top: 2px;">
+            COBRAR DIRECTO AL CLIENTE
+        </div>
+    </div>
+    {% endif %}
 
     {% if venta.metodo_pago == 'EFECTIVO' %}
     <div style="text-align: center; font-size: 11px; margin-top: 5px;">

@@ -36,7 +36,10 @@
       <div class="text-sm text-gray-300 space-y-1">
         <p>Cliente: <strong class="text-white">{{ venta.cliente_nombre }}</strong></p>
         <p>Telefono: {{ venta.telefono_cliente|default:"No proporcionado" }}</p>
-        <p>Total: <strong class="text-white">${{ venta.total_con_envio|floatformat:2 }}</strong></p>
+        <p>Total productos: <strong class="text-white">${{ venta.total|floatformat:2 }}</strong></p>
+        {% if venta.costo_envio > 0 %}
+        <p>Envio a cobrar directo: <strong class="text-white">${{ venta.costo_envio|floatformat:2 }}</strong></p>
+        {% endif %}
       </div>
 
       <form method="post" action="/integrations/delivery/in-transit/{{ token }}/submit/" class="space-y-3">

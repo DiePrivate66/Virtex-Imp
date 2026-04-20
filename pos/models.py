@@ -642,7 +642,7 @@ class Venta(models.Model):
     @property
     def cambio(self):
         if self.monto_recibido is not None:
-            return max(self.monto_recibido - self.total_con_envio, Decimal('0.00'))
+            return max(self.monto_recibido - (self.total or Decimal('0.00')), Decimal('0.00'))
         return Decimal('0.00')
 
     @property

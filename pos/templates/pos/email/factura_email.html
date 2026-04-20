@@ -90,13 +90,13 @@
                         </tr>
                         {% if venta.tipo_pedido == 'DOMICILIO' and venta.costo_envio > 0 %}
                         <tr class="summary-row">
-                            <td colspan="3" class="money"><strong>Envio</strong></td>
+                            <td colspan="3" class="money"><strong>Envio (pago directo al repartidor)</strong></td>
                             <td class="money"><strong>${{ venta.costo_envio|floatformat:2 }}</strong></td>
                         </tr>
                         {% endif %}
                         <tr class="grand-total">
-                            <td colspan="3">TOTAL</td>
-                            <td class="money">${{ venta.total_con_envio|floatformat:2 }}</td>
+                            <td colspan="3">TOTAL PRODUCTOS</td>
+                            <td class="money">${{ venta.total|floatformat:2 }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -111,7 +111,10 @@
             {% endif %}
 
             <p class="note">
-                Gracias por tu compra. Este comprobante se envio cuando el repartidor confirmo la entrega final del pedido.
+                Gracias por tu compra. Este comprobante corresponde solo al consumo registrado en caja.
+                {% if venta.tipo_pedido == 'DOMICILIO' and venta.costo_envio > 0 %}
+                El envio se paga directamente al repartidor.
+                {% endif %}
             </p>
         </div>
 

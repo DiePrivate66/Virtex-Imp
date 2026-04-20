@@ -70,13 +70,12 @@ def notify_customer_quote_total(self, venta_id: int):
     if not customer_phone:
         return
 
-    total_referencial = (venta.total + venta.costo_envio).quantize(Decimal('0.01'))
     send_whatsapp_confirmation_buttons(
         customer_phone,
         venta.id,
         f"{venta.total:.2f}",
         f"{venta.costo_envio:.2f}",
-        f"{total_referencial:.2f}",
+        f"{venta.total:.2f}",
         raise_on_error=True,
     )
 

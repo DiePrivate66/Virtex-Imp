@@ -31,7 +31,10 @@
                 <p class="text-2xl font-black text-[#ff6600]">#{{ venta.id }}</p>
                 <p class="text-sm text-gray-300">{{ venta.cliente_nombre }}</p>
                 <p class="text-sm text-gray-400">{{ venta.telefono_cliente }}</p>
-                <p class="text-sm text-gray-400">Total: ${{ venta.total_con_envio|floatformat:2 }}</p>
+                <p class="text-sm text-gray-400">Total productos: ${{ venta.total|floatformat:2 }}</p>
+                {% if venta.costo_envio > 0 %}
+                    <p class="text-sm text-gray-400">Envio directo repartidor: ${{ venta.costo_envio|floatformat:2 }}</p>
+                {% endif %}
             </div>
 
             {% if esperando_cliente %}
