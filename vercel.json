@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    { "source": "/privacy", "destination": "https://web-production-0bfcb.up.railway.app/privacy/" },
+    { "source": "/privacy/", "destination": "https://web-production-0bfcb.up.railway.app/privacy/" },
+    { "source": "/terms", "destination": "https://web-production-0bfcb.up.railway.app/terms/" },
+    { "source": "/terms/", "destination": "https://web-production-0bfcb.up.railway.app/terms/" },
+    { "source": "/data-deletion", "destination": "https://web-production-0bfcb.up.railway.app/data-deletion/" },
+    { "source": "/data-deletion/", "destination": "https://web-production-0bfcb.up.railway.app/data-deletion/" },
+    { "source": "/delete-data", "destination": "https://web-production-0bfcb.up.railway.app/data-deletion/" },
+    { "source": "/delete-data/", "destination": "https://web-production-0bfcb.up.railway.app/data-deletion/" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
