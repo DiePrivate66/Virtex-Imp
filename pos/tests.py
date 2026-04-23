@@ -14,7 +14,7 @@ from django.contrib import admin
 from django.contrib.auth.models import Group
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.client import RequestFactory
 from django.urls import reverse
@@ -171,6 +171,31 @@ class WhatsAppWebhookTests(TestCase):
                 status='rate_limited',
             ).exists()
         )
+
+
+@override_settings(
+    DEFAULT_FROM_EMAIL='SaaS Project <no-reply@facturas.saasproject.org>',
+    RESEND_API_KEY='re_test_123456',
+    RESEND_API_BASE='https://api.resend.com',
+)
+class SendResendTestEmailCommandTests(SimpleTestCase):
+    @patch('pos.management.commands.send_resend_test_email.send_resend_email')
+    def test_command_sends_resend_test_email(self, mock_send_resend_email):
+        mock_send_resend_email.return_value = True
+        out = StringIO()
+
+        call_command('send_resend_test_email', 'cliente@example.com', stdout=out)
+
+        mock_send_resend_email.assert_called_once()
+        kwargs = mock_send_resend_email.call_args.kwargs
+        self.assertEqual(kwargs['recipient_email'], 'cliente@example.com')
+        self.assertEqual(kwargs['from_email'], 'SaaS Project <no-reply@facturas.saasproject.org>')
+        self.assertIn('OK: Resend acepto el correo de prueba.', out.getvalue())
+
+    @override_settings(RESEND_API_KEY='')
+    def test_command_requires_resend_api_key(self):
+        with self.assertRaisesMessage(CommandError, 'RESEND_API_KEY no esta configurado'):
+            call_command('send_resend_test_email', 'cliente@example.com', stdout=StringIO())
 
 
 @override_settings(

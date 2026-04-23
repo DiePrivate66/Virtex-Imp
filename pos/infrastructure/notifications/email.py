@@ -48,7 +48,16 @@ def send_resend_email(
     try:
         with urlrequest.urlopen(req, timeout=getattr(settings, 'RESEND_API_TIMEOUT_SECONDS', 15)) as resp:
             body = json.loads(resp.read().decode('utf-8'))
-            return bool(body.get('id'))
+            message_id = body.get('id')
+            if message_id:
+                logger.info(
+                    'Resend accepted email id=%s recipient=%s from=%s subject=%s',
+                    message_id,
+                    recipient_email,
+                    payload['from'],
+                    subject,
+                )
+            return bool(message_id)
     except urlerror.HTTPError as exc:
         response_body = ''
         try:
