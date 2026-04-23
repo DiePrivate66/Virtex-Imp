@@ -1,0 +1,30 @@
+<main class="legal-shell">
+  <a class="back-link" routerLink="/">Volver al menu</a>
+
+  <section class="hero">
+    <p>{{ page().eyebrow }}</p>
+    <h1>{{ page().title }}</h1>
+    <span>{{ page().intro }}</span>
+  </section>
+
+  <section class="content" aria-label="Contenido legal">
+    <article class="section" *ngFor="let section of page().sections">
+      <h2>{{ section.title }}</h2>
+
+      <p *ngFor="let paragraph of section.paragraphs">{{ paragraph }}</p>
+
+      <ul *ngIf="section.items?.length">
+        <li *ngFor="let item of section.items">{{ item }}</li>
+      </ul>
+    </article>
+  </section>
+
+  <footer>
+    <p>RAMON by Bosco</p>
+    <nav>
+      <a routerLink="/privacy">Privacidad</a>
+      <a routerLink="/terms">Terminos</a>
+      <a routerLink="/data-deletion">Eliminar datos</a>
+    </nav>
+  </footer>
+</main>
