@@ -9,6 +9,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from pos.application.notifications import notify_customer_reported_received, notify_order_claimed
+from pos.domain.web_orders import (
+    STATUS_CANCELLED,
+    STATUS_IN_TRANSIT,
+    STATUS_KITCHEN,
+    STATUS_PENDING,
+    STATUS_PENDING_QUOTE,
+    STATUS_READY,
+)
 from pos.infrastructure.delivery import (
     read_delivery_claim_token,
     read_delivery_delivered_token,
@@ -65,7 +73,7 @@ class DeliveryDriverRegistration:
     pin: str
 
 
-CLAIMABLE_DELIVERY_STATUSES = {'PENDIENTE_COTIZACION', 'PENDIENTE', 'COCINA'}
+CLAIMABLE_DELIVERY_STATUSES = {STATUS_PENDING_QUOTE, STATUS_PENDING, STATUS_KITCHEN}
 
 
 def _parse_delivery_price(precio) -> Decimal:
@@ -249,7 +257,7 @@ def claim_delivery_order(*, token: str, pin: str, precio) -> DeliveryClaimSubmis
             update_fields.append('costo_envio')
         venta.save(update_fields=update_fields)
 
-    if venta.estado == 'PENDIENTE_COTIZACION':
+    if venta.estado == STATUS_PENDING_QUOTE:
         set_quote_and_notify.delay(venta.id, driver.id, str(precio_decimal))
 
     notify_order_claimed(venta, driver, precio_envio=venta.costo_envio or precio_decimal)
@@ -279,10 +287,16 @@ def mark_delivery_in_transit(*, token: str, pin: str, eta_minutos) -> DeliveryIn
         if venta.repartidor_asignado_id != payload['empleado_id'] or venta.repartidor_asignado_id != driver.id:
             raise DeliveryError('Este link no corresponde a tu pedido asignado.', status_code=403)
 
-        if venta.estado in {'CANCELADO', 'LISTO', 'PENDIENTE_COTIZACION'}:
+        if venta.estado in {STATUS_PENDING, STATUS_PENDING_QUOTE}:
+            raise DeliveryError('El POS aun no ha aceptado este pedido.', status_code=409)
+        if venta.estado == STATUS_IN_TRANSIT:
+            raise DeliveryError('Este pedido ya esta en camino.', status_code=409)
+        if venta.estado in {STATUS_CANCELLED, STATUS_READY}:
+            raise DeliveryError('Este pedido ya no se puede marcar en camino.', status_code=409)
+        if venta.estado != STATUS_KITCHEN:
             raise DeliveryError('Este pedido ya no se puede marcar en camino.', status_code=409)
 
-        venta.estado = 'EN_CAMINO'
+        venta.estado = STATUS_IN_TRANSIT
         venta.tiempo_estimado_minutos = eta
         venta.salio_a_reparto_at = timezone.now()
         venta.save(update_fields=['estado', 'tiempo_estimado_minutos', 'salio_a_reparto_at'])
@@ -304,7 +318,7 @@ def mark_customer_received(*, pedido_id) -> Venta:
     if venta.tipo_pedido != 'DOMICILIO':
         raise DeliveryError('Solo los pedidos delivery pueden confirmarse desde aqui.', status_code=400)
 
-    if venta.estado != 'EN_CAMINO':
+    if venta.estado != STATUS_IN_TRANSIT:
         raise DeliveryError('El pedido aun no esta en camino.', status_code=409)
 
     if venta.repartidor_confirmo_entrega_at:
@@ -338,7 +352,7 @@ def confirm_delivery_completed(*, token: str, pin: str) -> DeliveryCompletionSub
         if venta.repartidor_asignado_id != payload['empleado_id'] or venta.repartidor_asignado_id != driver.id:
             raise DeliveryError('Este link no corresponde a tu pedido asignado.', status_code=403)
 
-        if venta.estado != 'EN_CAMINO':
+        if venta.estado != STATUS_IN_TRANSIT:
             raise DeliveryError('Este pedido ya no esta en entrega.', status_code=409)
 
         if not venta.cliente_reporto_recibido_at:
@@ -352,7 +366,7 @@ def confirm_delivery_completed(*, token: str, pin: str) -> DeliveryCompletionSub
             )
 
         venta.repartidor_confirmo_entrega_at = timezone.now()
-        venta.estado = 'LISTO'
+        venta.estado = STATUS_READY
         venta.save(update_fields=['repartidor_confirmo_entrega_at', 'estado'])
 
     queue_delivery_receipt_ticket.delay(venta.id)

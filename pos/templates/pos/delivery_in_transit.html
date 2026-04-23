@@ -32,6 +32,12 @@
         <p class="text-blue-400 text-sm mt-1">ETA actual: {{ venta.tiempo_estimado_minutos }} min</p>
         {% endif %}
       </div>
+    {% elif esperando_pos %}
+      <div class="p-4 rounded-xl bg-yellow-900/30 border border-yellow-800 text-center">
+        <p class="text-yellow-300 font-bold text-lg">Esperando aceptacion del POS</p>
+        <p class="text-yellow-400 text-sm mt-1">{{ bloqueo_mensaje }}</p>
+        <p class="text-gray-400 text-xs mt-2">Cuando caja acepte el pedido, este mismo link servira para marcarlo en camino.</p>
+      </div>
     {% else %}
       <div class="text-sm text-gray-300 space-y-1">
         <p>Cliente: <strong class="text-white">{{ venta.cliente_nombre }}</strong></p>
@@ -42,6 +48,7 @@
         {% endif %}
       </div>
 
+      {% if puede_marcar_en_camino %}
       <form method="post" action="/integrations/delivery/in-transit/{{ token }}/submit/" class="space-y-3">
         <div>
           <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Tu PIN de 4 digitos</label>
@@ -66,6 +73,11 @@
           Marcar EN CAMINO
         </button>
       </form>
+      {% else %}
+      <div class="p-4 rounded-xl bg-yellow-900/30 border border-yellow-800 text-center">
+        <p class="text-yellow-300 font-bold">{{ bloqueo_mensaje|default:"Este pedido no esta disponible para marcar en camino." }}</p>
+      </div>
+      {% endif %}
     {% endif %}
   </div>
 </body>

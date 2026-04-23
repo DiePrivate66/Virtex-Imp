@@ -5320,6 +5320,35 @@ class DeliveryInTransitFlowTests(TestCase):
         self.assertEqual(self.sale.tiempo_estimado_minutos, 20)
         self.assertIsNotNone(self.sale.salio_a_reparto_at)
 
+    def test_in_transit_form_waits_until_pos_accepts_order(self):
+        self.sale.estado = 'PENDIENTE'
+        self.sale.save(update_fields=['estado'])
+        token = make_delivery_in_transit_token(self.sale.id, self.driver.id)
+
+        response = self.client.get(reverse('delivery_in_transit_form', args=[token]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Esperando aceptacion del POS')
+        self.assertContains(response, 'El POS aun no ha aceptado este pedido.')
+        self.assertNotContains(response, 'Marcar EN CAMINO')
+
+    def test_driver_cannot_mark_pending_order_in_transit_before_pos_accepts(self):
+        self.sale.estado = 'PENDIENTE'
+        self.sale.save(update_fields=['estado'])
+        token = make_delivery_in_transit_token(self.sale.id, self.driver.id)
+
+        response = self.client.post(
+            reverse('delivery_in_transit_submit', args=[token]),
+            data={'pin': '4321', 'eta_minutos': '20'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.estado, 'PENDIENTE')
+        self.assertIsNone(self.sale.tiempo_estimado_minutos)
+        self.assertIsNone(self.sale.salio_a_reparto_at)
+        self.assertContains(response, 'El POS aun no ha aceptado este pedido.')
+
     def test_driver_cannot_mark_other_drivers_order_in_transit(self):
         other_driver = Empleado.objects.create(
             nombre='Otro Repartidor',
