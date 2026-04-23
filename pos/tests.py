@@ -5560,6 +5560,7 @@ class SaleReceiptEmailTests(TestCase):
         DEFAULT_FROM_EMAIL='RAMON by Bosco <onboarding@resend.dev>',
         RESEND_API_BASE='https://api.resend.com',
         RESEND_API_TIMEOUT_SECONDS=15,
+        RESEND_API_USER_AGENT='Virtex-Test/1.0',
     )
     @patch('pos.infrastructure.notifications.email.urlrequest.urlopen')
     def test_sale_receipt_uses_resend_api_when_api_key_exists(self, mock_urlopen):
@@ -5578,6 +5579,7 @@ class SaleReceiptEmailTests(TestCase):
         self.assertEqual(payload['to'], ['agguti0@gmail.com'])
         self.assertIn('Comprobante de Venta', payload['subject'])
         self.assertIn('Bearer re_test_123', request_obj.headers['Authorization'])
+        self.assertEqual(request_obj.headers['User-agent'], 'Virtex-Test/1.0')
         self.assertIn('Envio (pago directo al repartidor)', payload['html'])
         self.assertIn('El envio se paga directamente al repartidor.', payload['html'])
         self.assertIn('TOTAL PRODUCTOS', payload['html'])

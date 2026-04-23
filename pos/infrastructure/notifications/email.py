@@ -10,6 +10,8 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_RESEND_USER_AGENT = 'Virtex-Imp-POS/1.0 (+https://saasproject.org)'
+
 
 class ResendEmailError(Exception):
     pass
@@ -34,6 +36,7 @@ def send_resend_email(
         'text': text_body,
         'html': html_body,
     }
+    user_agent = getattr(settings, 'RESEND_API_USER_AGENT', DEFAULT_RESEND_USER_AGENT) or DEFAULT_RESEND_USER_AGENT
 
     req = urlrequest.Request(
         f"{getattr(settings, 'RESEND_API_BASE', 'https://api.resend.com').rstrip('/')}/emails",
@@ -41,6 +44,7 @@ def send_resend_email(
         headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {api_key}',
+            'User-Agent': user_agent,
         },
         method='POST',
     )

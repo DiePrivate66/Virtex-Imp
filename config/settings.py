@@ -196,6 +196,7 @@ DEFAULT_FROM_EMAIL  = strip_wrapping_quotes(os.environ.get('DEFAULT_FROM_EMAIL',
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 RESEND_API_BASE = os.environ.get('RESEND_API_BASE', 'https://api.resend.com')
 RESEND_API_TIMEOUT_SECONDS = int(os.environ.get('RESEND_API_TIMEOUT_SECONDS', '15'))
+RESEND_API_USER_AGENT = os.environ.get('RESEND_API_USER_AGENT', 'Virtex-Imp-POS/1.0 (+https://saasproject.org)')
 
 # --- PAYPHONE ---
 PAYPHONE_ENABLED = os.environ.get('PAYPHONE_ENABLED', 'False') == 'True'
