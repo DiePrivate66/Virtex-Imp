@@ -5866,7 +5866,21 @@ class IntegrationsHealthPayloadTests(TestCase):
 
         self.assertFalse(payload['whatsapp']['configured'])
         self.assertTrue(payload['whatsapp']['signature_validation'])
+        self.assertTrue(payload['whatsapp']['token_configured'])
+        self.assertTrue(payload['whatsapp']['phone_number_id_configured'])
+        self.assertTrue(payload['whatsapp']['verify_token_configured'])
         self.assertFalse(payload['whatsapp']['app_secret_configured'])
+
+    @override_settings(META_WHATSAPP_APP_SECRET='app-secret-demo')
+    def test_health_exposes_safe_whatsapp_configuration_flags(self):
+        payload = get_integrations_health_payload()
+
+        self.assertTrue(payload['whatsapp']['configured'])
+        self.assertTrue(payload['whatsapp']['signature_validation'])
+        self.assertTrue(payload['whatsapp']['token_configured'])
+        self.assertTrue(payload['whatsapp']['phone_number_id_configured'])
+        self.assertTrue(payload['whatsapp']['verify_token_configured'])
+        self.assertTrue(payload['whatsapp']['app_secret_configured'])
 
     def test_delete_data_alias_page_is_public(self):
         response = self.client.get(reverse('data_deletion_alias'), follow=True)

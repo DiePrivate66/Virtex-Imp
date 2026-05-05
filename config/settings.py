@@ -44,6 +44,13 @@ def strip_wrapping_quotes(value: str):
     return normalized
 
 
+def env_bool(name: str, default: str | bool = False) -> bool:
+    raw_value = os.environ.get(name, default)
+    if isinstance(raw_value, bool):
+        return raw_value
+    return str(raw_value).strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
+
+
 DEFAULT_ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.railway.app']
 DEFAULT_CSRF_TRUSTED_ORIGINS = [
     'https://*.railway.app',
@@ -59,7 +66,7 @@ ALLOWED_HOSTS = split_env_list(os.environ.get('ALLOWED_HOSTS', '')) or (['*'] if
 CSRF_TRUSTED_ORIGINS = split_env_list(os.environ.get('CSRF_TRUSTED_ORIGINS', '')) or DEFAULT_CSRF_TRUSTED_ORIGINS
 
 CORS_ALLOWED_ORIGINS = split_env_list(os.environ.get('CORS_ALLOWED_ORIGINS', '')) or DEFAULT_CORS_ALLOWED_ORIGINS
-CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False') == 'True'
+CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False')
 
 if not DEBUG:
     # Seguridad HTTPS en Produccion
@@ -189,7 +196,7 @@ EMAIL_BACKEND = os.environ.get(
 )
 EMAIL_HOST          = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT          = int(os.environ.get('EMAIL_PORT', '587'))
-EMAIL_USE_TLS       = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_USE_TLS       = env_bool('EMAIL_USE_TLS', 'True')
 EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL  = strip_wrapping_quotes(os.environ.get('DEFAULT_FROM_EMAIL', f'RAMON by Bosco <{EMAIL_HOST_USER}>'))
@@ -199,7 +206,7 @@ RESEND_API_TIMEOUT_SECONDS = int(os.environ.get('RESEND_API_TIMEOUT_SECONDS', '1
 RESEND_API_USER_AGENT = os.environ.get('RESEND_API_USER_AGENT', 'Virtex-Imp-POS/1.0 (+https://saasproject.org)')
 
 # --- PAYPHONE ---
-PAYPHONE_ENABLED = os.environ.get('PAYPHONE_ENABLED', 'False') == 'True'
+PAYPHONE_ENABLED = env_bool('PAYPHONE_ENABLED', 'False')
 PAYPHONE_API_BASE = os.environ.get('PAYPHONE_API_BASE', 'https://pay.payphonetodoesposible.com')
 PAYPHONE_TOKEN = os.environ.get('PAYPHONE_TOKEN', '')
 PAYPHONE_STORE_ID = os.environ.get('PAYPHONE_STORE_ID', '')
@@ -213,7 +220,7 @@ META_WHATSAPP_PHONE_NUMBER_ID = os.environ.get('META_WHATSAPP_PHONE_NUMBER_ID', 
 META_WHATSAPP_API_VERSION = os.environ.get('META_WHATSAPP_API_VERSION', 'v22.0')
 META_WHATSAPP_VERIFY_TOKEN = os.environ.get('META_WHATSAPP_VERIFY_TOKEN', '')
 META_WHATSAPP_APP_SECRET = os.environ.get('META_WHATSAPP_APP_SECRET', '')
-META_SIGNATURE_VALIDATION = os.environ.get('META_SIGNATURE_VALIDATION', 'False' if DEBUG else 'True') == 'True'
+META_SIGNATURE_VALIDATION = env_bool('META_SIGNATURE_VALIDATION', 'False' if DEBUG else 'True')
 DELIVERY_QUOTE_TIMEOUT_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TIMEOUT_SECONDS', '180'))
 DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS', '900'))
 
@@ -234,7 +241,7 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
 CELERY_TASK_SOFT_TIME_LIMIT = 20 * 60
-CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_TASK_ALWAYS_EAGER', 'True' if DEBUG else 'False') == 'True'
+CELERY_TASK_ALWAYS_EAGER = env_bool('CELERY_TASK_ALWAYS_EAGER', 'True' if DEBUG else 'False')
 
 
 WHATSAPP_WEBHOOK_VERIFY = os.environ.get('WHATSAPP_WEBHOOK_VERIFY', '')
@@ -257,7 +264,11 @@ IDEMPOTENCY_PURGE_BATCH_SIZE = int(os.environ.get('IDEMPOTENCY_PURGE_BATCH_SIZE'
 LEDGER_VERSION_FENCING_ENABLED = os.environ.get(
     'LEDGER_VERSION_FENCING_ENABLED',
     'False' if DEBUG else 'True',
-) == 'True'
+)
+LEDGER_VERSION_FENCING_ENABLED = env_bool(
+    'LEDGER_VERSION_FENCING_ENABLED',
+    LEDGER_VERSION_FENCING_ENABLED,
+)
 LEDGER_ACTIVATION_CACHE_TTL_SECONDS = int(os.environ.get('LEDGER_ACTIVATION_CACHE_TTL_SECONDS', '5'))
 LEDGER_FENCED_MUTATION_PATHS = tuple(
     split_env_list(
@@ -271,14 +282,18 @@ LEDGER_WEB_CLIENT_APP_VERSION = os.environ.get('LEDGER_WEB_CLIENT_APP_VERSION', 
 POS_REPLAY_ADMISSION_ENABLED = os.environ.get(
     'POS_REPLAY_ADMISSION_ENABLED',
     'False' if DEBUG else 'True',
-) == 'True'
+)
+POS_REPLAY_ADMISSION_ENABLED = env_bool(
+    'POS_REPLAY_ADMISSION_ENABLED',
+    POS_REPLAY_ADMISSION_ENABLED,
+)
 POS_REPLAY_GLOBAL_SLOTS = int(os.environ.get('POS_REPLAY_GLOBAL_SLOTS', '8'))
 POS_REPLAY_ORGANIZATION_SLOTS = int(os.environ.get('POS_REPLAY_ORGANIZATION_SLOTS', '1'))
 POS_REPLAY_COLD_LANE_SLOTS = int(os.environ.get('POS_REPLAY_COLD_LANE_SLOTS', '2'))
 POS_REPLAY_COLD_LANE_HOURS = int(os.environ.get('POS_REPLAY_COLD_LANE_HOURS', '48'))
 POS_REPLAY_SLOT_TTL_SECONDS = int(os.environ.get('POS_REPLAY_SLOT_TTL_SECONDS', '15'))
 POS_REPLAY_RETRY_AFTER_SECONDS = int(os.environ.get('POS_REPLAY_RETRY_AFTER_SECONDS', '5'))
-REPLAY_GATEWAY_ENABLED = os.environ.get('REPLAY_GATEWAY_ENABLED', 'False') == 'True'
+REPLAY_GATEWAY_ENABLED = env_bool('REPLAY_GATEWAY_ENABLED', 'False')
 REPLAY_GATEWAY_UPSTREAM_HOST = os.environ.get('REPLAY_GATEWAY_UPSTREAM_HOST', '127.0.0.1')
 REPLAY_GATEWAY_UPSTREAM_PORT = int(os.environ.get('REPLAY_GATEWAY_UPSTREAM_PORT', '18000'))
 REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS = float(os.environ.get('REPLAY_GATEWAY_TOTAL_TIMEOUT_SECONDS', '10'))
@@ -312,7 +327,7 @@ REPLAY_TICKET_TTL_SECONDS = int(os.environ.get('REPLAY_TICKET_TTL_SECONDS', '30'
 REPLAY_HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get('REPLAY_HEARTBEAT_INTERVAL_SECONDS', '10'))
 REPLAY_MAX_WAITERS_PER_BUCKET = int(os.environ.get('REPLAY_MAX_WAITERS_PER_BUCKET', '100'))
 
-OFFLINE_JOURNAL_ENABLED = os.environ.get('OFFLINE_JOURNAL_ENABLED', 'False') == 'True'
+OFFLINE_JOURNAL_ENABLED = env_bool('OFFLINE_JOURNAL_ENABLED', 'False')
 OFFLINE_JOURNAL_ROOT = os.environ.get('OFFLINE_JOURNAL_ROOT', '')
 OFFLINE_JOURNAL_STREAM_NAME = os.environ.get('OFFLINE_JOURNAL_STREAM_NAME', 'sales')
 OFFLINE_JOURNAL_SEGMENT_MAX_BYTES = int(os.environ.get('OFFLINE_JOURNAL_SEGMENT_MAX_BYTES', str(100 * 1024 * 1024)))
@@ -321,7 +336,7 @@ OFFLINE_JOURNAL_HISTORY_LIMIT = int(os.environ.get('OFFLINE_JOURNAL_HISTORY_LIMI
 OFFLINE_JOURNAL_SIDECAR_MAX_BYTES = int(os.environ.get('OFFLINE_JOURNAL_SIDECAR_MAX_BYTES', str(64 * 1024)))
 OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS = int(os.environ.get('OFFLINE_JOURNAL_PROJECTION_WINDOW_HOURS', '24'))
 OFFLINE_JOURNAL_RECEIPT_SECRET = os.environ.get('OFFLINE_JOURNAL_RECEIPT_SECRET', SECRET_KEY)
-OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS = os.environ.get('OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS', 'False') == 'True'
+OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS = env_bool('OFFLINE_JOURNAL_CAPTURE_SERVER_EVENTS', 'False')
 OPS_PREFLIGHT_OFFLINE_CAPTURE_LOOKBACK_HOURS = int(
     os.environ.get('OPS_PREFLIGHT_OFFLINE_CAPTURE_LOOKBACK_HOURS', '24')
 )
@@ -335,5 +350,5 @@ OPS_PREFLIGHT_REPLAY_ALERT_STALE_HOURS = int(
 # --- OPERACION / HORARIO ---
 # En desarrollo se desactiva por defecto para facilitar pruebas.
 # En produccion se activa por defecto.
-ENABLE_BUSINESS_HOURS = os.environ.get('ENABLE_BUSINESS_HOURS', 'False' if DEBUG else 'True') == 'True'
+ENABLE_BUSINESS_HOURS = env_bool('ENABLE_BUSINESS_HOURS', 'False' if DEBUG else 'True')
 
