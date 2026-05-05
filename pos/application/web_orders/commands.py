@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from pos.application.context import get_default_catalog_organization
+from pos.application.notifications.whatsapp_orders import send_customer_order_accepted_message
 from pos.application.sales import send_sale_receipt_email_for_sale_after_commit
 from pos.application.sales.offline_capture import capture_paid_sale_to_offline_journal
 from pos.domain.shared import build_sale_temporal_fields, normalize_phone_to_e164
@@ -120,6 +121,7 @@ def accept_web_order(pedido_id) -> Venta:
     if venta.estado != STATUS_KITCHEN:
         venta.estado = STATUS_KITCHEN
         venta.save(update_fields=['estado'])
+        send_customer_order_accepted_message(venta, raise_on_error=False)
         if venta.tipo_pedido == 'DOMICILIO':
             send_sale_receipt_email_for_sale_after_commit(venta.id)
     return venta

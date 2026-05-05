@@ -11,6 +11,8 @@ from pos.models import PrintJob, Venta, WhatsAppMessageLog
 
 def get_integrations_health_payload() -> dict:
     now = timezone.now()
+    signature_validation_enabled = bool(settings.META_SIGNATURE_VALIDATION)
+    app_secret_configured = bool(getattr(settings, 'META_WHATSAPP_APP_SECRET', ''))
     stuck_threshold = now - timedelta(
         seconds=max(30, int(getattr(settings, 'PRINT_JOB_STUCK_SECONDS', 120)))
     )
@@ -47,8 +49,10 @@ def get_integrations_health_payload() -> dict:
                 settings.META_WHATSAPP_TOKEN
                 and settings.META_WHATSAPP_PHONE_NUMBER_ID
                 and settings.META_WHATSAPP_VERIFY_TOKEN
+                and (not signature_validation_enabled or app_secret_configured)
             ),
-            'signature_validation': bool(settings.META_SIGNATURE_VALIDATION),
+            'signature_validation': signature_validation_enabled,
+            'app_secret_configured': app_secret_configured,
             'last_inbound_at': last_inbound.isoformat() if last_inbound else None,
             'last_outbound_at': last_outbound.isoformat() if last_outbound else None,
             'rate_limited_last_hour': rate_limited_last_hour,

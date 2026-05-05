@@ -28,6 +28,7 @@ from .application.analytics import (
 )
 from .application.printing import build_cash_closing_context
 from .application.sales.replay_admission import admit_replay_request
+from .application.integrations.health import get_integrations_health_payload
 from .application.web_orders import WebOrderError, build_web_orders_payload, create_web_order
 from .admin import VentaAdmin
 from .application.sales.commands import send_sale_receipt_email
@@ -42,6 +43,7 @@ from .models import (
     CajaTurno,
     Categoria,
     Cliente,
+    DetalleVenta,
     DeliveryQuote,
     Empleado,
     Inventario,
@@ -131,8 +133,32 @@ class WhatsAppWebhookTests(TestCase):
             estado='PENDIENTE',
             metodo_pago='EFECTIVO',
             total='10.00',
+            costo_envio='2.50',
+            cliente_nombre='Cliente WhatsApp',
             telefono_cliente='+593991112233',
             telefono_cliente_e164='+593991112233',
+            direccion_envio='Av. Principal y Calle 1',
+        )
+        producto = Producto.objects.create(
+            categoria=Categoria.objects.create(
+                nombre='Confirmacion WhatsApp',
+                organization=Location.get_or_create_default().organization,
+            ),
+            organization=Location.get_or_create_default().organization,
+            nombre='Combo Confirmacion',
+            precio=Decimal('10.00'),
+            activo=True,
+        )
+        venta.organization = producto.organization
+        venta.location = Location.get_or_create_default()
+        venta.save(update_fields=['organization', 'location'])
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=producto,
+            cantidad=1,
+            precio_unitario=Decimal('10.00'),
+            precio_bruto_unitario=Decimal('10.00'),
+            subtotal_neto=Decimal('10.00'),
         )
         WhatsAppConversation.objects.create(
             telefono_e164='+593991112233',
@@ -150,6 +176,27 @@ class WhatsAppWebhookTests(TestCase):
         self.assertEqual(venta.estado, 'COCINA')
         self.assertEqual(PrintJob.objects.filter(venta=venta, tipo='COMANDA').count(), 1)
         self.assertEqual(PrintJob.objects.filter(venta=venta, tipo='TICKET').count(), 1)
+        outbound = next(
+            (
+                log
+                for log in WhatsAppMessageLog.objects.filter(
+                    direction='OUT',
+                    telefono_e164='+593991112233',
+                ).order_by('-created_at')
+                if f'Pedido #{venta.id} confirmado por el local.'
+                in log.payload_json.get('payload', {}).get('text', {}).get('body', '')
+            ),
+            None,
+        )
+        self.assertIsNotNone(outbound)
+        message_body = outbound.payload_json['payload']['text']['body']
+        self.assertIn(f'Pedido #{venta.id} confirmado por el local.', message_body)
+        self.assertIn('Cliente: Cliente WhatsApp', message_body)
+        self.assertIn('Tipo: DOMICILIO', message_body)
+        self.assertIn('Subtotal productos: $10.00', message_body)
+        self.assertIn('Envio: $2.50', message_body)
+        self.assertIn('Direccion: Av. Principal y Calle 1', message_body)
+        self.assertIn('Total pedido: $12.50', message_body)
 
     @override_settings(
         WHATSAPP_INBOUND_RATE_LIMIT_WINDOW_SECONDS=60,
@@ -356,6 +403,37 @@ class WebOrderCreationInvariantsTests(TestCase):
         self.assertNotEqual(venta.cliente_id, foreign_customer.id)
         self.assertEqual(venta.cliente.organization, location.organization)
         self.assertEqual(venta.cliente.email, 'cliente-web@example.com')
+
+    @override_settings(META_WHATSAPP_TOKEN='', META_WHATSAPP_PHONE_NUMBER_ID='')
+    def test_create_web_order_does_not_send_customer_acceptance_summary(self):
+        location = Location.get_or_create_default()
+        categoria = Categoria.objects.create(nombre='Creacion Sin Resumen', organization=location.organization)
+        producto = Producto.objects.create(
+            categoria=categoria,
+            organization=location.organization,
+            nombre='Combo Creacion',
+            precio=Decimal('7.00'),
+            activo=True,
+        )
+
+        venta = create_web_order(
+            {
+                'nombre': 'Cliente Web',
+                'telefono': '0991234567',
+                'email': 'cliente-web@example.com',
+                'direccion': 'Av. Central',
+                'metodo_pago': 'EFECTIVO',
+                'tipo_pedido': 'SERVIR',
+                'carrito': [{'id': producto.id, 'cantidad': 1, 'nombre': producto.nombre, 'nota': ''}],
+            }
+        )
+
+        self.assertFalse(
+            WhatsAppMessageLog.objects.filter(
+                direction='OUT',
+                telefono_e164=venta.telefono_cliente_e164,
+            ).exists()
+        )
 
     def test_create_web_order_requires_customer_email_for_receipt(self):
         location = Location.get_or_create_default()
@@ -730,6 +808,76 @@ class WebOrderActionApiTests(TestCase):
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'COCINA')
 
+    @override_settings(META_WHATSAPP_TOKEN='', META_WHATSAPP_PHONE_NUMBER_ID='')
+    def test_accept_order_sends_structured_whatsapp_summary(self):
+        location = Location.get_or_create_default()
+        categoria = Categoria.objects.create(nombre='Panel WhatsApp', organization=location.organization)
+        producto = Producto.objects.create(
+            categoria=categoria,
+            organization=location.organization,
+            nombre='Combo Panel',
+            precio=Decimal('12.00'),
+            activo=True,
+        )
+        venta = Venta.objects.create(
+            origen='WEB',
+            organization=location.organization,
+            location=location,
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            total='12.00',
+            costo_envio='3.50',
+            cliente_nombre='Cliente Panel',
+            telefono_cliente='0991234567',
+            telefono_cliente_e164='+593991234567',
+            direccion_envio='Av. Loja y Remigio Crespo',
+            payment_status=Venta.PaymentStatus.PAID,
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=producto,
+            cantidad=1,
+            precio_unitario=Decimal('12.00'),
+            precio_bruto_unitario=Decimal('12.00'),
+            subtotal_neto=Decimal('12.00'),
+        )
+
+        self.client.force_login(self.allowed_user)
+        response = self.client.post(
+            reverse('api_actualizar_pedido'),
+            data=json.dumps({'pedido_id': venta.id, 'accion': 'accept_order'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'COCINA')
+        outbound = next(
+            (
+                log
+                for log in WhatsAppMessageLog.objects.filter(
+                    direction='OUT',
+                    telefono_e164='+593991234567',
+                ).order_by('-created_at')
+                if f'Pedido #{venta.id} confirmado por el local.'
+                in log.payload_json.get('payload', {}).get('text', {}).get('body', '')
+            ),
+            None,
+        )
+        self.assertIsNotNone(outbound)
+        self.assertEqual(outbound.status, 'skipped')
+        message_body = outbound.payload_json['payload']['text']['body']
+        self.assertIn(f'Pedido #{venta.id} confirmado por el local.', message_body)
+        self.assertIn('Cliente: Cliente Panel', message_body)
+        self.assertIn('Tipo: DOMICILIO', message_body)
+        self.assertIn('Items:', message_body)
+        self.assertIn('- 1x Combo Panel', message_body)
+        self.assertIn('Subtotal productos: $12.00', message_body)
+        self.assertIn('Envio: $3.50', message_body)
+        self.assertIn('Direccion: Av. Loja y Remigio Crespo', message_body)
+        self.assertIn('Total pedido: $15.50', message_body)
+
     def test_update_web_order_rejects_invalid_action(self):
         venta = Venta.objects.create(
             origen='WEB',
@@ -749,6 +897,36 @@ class WebOrderActionApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'PENDIENTE')
+
+    @override_settings(META_WHATSAPP_TOKEN='', META_WHATSAPP_PHONE_NUMBER_ID='')
+    def test_cancel_order_does_not_send_customer_acceptance_summary(self):
+        venta = Venta.objects.create(
+            origen='WEB',
+            tipo_pedido='DOMICILIO',
+            estado='PENDIENTE',
+            metodo_pago='EFECTIVO',
+            total='12.00',
+            cliente_nombre='Cliente Cancelado',
+            telefono_cliente='0991234567',
+            telefono_cliente_e164='+593991234567',
+        )
+
+        self.client.force_login(self.allowed_user)
+        response = self.client.post(
+            reverse('api_actualizar_pedido'),
+            data=json.dumps({'pedido_id': venta.id, 'accion': 'cancel_order'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'CANCELADO')
+        self.assertFalse(
+            WhatsAppMessageLog.objects.filter(
+                direction='OUT',
+                telefono_e164='+593991234567',
+            ).exists()
+        )
 
 
 @override_settings(
@@ -5674,8 +5852,24 @@ class PublicLegalPagesTests(SimpleTestCase):
         self.assertContains(response, 'Eliminacion de datos')
         self.assertContains(response, 'Solicitud de eliminacion de datos')
 
+
+@override_settings(
+    META_WHATSAPP_TOKEN='system-user-token',
+    META_WHATSAPP_PHONE_NUMBER_ID='972835239257790',
+    META_WHATSAPP_VERIFY_TOKEN='verify-token-demo',
+    META_SIGNATURE_VALIDATION=True,
+    META_WHATSAPP_APP_SECRET='',
+)
+class IntegrationsHealthPayloadTests(TestCase):
+    def test_health_marks_whatsapp_not_configured_without_app_secret_when_signature_validation_enabled(self):
+        payload = get_integrations_health_payload()
+
+        self.assertFalse(payload['whatsapp']['configured'])
+        self.assertTrue(payload['whatsapp']['signature_validation'])
+        self.assertFalse(payload['whatsapp']['app_secret_configured'])
+
     def test_delete_data_alias_page_is_public(self):
-        response = self.client.get(reverse('data_deletion_alias'))
+        response = self.client.get(reverse('data_deletion_alias'), follow=True)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Eliminacion de datos')
