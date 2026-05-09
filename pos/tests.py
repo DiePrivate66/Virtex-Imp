@@ -37,6 +37,7 @@ from .infrastructure.delivery import (
     make_delivery_delivered_token,
     make_delivery_in_transit_token,
 )
+from .infrastructure.notifications.whatsapp_transport import _meta_graph_url
 from .models import (
     AccountingAdjustment,
     AuditLog,
@@ -5881,6 +5882,16 @@ class IntegrationsHealthPayloadTests(TestCase):
         self.assertTrue(payload['whatsapp']['phone_number_id_configured'])
         self.assertTrue(payload['whatsapp']['verify_token_configured'])
         self.assertTrue(payload['whatsapp']['app_secret_configured'])
+
+    @override_settings(
+        META_WHATSAPP_API_VERSION=' /v25.0/ ',
+        META_WHATSAPP_PHONE_NUMBER_ID='\n=972835239257790\r\n',
+    )
+    def test_meta_graph_url_tolerates_pasted_railway_phone_id_artifacts(self):
+        self.assertEqual(
+            _meta_graph_url(),
+            'https://graph.facebook.com/v25.0/972835239257790/messages',
+        )
 
     def test_delete_data_alias_page_is_public(self):
         response = self.client.get(reverse('data_deletion_alias'), follow=True)

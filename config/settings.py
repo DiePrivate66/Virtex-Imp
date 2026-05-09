@@ -44,6 +44,10 @@ def strip_wrapping_quotes(value: str):
     return normalized
 
 
+def env_str(name: str, default: str = '') -> str:
+    return strip_wrapping_quotes(os.environ.get(name, default))
+
+
 def env_bool(name: str, default: str | bool = False) -> bool:
     raw_value = os.environ.get(name, default)
     if isinstance(raw_value, bool):
@@ -213,13 +217,13 @@ PAYPHONE_STORE_ID = os.environ.get('PAYPHONE_STORE_ID', '')
 PAYPHONE_TIMEOUT_SECONDS = int(os.environ.get('PAYPHONE_TIMEOUT_SECONDS', '15'))
 
 # --- INTEGRACIONES WHATSAPP / ASYNC ---
-PUBLIC_PWA_URL = os.environ.get('PUBLIC_PWA_URL', 'http://127.0.0.1:4200')
-PUBLIC_BACKEND_URL = os.environ.get('PUBLIC_BACKEND_URL', 'http://127.0.0.1:8000')
-META_WHATSAPP_TOKEN = os.environ.get('META_WHATSAPP_TOKEN', '')
-META_WHATSAPP_PHONE_NUMBER_ID = os.environ.get('META_WHATSAPP_PHONE_NUMBER_ID', '')
-META_WHATSAPP_API_VERSION = os.environ.get('META_WHATSAPP_API_VERSION', 'v22.0')
-META_WHATSAPP_VERIFY_TOKEN = os.environ.get('META_WHATSAPP_VERIFY_TOKEN', '')
-META_WHATSAPP_APP_SECRET = os.environ.get('META_WHATSAPP_APP_SECRET', '')
+PUBLIC_PWA_URL = env_str('PUBLIC_PWA_URL', 'http://127.0.0.1:4200')
+PUBLIC_BACKEND_URL = env_str('PUBLIC_BACKEND_URL', 'http://127.0.0.1:8000')
+META_WHATSAPP_TOKEN = env_str('META_WHATSAPP_TOKEN')
+META_WHATSAPP_PHONE_NUMBER_ID = env_str('META_WHATSAPP_PHONE_NUMBER_ID')
+META_WHATSAPP_API_VERSION = env_str('META_WHATSAPP_API_VERSION', 'v22.0')
+META_WHATSAPP_VERIFY_TOKEN = env_str('META_WHATSAPP_VERIFY_TOKEN')
+META_WHATSAPP_APP_SECRET = env_str('META_WHATSAPP_APP_SECRET')
 META_SIGNATURE_VALIDATION = env_bool('META_SIGNATURE_VALIDATION', 'False' if DEBUG else 'True')
 DELIVERY_QUOTE_TIMEOUT_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TIMEOUT_SECONDS', '180'))
 DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS = int(os.environ.get('DELIVERY_QUOTE_TOKEN_MAX_AGE_SECONDS', '900'))

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Optional
 from urllib import error as urlerror
 from urllib import request as urlrequest
@@ -14,9 +15,21 @@ from pos.models import WhatsAppMessageLog
 logger = logging.getLogger(__name__)
 
 
+def _clean_meta_phone_number_id(phone_id: str) -> str:
+    cleaned = str(phone_id or '').strip().lstrip('=').strip()
+    return cleaned if re.fullmatch(r'\d+', cleaned) else ''
+
+
+def _clean_meta_api_version(version: str) -> str:
+    cleaned = str(version or 'v22.0').strip().strip('/')
+    return cleaned or 'v22.0'
+
+
 def _meta_graph_url() -> str:
-    version = getattr(settings, 'META_WHATSAPP_API_VERSION', 'v22.0')
-    phone_id = getattr(settings, 'META_WHATSAPP_PHONE_NUMBER_ID', '')
+    version = _clean_meta_api_version(getattr(settings, 'META_WHATSAPP_API_VERSION', 'v22.0'))
+    phone_id = _clean_meta_phone_number_id(getattr(settings, 'META_WHATSAPP_PHONE_NUMBER_ID', ''))
+    if not phone_id:
+        raise ValueError('META_WHATSAPP_PHONE_NUMBER_ID must contain only digits.')
     return f'https://graph.facebook.com/{version}/{phone_id}/messages'
 
 
@@ -24,13 +37,18 @@ def _send_meta_payload(
     payload: dict, to_e164: str, status: str = 'queued', raise_on_error: bool = False
 ) -> Optional[str]:
     token = getattr(settings, 'META_WHATSAPP_TOKEN', '')
-    phone_id = getattr(settings, 'META_WHATSAPP_PHONE_NUMBER_ID', '')
+    phone_id = _clean_meta_phone_number_id(getattr(settings, 'META_WHATSAPP_PHONE_NUMBER_ID', ''))
     if not token or not phone_id:
-        logger.warning('Meta WhatsApp credentials missing; skipping outbound WhatsApp.')
+        reason = (
+            'missing_token'
+            if not token
+            else 'invalid_or_missing_phone_number_id'
+        )
+        logger.warning('Meta WhatsApp credentials invalid; skipping outbound WhatsApp: %s.', reason)
         WhatsAppMessageLog.objects.create(
             direction='OUT',
             telefono_e164=to_e164,
-            payload_json={'payload': payload, 'skipped': True, 'provider': 'META'},
+            payload_json={'payload': payload, 'skipped': True, 'reason': reason, 'provider': 'META'},
             status='skipped',
         )
         return None
