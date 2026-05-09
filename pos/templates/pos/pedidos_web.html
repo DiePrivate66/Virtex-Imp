@@ -632,35 +632,71 @@
     // ============== AUTO-IMPRESION DESDE COLA ==============
     let autoPrintBusy = false;
 
+    function normalizarPrintUrl(printUrl) {
+        if (!printUrl) {
+            throw new Error('URL de impresion vacia');
+        }
+
+        const url = new URL(printUrl, window.location.origin);
+        const path = `${url.pathname}${url.search}${url.hash}`;
+
+        if (url.origin === window.location.origin) {
+            return path;
+        }
+
+        if (path.startsWith('/imprimir/')) {
+            return path;
+        }
+
+        throw new Error(`URL de impresion cross-origin no permitida: ${url.origin}`);
+    }
+
     function imprimirJobEnIframe(job) {
         return new Promise((resolve, reject) => {
             const iframe = document.createElement('iframe');
+            let settled = false;
+            let timeoutId = null;
+
+            const cleanup = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                setTimeout(() => iframe.remove(), 1000);
+            };
+
+            const finish = (callback, value) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                callback(value);
+            };
+
             iframe.style.position = 'fixed';
             iframe.style.width = '0';
             iframe.style.height = '0';
             iframe.style.border = '0';
             iframe.style.opacity = '0';
-            iframe.src = job.print_url;
-            document.body.appendChild(iframe);
 
             iframe.onload = () => {
-                setTimeout(() => {
-                    try {
-                        iframe.contentWindow.focus();
-                        iframe.contentWindow.print();
-                        resolve();
-                    } catch (err) {
-                        reject(err);
-                    } finally {
-                        setTimeout(() => iframe.remove(), 1000);
-                    }
-                }, 350);
+                // El documento imprimible ejecuta window.print() dentro de su propio contexto.
+                // No tocar iframe.contentWindow: en produccion puede bloquearse por cross-origin.
+                setTimeout(() => finish(resolve), 800);
             };
 
             iframe.onerror = () => {
-                iframe.remove();
-                reject(new Error('No se pudo cargar URL de impresion'));
+                finish(reject, new Error('No se pudo cargar URL de impresion'));
             };
+
+            try {
+                iframe.src = normalizarPrintUrl(job.print_url);
+            } catch (err) {
+                finish(reject, err);
+                return;
+            }
+
+            timeoutId = setTimeout(() => {
+                finish(reject, new Error('Timeout cargando URL de impresion'));
+            }, 10000);
+
+            document.body.appendChild(iframe);
         });
     }
 

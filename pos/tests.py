@@ -184,20 +184,24 @@ class WhatsAppWebhookTests(TestCase):
                     direction='OUT',
                     telefono_e164='+593991112233',
                 ).order_by('-created_at')
-                if f'Pedido #{venta.id} confirmado por el local.'
+                if 'COMPROBANTE DE VENTA'
                 in log.payload_json.get('payload', {}).get('text', {}).get('body', '')
             ),
             None,
         )
         self.assertIsNotNone(outbound)
         message_body = outbound.payload_json['payload']['text']['body']
-        self.assertIn(f'Pedido #{venta.id} confirmado por el local.', message_body)
-        self.assertIn('Cliente: Cliente WhatsApp', message_body)
-        self.assertIn('Tipo: DOMICILIO', message_body)
+        self.assertIn('COMPROBANTE DE VENTA', message_body)
+        self.assertIn(f'Pedido #{venta.id}', message_body)
+        self.assertIn('Nombre: Cliente WhatsApp', message_body)
+        self.assertIn('Tipo de pedido: A Domicilio', message_body)
+        self.assertIn('- 1x Combo Confirmacion | P/U: $10.00 | Subtotal: $10.00', message_body)
         self.assertIn('Subtotal productos: $10.00', message_body)
         self.assertIn('Envio: $2.50', message_body)
         self.assertIn('Direccion: Av. Principal y Calle 1', message_body)
         self.assertIn('Total pedido: $12.50', message_body)
+        self.assertIn('Metodo de pago: EFECTIVO', message_body)
+        self.assertIn('Estado: En Cocina', message_body)
 
     @override_settings(
         WHATSAPP_INBOUND_RATE_LIMIT_WINDOW_SECONDS=60,
@@ -861,7 +865,7 @@ class WebOrderActionApiTests(TestCase):
                     direction='OUT',
                     telefono_e164='+593991234567',
                 ).order_by('-created_at')
-                if f'Pedido #{venta.id} confirmado por el local.'
+                if 'COMPROBANTE DE VENTA'
                 in log.payload_json.get('payload', {}).get('text', {}).get('body', '')
             ),
             None,
@@ -869,15 +873,17 @@ class WebOrderActionApiTests(TestCase):
         self.assertIsNotNone(outbound)
         self.assertEqual(outbound.status, 'skipped')
         message_body = outbound.payload_json['payload']['text']['body']
-        self.assertIn(f'Pedido #{venta.id} confirmado por el local.', message_body)
-        self.assertIn('Cliente: Cliente Panel', message_body)
-        self.assertIn('Tipo: DOMICILIO', message_body)
-        self.assertIn('Items:', message_body)
-        self.assertIn('- 1x Combo Panel', message_body)
+        self.assertIn('COMPROBANTE DE VENTA', message_body)
+        self.assertIn(f'Pedido #{venta.id}', message_body)
+        self.assertIn('Nombre: Cliente Panel', message_body)
+        self.assertIn('Tipo de pedido: A Domicilio', message_body)
+        self.assertIn('DETALLE DEL PEDIDO', message_body)
+        self.assertIn('- 1x Combo Panel | P/U: $12.00 | Subtotal: $12.00', message_body)
         self.assertIn('Subtotal productos: $12.00', message_body)
         self.assertIn('Envio: $3.50', message_body)
         self.assertIn('Direccion: Av. Loja y Remigio Crespo', message_body)
         self.assertIn('Total pedido: $15.50', message_body)
+        self.assertIn('Metodo de pago: EFECTIVO', message_body)
 
     def test_update_web_order_rejects_invalid_action(self):
         venta = Venta.objects.create(
