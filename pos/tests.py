@@ -5829,6 +5829,23 @@ class MetaWebhookTests(TestCase):
             ).exists()
         )
 
+    @override_settings(META_SIGNATURE_VALIDATION=True, META_WHATSAPP_APP_SECRET='app-secret-demo')
+    def test_meta_webhook_logs_invalid_signature_rejections(self):
+        url = reverse('whatsapp_webhook')
+        payload = {'entry': [{'changes': [{'value': {'messages': []}}]}]}
+
+        resp = self.client.post(url, data=json.dumps(payload), content_type='application/json')
+
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(
+            WhatsAppMessageLog.objects.filter(
+                direction='IN',
+                telefono_e164='unknown',
+                status='failed',
+                payload_json__reason='invalid_signature',
+            ).exists()
+        )
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class PublicLegalPagesTests(SimpleTestCase):
